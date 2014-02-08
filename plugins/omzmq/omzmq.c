@@ -1,9 +1,5 @@
-/* omzmq.c
+/* omhiredis.c
  * Copyright 2014 Brian Knox
- * Using the czmq interface to zeromq, we output
- * to a zmq socket.
-
-
 *
 * This program is free software: you can redistribute it and/or
 * modify it under the terms of the GNU Lesser General Public License
@@ -25,15 +21,18 @@
 
 
 #include "config.h"
-#include "rsyslog.h"
 #include <stdio.h>
-#include <stdarg.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <errno.h>
 #include <assert.h>
 #include <signal.h>
-#include <errno.h>
-#include <unistd.h>
+#include <time.h>
+#include <hiredis/hiredis.h>
+#include <czmq.h>
+
+#include "rsyslog.h"
 #include "conf.h"
 #include "syslogd-types.h"
 #include "srUtils.h"
@@ -42,46 +41,40 @@
 #include "errmsg.h"
 #include "cfsysline.h"
 
-#include <czmq.h>
-
 MODULE_TYPE_OUTPUT
 MODULE_TYPE_NOKEEP
 MODULE_CNFNAME("omzmq")
-
-static rsRetVal resetConfigVariables (uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
-
+/* internal structures
+ */
 DEF_OMOD_STATIC_DATA
 DEFobjCurrIf(errmsg)
 
+/*  our instance data.
+ *  this will be accessable 
+ *  via pData */
 typedef struct _instanceData {
-    zctx_t *ctx;
-	uchar*  endpoint;
-    int     socktype;
-    uchar*  tplName;
+	uchar *server; /*  redis server address */
+	int port; /*  redis port */
+	uchar *tplName; /*  template name */
 } instanceData;
 
 typedef struct wrkrInstanceData {
-    instanceData *pData;
-    void *zocket;
-}
+	instanceData *pData;
+	redisContext *conn; /*  redis connection */
+	redisReply **replies; /* array to hold replies from redis */
+	int count; /*  count of command sent for current batch */
+} wrkrInstanceData_t;
 
 static struct cnfparamdescr actpdescr[] = {
-	{ "endpoint",            eCmdHdlrGetWord, 0 },
-    { "socktype",                eCmdHdlrGetWord, 0 },
-    { "action",              eCmdHdlrGetWord, 0 },
-    { "template",            eCmdHdlrGetWord, 1 }
+	{ "server", eCmdHdlrGetWord, 0 },
+	{ "serverport", eCmdHdlrInt, 0 },
+	{ "template", eCmdHdlrGetWord, 1 }
 };
-
 static struct cnfparamblk actpblk = {
 	CNFPARAMBLK_VERSION,
 	sizeof(actpdescr)/sizeof(struct cnfparamdescr),
 	actpdescr
 };
-
-BEGINinitConfVars
-CODESTARTinitConfVars
-    resetConfigVariables (NULL, NULL);
-ENDinitConfVars
 
 BEGINcreateInstance
 CODESTARTcreateInstance
@@ -89,6 +82,7 @@ ENDcreateInstance
 
 BEGINcreateWrkrInstance
 CODESTARTcreateWrkrInstance
+	pWrkrData->conn = NULL; /* Connect later */
 ENDcreateWrkrInstance
 
 BEGINisCompatibleWithFeature
@@ -97,14 +91,27 @@ CODESTARTisCompatibleWithFeature
 		iRet = RS_RET_OK;
 ENDisCompatibleWithFeature
 
+/*  called when closing */
+static void closeZMQ (wrkrInstanceData_t *pWrkrData)
+{
+	if(pWrkrData->conn != NULL) {
+		redisFree(pWrkrData->conn);
+		pWrkrData->conn = NULL;
+	}
+}
+
+/*  Free our instance data.
+ *  TODO: free **replies */
 BEGINfreeInstance
 CODESTARTfreeInstance
-	free(pData->tplName);
+	if (pData->server != NULL) {
+		free(pData->server);
+	}
 ENDfreeInstance
 
 BEGINfreeWrkrInstance
 CODESTARTfreeWrkrInstance
-	closeMySQL(pWrkrData);
+	closeZMQ(pWrkrData);
 ENDfreeWrkrInstance
 
 BEGINdbgPrintInstInfo
@@ -112,165 +119,169 @@ CODESTARTdbgPrintInstInfo
 	/* nothing special here */
 ENDdbgPrintInstInfo
 
-static rsRetVal initZMQ (wrkrInstanceData_t *pWrkData, int bSilent)
+/*  establish our connection to redis */
+static rsRetVal initZMQ(wrkrInstanceData_t *pWrkrData, int bSilent)
 {
-    instanceData *pData;
-    DEFiRet;
+	char *server;
+	DEFiRet;
 
-    ASSERT (pWrkrData->zocket == NULL);
-    pData = pWrkrData->pData;
-    
-    // TODO: initialize socket
+	server = (pWrkrData->pData->server == NULL) ? "127.0.0.1" : 
+			(char*) pWrkrData->pData->server;
+	DBGPRINTF("omzmq: trying connect to '%s' at port %d\n", server, 
+			pWrkrData->pData->port);
+	
+	struct timeval timeout = { 1, 500000 }; /* 1.5 seconds */
+	pWrkrData->conn = redisConnectWithTimeout(server, pWrkrData->pData->port,
+			timeout);
+	if (pWrkrData->conn->err) {
+		if(!bSilent)
+			errmsg.LogError(0, RS_RET_SUSPENDED,
+				"can not initialize redis handle");
+		ABORT_FINALIZE(RS_RET_SUSPENDED);
+	}
 finalize_it:
-    RETiRet;
+	RETiRet;
 }
 
-rsRetVal writeZMQ (wrkrInstanceData_t *pWrkrData, uchar *psz)
+rsRetVal writeZMQ(uchar *message, wrkrInstanceData_t *pWrkrData)
 {
-    DEFiRet;
+	DEFiRet;
 
-    if (pWrkrData->zocket == NULL) {
-        CHKiRet (initZMQ (pWrkrData, 0));
-    }
+	/*  if we do not have a redis connection, call
+	 *  initHiredis and try to establish one */
+	if(pWrkrData->conn == NULL)
+		CHKiRet(initZMQ(pWrkrData, 0));
 
-    // TODO: write to socket
+	/*  try to append the command to the pipeline. 
+	 *  REDIS_ERR reply indicates something bad
+	 *  happened, in which case abort. otherwise
+	 *  increase our current pipeline count
+	 *  by 1 and continue. */
+	int rc;
+	rc = redisAppendCommand(pWrkrData->conn, (char*)message);
+	if (rc == REDIS_ERR) {
+		errmsg.LogError(0, NO_ERRCODE, "omzmq: %s", pWrkrData->conn->errstr);
+		dbgprintf("omzmq: %s\n", pWrkrData->conn->errstr);
+		ABORT_FINALIZE(RS_RET_ERR);
+	} else {
+		pWrkrData->count++;
+	}
+
 finalize_it:
-    RETiRet;
+	RETiRet;
 }
 
+/*  called when resuming from suspended state.
+ *  try to restablish our connection to redis */
 BEGINtryResume
 CODESTARTtryResume
-	if(pWrkrData->zocket == NULL) {
-		iRet = initZMQ(pWrkrData, 1);
-	}
+	if(pWrkrData->conn == NULL)
+		iRet = initZMQ(pWrkrData, 0);
 ENDtryResume
 
+/*  call writeHiredis for this log line,
+ *  which appends it as a command to the
+ *  current pipeline */
+BEGINdoAction
+CODESTARTdoAction
+	CHKiRet(writeZMQ(ppString[0], pWrkrData));
+	iRet = RS_RET_DEFER_COMMIT;
+finalize_it:
+ENDdoAction
+
+/*  set defaults. note server is set to NULL 
+ *  and is set to a default in initHiredis if 
+ *  it is still null when it's called - I should
+ *  probable just set the default here instead */
 static inline void
 setInstParamDefaults(instanceData *pData)
 {
+	pData->server = NULL;
+	pData->port = 6379;
 	pData->tplName = NULL;
 }
 
-BEGINcreateInstance
-CODESTARTcreateInstance
-ENDcreateInstance
-
-BEGINisCompatibleWithFeature
-CODESTARTisCompatibleWithFeature
-	if(eFeat == sFEATURERepeatedMsgReduction)
-		iRet = RS_RET_OK;
-ENDisCompatibleWithFeature
-
-
-BEGINdbgPrintInstInfo
-CODESTARTdbgPrintInstInfo
-ENDdbgPrintInstInfo
-
-BEGINfreeInstance
-CODESTARTfreeInstance
-	closeZMQ(pData);
-	free(pData->endpoint);
-	free(pData->tplName);
-ENDfreeInstance
-
-BEGINtryResume
-CODESTARTtryResume
-	if(NULL == pData->socket)
-		iRet = initZMQ(pData);
-ENDtryResume
-
-BEGINdoAction
-CODESTARTdoAction
-iRet = writeZMQ(ppString[0], pData);
-ENDdoAction
-
-
+/*  here is where the work to set up a new instance
+ *  is done.  this reads the config options from 
+ *  the rsyslog conf and takes appropriate setup
+ *  actions. */
 BEGINnewActInst
-    struct cnfparamvals *pvals;
-    int i;
+	struct cnfparamvals *pvals;
+	int i;
 CODESTARTnewActInst
-    if ((pvals = nvlstGetParams(lst, &actpblk, NULL)) == NULL) {
-        ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
-    }
+	if((pvals = nvlstGetParams(lst, &actpblk, NULL)) == NULL)
+		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
 
-CHKiRet(createInstance(&pData));
-setInstParamDefaults(pData);
+	CHKiRet(createInstance(&pData));
+	setInstParamDefaults(pData);
 
-CODE_STD_STRING_REQUESTnewActInst(1)
-    for (i = 0; i < actpblk.nParams; ++i) {
-        if (!pvals[i].bUsed)
-            continue;
-        if (!strcmp(actpblk.descr[i].name, "endpoint")) {
-            pData->description = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
-        } else if (!strcmp(actpblk.descr[i].name, "template")) {
-            pData->tplName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
-        } else if (!strcmp(actpblk.descr[i].name, "socktype")){
-            pData->type = getSocketType(es_str2cstr(pvals[i].val.d.estr, NULL));
-        } else {
-            errmsg.LogError(0, NO_ERRCODE, "omzmq: program error, non-handled "
-        }
-    }
+	CODE_STD_STRING_REQUESTnewActInst(1)
+	for(i = 0 ; i < actpblk.nParams ; ++i) {
+		if(!pvals[i].bUsed)
+			continue;
+	
+		if(!strcmp(actpblk.descr[i].name, "server")) {
+			pData->server = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+		} else if(!strcmp(actpblk.descr[i].name, "serverport")) {
+			pData->port = (int) pvals[i].val.d.n, NULL;
+		} else if(!strcmp(actpblk.descr[i].name, "template")) {
+			pData->tplName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+		} else {
+			dbgprintf("omzmq: program error, non-handled "
+				"param '%s'\n", actpblk.descr[i].name);
+		}
+	}
 
-    if (pData->tplName == NULL) {
-        CHKiRet(OMSRsetEntry(*ppOMSR, 0, (uchar*)strdup("RSYSLOG_ForwardFormat"), OMSR_NO_RQD_TPL_OPTS));
-    } else {
-        CHKiRet(OMSRsetEntry(*ppOMSR, 0, (uchar*)pData->tplName, OMSR_NO_RQD_TPL_OPTS));
-    }
-    if (NULL == pData->endpoint) {
-        errmsg.LogError(0, RS_RET_CONFIG_ERROR, "omzmq: endpoint is required");
-        ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
-    }
-    if (pData->type == -1) {
-        errmsg.LogError(0, RS_RET_CONFIG_ERROR, "omzmq: invalid socket type.");
-        ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
-    }
+	if(pData->tplName == NULL) {
+		dbgprintf("omzmq: action requires a template name");
+		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
+	}
+
+	/* template string 0 is just a regular string */
+	OMSRsetEntry(*ppOMSR, 0,(uchar*)pData->tplName, OMSR_NO_RQD_TPL_OPTS);
 
 CODE_STD_FINALIZERnewActInst
-    cnfparamvalsDestruct(pvals, &actpblk);
+	cnfparamvalsDestruct(pvals, &actpblk);
 ENDnewActInst
+
 
 BEGINparseSelectorAct
 CODESTARTparseSelectorAct
 
+/* tell the engine we only want one template string */
 CODE_STD_STRING_REQUESTparseSelectorAct(1)
 	if(!strncmp((char*) p, ":omzmq:", sizeof(":omzmq:") - 1)) 
 		errmsg.LogError(0, RS_RET_LEGA_ACT_NOT_SUPPORTED,
 			"omzmq supports only v6 config format, use: "
-			"action(type=\"omzmq\" socktype=...)");
+			"action(type=\"omzmq\" endpoint=...)");
 	ABORT_FINALIZE(RS_RET_CONFLINE_UNPROCESSED);
 CODE_STD_FINALIZERparseSelectorAct
 ENDparseSelectorAct
 
-BEGINinitConfVars /* (re)set config variables to defaults */
-CODESTARTinitConfVars
-ENDinitConfVars
 
 BEGINmodExit
 CODESTARTmodExit
-    if (NULL != s_context) {
-        zctx_destroy(&s_context);
-        s_context=NULL;
-    }
 ENDmodExit
 
-
+/*  register our plugin entry points
+ *  with the rsyslog core engine */
 BEGINqueryEtryPt
 CODESTARTqueryEtryPt
 CODEqueryEtryPt_STD_OMOD_QUERIES
+CODEqueryEtryPt_STD_OMOD8_QUERIES
 CODEqueryEtryPt_STD_CONF2_OMOD_QUERIES
 ENDqueryEtryPt
 
+/*  note we do not support rsyslog v5 syntax */
 BEGINmodInit()
 CODESTARTmodInit
 	*ipIFVersProvided = CURR_MOD_IF_VERSION; /* only supports rsyslog 6 configs */
 CODEmodInit_QueryRegCFSLineHdlr
 	CHKiRet(objUse(errmsg, CORE_COMPONENT));
 	INITChkCoreFeature(bCoreSupportsBatching, CORE_FEATURE_BATCHING);
-	DBGPRINTF("omzmq3: module compiled with rsyslog version %s.\n", VERSION);
-
-INITLegCnfVars
-CHKiRet(omsdRegCFSLineHdlr((uchar *)"omzmqworkerthreads", 0, eCmdHdlrInt, NULL, &s_workerThreads, STD_LOADABLE_MODULE_ID));
+	if (!bCoreSupportsBatching) {
+		errmsg.LogError(0, NO_ERRCODE, "omzmq: rsyslog core does not support batching - abort");
+		ABORT_FINALIZE(RS_RET_ERR);
+	}
+	DBGPRINTF("omzmq: module compiled with rsyslog version %s.\n", VERSION);
 ENDmodInit
-
-
-
