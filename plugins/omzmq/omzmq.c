@@ -1,4 +1,4 @@
-/* omhiredis.c
+/* omzmq.c
  * Copyright 2014 Brian Knox
 *
 * This program is free software: you can redistribute it and/or
@@ -53,21 +53,20 @@ DEFobjCurrIf(errmsg)
  *  this will be accessable 
  *  via pData */
 typedef struct _instanceData {
-	uchar *server; /*  redis server address */
-	int port; /*  redis port */
+    zctx_t *ctx; /* zeromq context */
+	const char *endPoint; /*  zeromq endpoint */
+	int socketType; /*  zeromq socket type */
 	uchar *tplName; /*  template name */
 } instanceData;
 
 typedef struct wrkrInstanceData {
 	instanceData *pData;
-	redisContext *conn; /*  redis connection */
-	redisReply **replies; /* array to hold replies from redis */
-	int count; /*  count of command sent for current batch */
+    void *zocket; /* zeromq socket */
 } wrkrInstanceData_t;
 
 static struct cnfparamdescr actpdescr[] = {
-	{ "server", eCmdHdlrGetWord, 0 },
-	{ "serverport", eCmdHdlrInt, 0 },
+	{ "endpoint", eCmdHdlrGetWord, 0 },
+	{ "sockettype", eCmdHdlrInt, 0 },
 	{ "template", eCmdHdlrGetWord, 1 }
 };
 static struct cnfparamblk actpblk = {
@@ -82,7 +81,7 @@ ENDcreateInstance
 
 BEGINcreateWrkrInstance
 CODESTARTcreateWrkrInstance
-	pWrkrData->conn = NULL; /* Connect later */
+	pWrkrData->zocket = NULL; /* Connect later */
 ENDcreateWrkrInstance
 
 BEGINisCompatibleWithFeature
@@ -94,9 +93,9 @@ ENDisCompatibleWithFeature
 /*  called when closing */
 static void closeZMQ (wrkrInstanceData_t *pWrkrData)
 {
-	if(pWrkrData->conn != NULL) {
-		redisFree(pWrkrData->conn);
-		pWrkrData->conn = NULL;
+	if(pWrkrData->zocket != NULL) {
+        zsocket_destroy (pWrkrData->pData->ctx, pWrkrData->zocket);
+		pWrkrData->zocket = NULL;
 	}
 }
 
@@ -104,8 +103,8 @@ static void closeZMQ (wrkrInstanceData_t *pWrkrData)
  *  TODO: free **replies */
 BEGINfreeInstance
 CODESTARTfreeInstance
-	if (pData->server != NULL) {
-		free(pData->server);
+	if (pData->ctx != NULL) {
+        zctx_destroy (&pData->ctx);
 	}
 ENDfreeInstance
 
@@ -122,21 +121,19 @@ ENDdbgPrintInstInfo
 /*  establish our connection to redis */
 static rsRetVal initZMQ(wrkrInstanceData_t *pWrkrData, int bSilent)
 {
-	char *server;
-	DEFiRet;
+	const char *endpoint;
+    DEFiRet;
 
-	server = (pWrkrData->pData->server == NULL) ? "127.0.0.1" : 
-			(char*) pWrkrData->pData->server;
-	DBGPRINTF("omzmq: trying connect to '%s' at port %d\n", server, 
-			pWrkrData->pData->port);
+	endpoint = (pWrkrData->pData->endPoint == NULL) ? "ipc:///tmp/test" : 
+			(char*) pWrkrData->pData->endPoint;
+	DBGPRINTF("omzmq: trying connect to '%s'", endpoint);
 	
-	struct timeval timeout = { 1, 500000 }; /* 1.5 seconds */
-	pWrkrData->conn = redisConnectWithTimeout(server, pWrkrData->pData->port,
-			timeout);
-	if (pWrkrData->conn->err) {
+    pWrkrData->zocket = zsocket_new (pWrkrData->pData->ctx, pWrkrData->pData->socketType);
+    int rc = zsocket_connect (pWrkrData->zocket, endpoint);
+	if (rc == -1) {
 		if(!bSilent)
 			errmsg.LogError(0, RS_RET_SUSPENDED,
-				"can not initialize redis handle");
+				"can not initialize zeromq socket");
 		ABORT_FINALIZE(RS_RET_SUSPENDED);
 	}
 finalize_it:
@@ -147,35 +144,28 @@ rsRetVal writeZMQ(uchar *message, wrkrInstanceData_t *pWrkrData)
 {
 	DEFiRet;
 
-	/*  if we do not have a redis connection, call
-	 *  initHiredis and try to establish one */
-	if(pWrkrData->conn == NULL)
+	/*  if we do not have a zeromq connection, call
+	 *  initZMQ and try to establish one */
+	if(pWrkrData->zocket == NULL)
 		CHKiRet(initZMQ(pWrkrData, 0));
 
-	/*  try to append the command to the pipeline. 
-	 *  REDIS_ERR reply indicates something bad
-	 *  happened, in which case abort. otherwise
-	 *  increase our current pipeline count
-	 *  by 1 and continue. */
-	int rc;
-	rc = redisAppendCommand(pWrkrData->conn, (char*)message);
-	if (rc == REDIS_ERR) {
-		errmsg.LogError(0, NO_ERRCODE, "omzmq: %s", pWrkrData->conn->errstr);
-		dbgprintf("omzmq: %s\n", pWrkrData->conn->errstr);
+    /* try to send the message */
+    zmsg_t *msg = zmsg_new ();
+    zmsg_addstr (msg, "%s", (char*)message);
+    int rc = zmsg_send (&msg, pWrkrData->zocket); 
+	if (rc == -1) {
+		errmsg.LogError(0, NO_ERRCODE, "omzmq: error sending message");
+		dbgprintf("omzmq: error sending message");
 		ABORT_FINALIZE(RS_RET_ERR);
-	} else {
-		pWrkrData->count++;
-	}
-
+	} 
 finalize_it:
 	RETiRet;
 }
 
-/*  called when resuming from suspended state.
- *  try to restablish our connection to redis */
+/*  called when resuming from suspended state. */
 BEGINtryResume
 CODESTARTtryResume
-	if(pWrkrData->conn == NULL)
+	if(pWrkrData->zocket == NULL)
 		iRet = initZMQ(pWrkrData, 0);
 ENDtryResume
 
@@ -196,8 +186,9 @@ ENDdoAction
 static inline void
 setInstParamDefaults(instanceData *pData)
 {
-	pData->server = NULL;
-	pData->port = 6379;
+    pData->ctx = zctx_new ();
+	pData->endPoint = NULL;
+	pData->socketType = 1;
 	pData->tplName = NULL;
 }
 
@@ -220,10 +211,10 @@ CODESTARTnewActInst
 		if(!pvals[i].bUsed)
 			continue;
 	
-		if(!strcmp(actpblk.descr[i].name, "server")) {
-			pData->server = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
-		} else if(!strcmp(actpblk.descr[i].name, "serverport")) {
-			pData->port = (int) pvals[i].val.d.n, NULL;
+		if(!strcmp(actpblk.descr[i].name, "endpoint")) {
+			pData->endPoint = (const char*)es_str2cstr(pvals[i].val.d.estr, NULL);
+		} else if(!strcmp(actpblk.descr[i].name, "sockettype")) {
+			pData->socketType = (int) pvals[i].val.d.n;
 		} else if(!strcmp(actpblk.descr[i].name, "template")) {
 			pData->tplName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else {
