@@ -161,16 +161,16 @@ if ENABLE_OMHIREDIS
 SUBDIRS += plugins/omhiredis
 endif
 
-if ENABLE_OMZMQ3
-SUBDIRS += plugins/omzmq3
+if ENABLE_OMZMQ
+SUBDIRS += plugins/omzmq
 endif
 
 if ENABLE_OMRABBITMQ
 SUBDIRS += plugins/omrabbitmq
 endif
 
-if ENABLE_IMZMQ3
-SUBDIRS += plugins/imzmq3
+if ENABLE_IMZMQ
+SUBDIRS += plugins/imzmq
 endif
 
 if ENABLE_OMUXSOCK
