@@ -119,7 +119,7 @@ static void closeZMQ (wrkrInstanceData_t *pWrkrData)
 {
 	if(pWrkrData->zocket != NULL) {
         zsocket_destroy (pWrkrData->pData->ctx, pWrkrData->zocket);
-		pWrkrData->zocket = NULL;
+        pWrkrData->zocket = NULL;
 	}
 }
 
