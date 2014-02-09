@@ -230,7 +230,7 @@ CODESTARTnewActInst
 		if (!pvals[i].bUsed)
 			continue;
 	
-		if (!strcmp (actpblk.descr[i].name, "endpoint")) {
+        if (!strcmp (actpblk.descr[i].name, "endpoint")) {
             pData->endPoint = (const char*) es_str2cstr (pvals[i].val.d.estr, NULL);
 		} else if (!strcmp (actpblk.descr[i].name, "sockettype")) {
             pData->zocketType = getZMQType (es_str2cstr (pvals[i].val.d.estr, NULL));
