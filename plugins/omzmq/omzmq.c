@@ -53,13 +53,13 @@ DEFobjCurrIf(errmsg)
  *  via pData */
 typedef struct _instanceData {
     zctx_t *ctx;            /* zeromq context */
-	const char *endPoint;   /* zeromq endpoint */
-	int zocketType;         /* zeromq socket type */
-	uchar *tplName;         /* template name */
+    const char *endPoint;   /* zeromq endpoint */
+    int zocketType;         /* zeromq socket type */
+    uchar *tplName;         /* template name */
 } instanceData;
 
 typedef struct wrkrInstanceData {
-	instanceData *pData;
+    instanceData *pData;
     void *zocket; /* zeromq socket */
 } wrkrInstanceData_t;
 
