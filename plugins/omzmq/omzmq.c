@@ -55,7 +55,7 @@ DEFobjCurrIf(errmsg)
 typedef struct _instanceData {
     zctx_t *ctx;            /* zeromq context */
 	const char *endPoint;   /* zeromq endpoint */
-	int socketType;         /* zeromq socket type */
+	int zocketType;         /* zeromq socket type */
 	uchar *tplName;         /* template name */
 } instanceData;
 
@@ -74,6 +74,30 @@ static struct cnfparamblk actpblk = {
 	sizeof(actpdescr)/sizeof(struct cnfparamdescr),
 	actpdescr
 };
+
+struct zmq_type {
+    char *name;
+    int type;
+};
+
+static struct zmq_type zmq_types[] = {
+    {"ZMQ_PUB",     ZMQ_PUB},
+    {"ZMQ_PUSH",    ZMQ_PUSH},
+    {"ZMQ_DEALER",  ZMQ_DEALER}
+};
+
+int getZMQType (char *name) {
+    int ret_type = -1;
+    uint i;
+    uint sz = sizeof (zmq_types) / sizeof (struct zmq_type);
+    for (i=0; i<sz; i++) {
+        if (!strcmp (zmq_types[i].name, name)) {
+            ret_type = zmq_types[i].type;
+            break;
+        }
+    }
+    return ret_type;
+}
 
 BEGINcreateInstance
 CODESTARTcreateInstance
@@ -122,12 +146,12 @@ static rsRetVal initZMQ (wrkrInstanceData_t *pWrkrData, int bSilent)
     DEFiRet;
 
     const char *endpoint = (char*) pWrkrData->pData->endPoint;
-    int sockettype = (int) pWrkrData->pData->socketType;
+    int zockettype = (int) pWrkrData->pData->zocketType;
     zctx_t *ctx = pWrkrData->pData->ctx;
 
 	DBGPRINTF("omzmq: trying connect to '%s'", endpoint);
 	
-    pWrkrData->zocket = zsocket_new (ctx, sockettype);
+    pWrkrData->zocket = zsocket_new (ctx, zockettype);
     int rc = zsocket_connect (pWrkrData->zocket, endpoint);
 	if (rc == -1) {
 		if(!bSilent)
@@ -187,7 +211,7 @@ setInstParamDefaults (instanceData *pData)
 {
     pData->ctx = zctx_new ();
 	pData->endPoint = NULL;
-	pData->socketType = 1;
+	pData->zocketType = -1;
 	pData->tplName = NULL;
 }
 
@@ -213,7 +237,7 @@ CODESTARTnewActInst
 		if (!strcmp (actpblk.descr[i].name, "endpoint")) {
 			pData->endPoint = (const char*) es_str2cstr (pvals[i].val.d.estr, NULL);
 		} else if (!strcmp (actpblk.descr[i].name, "sockettype")) {
-			pData->socketType = (int) pvals[i].val.d.n, 0;
+            pData->zocketType = getZMQType (es_str2cstr (pvals[i].val.d.estr, NULL));
 		} else if (!strcmp (actpblk.descr[i].name, "template")) {
 			pData->tplName = (uchar*) es_str2cstr (pvals[i].val.d.estr, NULL);
 		} else {
@@ -227,7 +251,7 @@ CODESTARTnewActInst
         ABORT_FINALIZE (RS_RET_MISSING_CNFPARAMS);
     }
 
-    if (pData->socketType == 0) {
+    if (pData->zocketType == 0) {
         dbgprintf ("omzmq: action requires sockettype");
         ABORT_FINALIZE (RS_RET_MISSING_CNFPARAMS);
     }
