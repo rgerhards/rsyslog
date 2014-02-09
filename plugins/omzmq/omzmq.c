@@ -65,7 +65,7 @@ typedef struct wrkrInstanceData {
 
 static struct cnfparamdescr actpdescr[] = {
 	{ "endpoint", eCmdHdlrGetWord, 0 },
-	{ "sockettype", eCmdHdlrInt, 0 },
+	{ "sockettype", eCmdHdlrGetWord, 0 },
 	{ "template", eCmdHdlrGetWord, 1 }
 };
 
@@ -174,7 +174,7 @@ rsRetVal writeZMQ (uchar *message, wrkrInstanceData_t *pWrkrData)
 
     /* try to send the message */
     zmsg_t *msg = zmsg_new ();
-    zmsg_addstr (msg, "%s", (char*) message);
+    zmsg_addstr (msg, (char*) message);
 
     int rc = zmsg_send (&msg, pWrkrData->zocket); 
 	if (rc == -1) {
