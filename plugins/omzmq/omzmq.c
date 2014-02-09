@@ -53,10 +53,10 @@ DEFobjCurrIf(errmsg)
  *  this will be accessable 
  *  via pData */
 typedef struct _instanceData {
-    zctx_t *ctx; /* zeromq context */
-	const char *endPoint; /*  zeromq endpoint */
-	int socketType; /*  zeromq socket type */
-	uchar *tplName; /*  template name */
+    zctx_t *ctx;            /* zeromq context */
+	const char *endPoint;   /* zeromq endpoint */
+	int socketType;         /* zeromq socket type */
+	uchar *tplName;         /* template name */
 } instanceData;
 
 typedef struct wrkrInstanceData {
@@ -99,8 +99,7 @@ static void closeZMQ (wrkrInstanceData_t *pWrkrData)
 	}
 }
 
-/*  Free our instance data.
- *  TODO: free **replies */
+/*  Free our instance data. */
 BEGINfreeInstance
 CODESTARTfreeInstance
 	if (pData->ctx != NULL) {
@@ -110,7 +109,7 @@ ENDfreeInstance
 
 BEGINfreeWrkrInstance
 CODESTARTfreeWrkrInstance
-	closeZMQ(pWrkrData);
+	closeZMQ (pWrkrData);
 ENDfreeWrkrInstance
 
 BEGINdbgPrintInstInfo
@@ -118,45 +117,45 @@ CODESTARTdbgPrintInstInfo
 	/* nothing special here */
 ENDdbgPrintInstInfo
 
-/*  establish our connection to redis */
-static rsRetVal initZMQ(wrkrInstanceData_t *pWrkrData, int bSilent)
+static rsRetVal initZMQ (wrkrInstanceData_t *pWrkrData, int bSilent)
 {
-	const char *endpoint;
     DEFiRet;
 
-	endpoint = (pWrkrData->pData->endPoint == NULL) ? "ipc:///tmp/test" : 
-			(char*) pWrkrData->pData->endPoint;
+    const char *endpoint = (char*) pWrkrData->pData->endPoint;
+    int sockettype = (int) pWrkrData->pData->socketType;
+    zctx_t *ctx = pWrkrData->pData->ctx;
+
 	DBGPRINTF("omzmq: trying connect to '%s'", endpoint);
 	
-    pWrkrData->zocket = zsocket_new (pWrkrData->pData->ctx, pWrkrData->pData->socketType);
+    pWrkrData->zocket = zsocket_new (ctx, sockettype);
     int rc = zsocket_connect (pWrkrData->zocket, endpoint);
 	if (rc == -1) {
 		if(!bSilent)
-			errmsg.LogError(0, RS_RET_SUSPENDED,
+			errmsg.LogError (0, RS_RET_SUSPENDED,
 				"can not initialize zeromq socket");
-		ABORT_FINALIZE(RS_RET_SUSPENDED);
+		ABORT_FINALIZE (RS_RET_SUSPENDED);
 	}
 finalize_it:
 	RETiRet;
 }
 
-rsRetVal writeZMQ(uchar *message, wrkrInstanceData_t *pWrkrData)
+rsRetVal writeZMQ (uchar *message, wrkrInstanceData_t *pWrkrData)
 {
 	DEFiRet;
 
 	/*  if we do not have a zeromq connection, call
 	 *  initZMQ and try to establish one */
-	if(pWrkrData->zocket == NULL)
-		CHKiRet(initZMQ(pWrkrData, 0));
+	if (pWrkrData->zocket == NULL)
+		CHKiRet (initZMQ (pWrkrData, 0));
 
     /* try to send the message */
     zmsg_t *msg = zmsg_new ();
-    zmsg_addstr (msg, "%s", (char*)message);
+    zmsg_addstr (msg, "%s", (char*) message);
     int rc = zmsg_send (&msg, pWrkrData->zocket); 
 	if (rc == -1) {
-		errmsg.LogError(0, NO_ERRCODE, "omzmq: error sending message");
-		dbgprintf("omzmq: error sending message");
-		ABORT_FINALIZE(RS_RET_ERR);
+		errmsg.LogError (0, NO_ERRCODE, "omzmq: error sending message");
+		dbgprintf ("omzmq: error sending message");
+		ABORT_FINALIZE (RS_RET_ERR);
 	} 
 finalize_it:
 	RETiRet;
@@ -165,8 +164,8 @@ finalize_it:
 /*  called when resuming from suspended state. */
 BEGINtryResume
 CODESTARTtryResume
-	if(pWrkrData->zocket == NULL)
-		iRet = initZMQ(pWrkrData, 0);
+	if (pWrkrData->zocket == NULL)
+		iRet = initZMQ (pWrkrData, 0);
 ENDtryResume
 
 /*  call writeHiredis for this log line,
@@ -174,7 +173,7 @@ ENDtryResume
  *  current pipeline */
 BEGINdoAction
 CODESTARTdoAction
-	CHKiRet(writeZMQ(ppString[0], pWrkrData));
+	CHKiRet (writeZMQ (ppString[0], pWrkrData));
 	iRet = RS_RET_DEFER_COMMIT;
 finalize_it:
 ENDdoAction
@@ -184,7 +183,7 @@ ENDdoAction
  *  it is still null when it's called - I should
  *  probable just set the default here instead */
 static inline void
-setInstParamDefaults(instanceData *pData)
+setInstParamDefaults (instanceData *pData)
 {
     pData->ctx = zctx_new ();
 	pData->endPoint = NULL;
@@ -200,39 +199,49 @@ BEGINnewActInst
 	struct cnfparamvals *pvals;
 	int i;
 CODESTARTnewActInst
-	if((pvals = nvlstGetParams(lst, &actpblk, NULL)) == NULL)
-		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
+	if((pvals = nvlstGetParams (lst, &actpblk, NULL)) == NULL)
+		ABORT_FINALIZE (RS_RET_MISSING_CNFPARAMS);
 
-	CHKiRet(createInstance(&pData));
-	setInstParamDefaults(pData);
+	CHKiRet (createInstance (&pData));
+	setInstParamDefaults (pData);
 
-	CODE_STD_STRING_REQUESTnewActInst(1)
-	for(i = 0 ; i < actpblk.nParams ; ++i) {
-		if(!pvals[i].bUsed)
+	CODE_STD_STRING_REQUESTnewActInst (1)
+	for (i = 0 ; i < actpblk.nParams ; ++i) {
+		if (!pvals[i].bUsed)
 			continue;
 	
-		if(!strcmp(actpblk.descr[i].name, "endpoint")) {
-			pData->endPoint = (const char*)es_str2cstr(pvals[i].val.d.estr, NULL);
-		} else if(!strcmp(actpblk.descr[i].name, "sockettype")) {
-			pData->socketType = (int) pvals[i].val.d.n;
-		} else if(!strcmp(actpblk.descr[i].name, "template")) {
-			pData->tplName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+		if (!strcmp (actpblk.descr[i].name, "endpoint")) {
+			pData->endPoint = (const char*) es_str2cstr (pvals[i].val.d.estr, NULL);
+		} else if (!strcmp (actpblk.descr[i].name, "sockettype")) {
+			pData->socketType = (int) pvals[i].val.d.n, 0;
+		} else if (!strcmp (actpblk.descr[i].name, "template")) {
+			pData->tplName = (uchar*) es_str2cstr (pvals[i].val.d.estr, NULL);
 		} else {
-			dbgprintf("omzmq: program error, non-handled "
+			dbgprintf ("omzmq: program error, non-handled "
 				"param '%s'\n", actpblk.descr[i].name);
 		}
 	}
 
-	if(pData->tplName == NULL) {
-		dbgprintf("omzmq: action requires a template name");
-		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
+    if (pData->endPoint == NULL) {
+        dbgprintf ("omzmq: action requires endpoint");
+        ABORT_FINALIZE (RS_RET_MISSING_CNFPARAMS);
+    }
+
+    if (pData->socketType == 0) {
+        dbgprintf ("omzmq: action requires sockettype");
+        ABORT_FINALIZE (RS_RET_MISSING_CNFPARAMS);
+    }
+
+	if (pData->tplName == NULL) {
+		dbgprintf ("omzmq: action requires a template name");
+		ABORT_FINALIZE (RS_RET_MISSING_CNFPARAMS);
 	}
 
 	/* template string 0 is just a regular string */
-	OMSRsetEntry(*ppOMSR, 0,(uchar*)pData->tplName, OMSR_NO_RQD_TPL_OPTS);
+	OMSRsetEntry (*ppOMSR, 0,(uchar*) pData->tplName, OMSR_NO_RQD_TPL_OPTS);
 
 CODE_STD_FINALIZERnewActInst
-	cnfparamvalsDestruct(pvals, &actpblk);
+	cnfparamvalsDestruct (pvals, &actpblk);
 ENDnewActInst
 
 
@@ -240,15 +249,14 @@ BEGINparseSelectorAct
 CODESTARTparseSelectorAct
 
 /* tell the engine we only want one template string */
-CODE_STD_STRING_REQUESTparseSelectorAct(1)
-	if(!strncmp((char*) p, ":omzmq:", sizeof(":omzmq:") - 1)) 
-		errmsg.LogError(0, RS_RET_LEGA_ACT_NOT_SUPPORTED,
+CODE_STD_STRING_REQUESTparseSelectorAct (1)
+	if (!strncmp ((char*) p, ":omzmq:", sizeof (":omzmq:") - 1)) 
+		errmsg.LogError (0, RS_RET_LEGA_ACT_NOT_SUPPORTED,
 			"omzmq supports only v6 config format, use: "
 			"action(type=\"omzmq\" endpoint=...)");
-	ABORT_FINALIZE(RS_RET_CONFLINE_UNPROCESSED);
+	ABORT_FINALIZE (RS_RET_CONFLINE_UNPROCESSED);
 CODE_STD_FINALIZERparseSelectorAct
 ENDparseSelectorAct
-
 
 BEGINmodExit
 CODESTARTmodExit
@@ -268,11 +276,11 @@ BEGINmodInit()
 CODESTARTmodInit
 	*ipIFVersProvided = CURR_MOD_IF_VERSION; /* only supports rsyslog 6 configs */
 CODEmodInit_QueryRegCFSLineHdlr
-	CHKiRet(objUse(errmsg, CORE_COMPONENT));
-	INITChkCoreFeature(bCoreSupportsBatching, CORE_FEATURE_BATCHING);
+	CHKiRet (objUse(errmsg, CORE_COMPONENT));
+	INITChkCoreFeature (bCoreSupportsBatching, CORE_FEATURE_BATCHING);
 	if (!bCoreSupportsBatching) {
-		errmsg.LogError(0, NO_ERRCODE, "omzmq: rsyslog core does not support batching - abort");
-		ABORT_FINALIZE(RS_RET_ERR);
+		errmsg.LogError (0, NO_ERRCODE, "omzmq: rsyslog core does not support batching - abort");
+		ABORT_FINALIZE (RS_RET_ERR);
 	}
-	DBGPRINTF("omzmq: module compiled with rsyslog version %s.\n", VERSION);
+	DBGPRINTF ("omzmq: module compiled with rsyslog version %s.\n", VERSION);
 ENDmodInit
