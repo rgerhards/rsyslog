@@ -125,9 +125,9 @@ static void closeZMQ (wrkrInstanceData_t *pWrkrData)
 /*  Free our instance data. */
 BEGINfreeInstance
 CODESTARTfreeInstance
-	if (pData->ctx != NULL) {
+    if (pData->ctx != NULL) {
         zctx_destroy (&pData->ctx);
-	}
+    }
 ENDfreeInstance
 
 BEGINfreeWrkrInstance
