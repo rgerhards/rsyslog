@@ -29,7 +29,6 @@
 #include <assert.h>
 #include <signal.h>
 #include <time.h>
-#include <hiredis/hiredis.h>
 #include <czmq.h>
 
 #include "rsyslog.h"
@@ -175,6 +174,7 @@ rsRetVal writeZMQ (uchar *message, wrkrInstanceData_t *pWrkrData)
     /* try to send the message */
     zmsg_t *msg = zmsg_new ();
     zmsg_addstr (msg, "%s", (char*) message);
+
     int rc = zmsg_send (&msg, pWrkrData->zocket); 
 	if (rc == -1) {
 		errmsg.LogError (0, NO_ERRCODE, "omzmq: error sending message");
@@ -192,9 +192,7 @@ CODESTARTtryResume
 		iRet = initZMQ (pWrkrData, 0);
 ENDtryResume
 
-/*  call writeHiredis for this log line,
- *  which appends it as a command to the
- *  current pipeline */
+/*  call writeZMQ for this log line */
 BEGINdoAction
 CODESTARTdoAction
 	CHKiRet (writeZMQ (ppString[0], pWrkrData));
@@ -202,10 +200,7 @@ CODESTARTdoAction
 finalize_it:
 ENDdoAction
 
-/*  set defaults. note server is set to NULL 
- *  and is set to a default in initHiredis if 
- *  it is still null when it's called - I should
- *  probable just set the default here instead */
+/*  set defaults. */
 static inline void
 setInstParamDefaults (instanceData *pData)
 {
