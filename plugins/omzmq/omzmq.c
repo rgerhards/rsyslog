@@ -68,6 +68,7 @@ static struct cnfparamdescr actpdescr[] = {
 	{ "sockettype", eCmdHdlrInt, 0 },
 	{ "template", eCmdHdlrGetWord, 1 }
 };
+
 static struct cnfparamblk actpblk = {
 	CNFPARAMBLK_VERSION,
 	sizeof(actpdescr)/sizeof(struct cnfparamdescr),
