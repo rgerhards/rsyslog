@@ -148,7 +148,7 @@ static rsRetVal initZMQ (wrkrInstanceData_t *pWrkrData, int bSilent)
     int zockettype = (int) pWrkrData->pData->zocketType;
     zctx_t *ctx = pWrkrData->pData->ctx;
 
-	DBGPRINTF("omzmq: trying connect to '%s'", endpoint);
+    DBGPRINTF("omzmq: trying connect to '%s'", endpoint);
 	
     pWrkrData->zocket = zsocket_new (ctx, zockettype);
     int rc = zsocket_connect (pWrkrData->zocket, endpoint);
