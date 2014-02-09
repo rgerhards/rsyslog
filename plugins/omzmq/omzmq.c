@@ -237,8 +237,8 @@ CODESTARTnewActInst
         } else if (!strcmp (actpblk.descr[i].name, "template")) {
             pData->tplName = (uchar*) es_str2cstr (pvals[i].val.d.estr, NULL);
         } else {
-			dbgprintf ("omzmq: program error, non-handled "
-				"param '%s'\n", actpblk.descr[i].name);
+            dbgprintf ("omzmq: program error, non-handled "
+                        "param '%s'\n", actpblk.descr[i].name);
 		}
 	}
 
