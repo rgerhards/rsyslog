@@ -85,7 +85,7 @@ struct zmq_type {
 struct zmq_action {
     char *name;
     int action;
-}
+};
 
 #define ZMQ_CONNECT 0
 #define ZMQ_BIND 1
@@ -119,8 +119,8 @@ static int getZMQAction (char *name) {
     uint i;
     uint sz = sizeof (zmq_actions) / sizeof (struct zmq_action);
     for (i=0; i<sz; i++) {
-        if (!strcmp (zmq_actions) / sizeof (struct zmq_action)) {
-            ret_action = zmq_actions[].action;
+        if (!strcmp (zmq_actions[i].name, name)) {
+            ret_action = zmq_actions[i].action;
             break;
         }
     }
@@ -276,7 +276,7 @@ CODESTARTnewActInst
         } else if (!strcmp (actpblk.descr[i].name, "sockettype")) {
             pData->zocketType = getZMQType (es_str2cstr (pvals[i].val.d.estr, NULL));
         } else if (!strcmp (actpblk.descr[i].name, "socketaction")) {
-            pData->zocketAction = getZMQAction (es_str2cstr (pvals[i].val.d.estr NULL));
+            pData->zocketAction = getZMQAction (es_str2cstr (pvals[i].val.d.estr, NULL));
         } else if (!strcmp (actpblk.descr[i].name, "template")) {
             pData->tplName = (uchar*) es_str2cstr (pvals[i].val.d.estr, NULL);
         } else {
