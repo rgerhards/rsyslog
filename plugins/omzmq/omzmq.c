@@ -55,6 +55,7 @@ typedef struct _instanceData {
     zctx_t *ctx;            /* zeromq context */
     const char *endPoint;   /* zeromq endpoint */
     int zocketType;         /* zeromq socket type */
+    int zocketAction;       /* zeromq socket action */
     uchar *tplName;         /* template name */
 } instanceData;
 
@@ -66,6 +67,7 @@ typedef struct wrkrInstanceData {
 static struct cnfparamdescr actpdescr[] = {
 	{ "endpoint", eCmdHdlrGetWord, 0 },
 	{ "sockettype", eCmdHdlrGetWord, 0 },
+    { "socketaction", eCmdHdlrGetWord, 0},
 	{ "template", eCmdHdlrGetWord, 1 }
 };
 
@@ -80,13 +82,26 @@ struct zmq_type {
     int type;
 };
 
+struct zmq_action {
+    char *name;
+    int action;
+}
+
+#define ZMQ_CONNECT 0
+#define ZMQ_BIND 1
+
 static struct zmq_type zmq_types[] = {
     {"ZMQ_PUB",     ZMQ_PUB},
     {"ZMQ_PUSH",    ZMQ_PUSH},
     {"ZMQ_DEALER",  ZMQ_DEALER}
 };
 
-int getZMQType (char *name) {
+static struct zmq_action zmq_actions[] = {
+    {"BIND",    ZMQ_CONNECT },
+    {"CONNECT", ZMQ_BIND }
+};
+
+static int getZMQType (char *name) {
     int ret_type = -1;
     uint i;
     uint sz = sizeof (zmq_types) / sizeof (struct zmq_type);
@@ -97,6 +112,19 @@ int getZMQType (char *name) {
         }
     }
     return ret_type;
+}
+
+static int getZMQAction (char *name) {
+    int ret_action = -1;
+    uint i;
+    uint sz = sizeof (zmq_actions) / sizeof (struct zmq_action);
+    for (i=0; i<sz; i++) {
+        if (!strcmp (zmq_actions) / sizeof (struct zmq_action)) {
+            ret_action = zmq_actions[].action;
+            break;
+        }
+    }
+    return ret_action;
 }
 
 BEGINcreateInstance
@@ -147,12 +175,25 @@ static rsRetVal initZMQ (wrkrInstanceData_t *pWrkrData, int bSilent)
 
     const char *endpoint = (char*) pWrkrData->pData->endPoint;
     int zockettype = (int) pWrkrData->pData->zocketType;
+    int zocketaction = (int) pWrkrData->pData->zocketAction;
     zctx_t *ctx = pWrkrData->pData->ctx;
 
     DBGPRINTF("omzmq: trying connect to '%s'", endpoint);
-	
+
+    int rc;    
     pWrkrData->zocket = zsocket_new (ctx, zockettype);
-    int rc = zsocket_connect (pWrkrData->zocket, endpoint);
+    switch (zocketaction) {
+        case (ZMQ_CONNECT):
+            rc = zsocket_connect (pWrkrData->zocket, endpoint);
+            break;
+        case (ZMQ_BIND):
+            rc = zsocket_bind (pWrkrData->zocket, endpoint);
+            break;
+        default:
+            rc = zsocket_connect (pWrkrData->zocket, endpoint);
+            break;
+    }
+
 	if (rc == -1) {
 		if(!bSilent)
 			errmsg.LogError (0, RS_RET_SUSPENDED,
@@ -234,6 +275,8 @@ CODESTARTnewActInst
             pData->endPoint = (const char*) es_str2cstr (pvals[i].val.d.estr, NULL);
         } else if (!strcmp (actpblk.descr[i].name, "sockettype")) {
             pData->zocketType = getZMQType (es_str2cstr (pvals[i].val.d.estr, NULL));
+        } else if (!strcmp (actpblk.descr[i].name, "socketaction")) {
+            pData->zocketAction = getZMQAction (es_str2cstr (pvals[i].val.d.estr NULL));
         } else if (!strcmp (actpblk.descr[i].name, "template")) {
             pData->tplName = (uchar*) es_str2cstr (pvals[i].val.d.estr, NULL);
         } else {
