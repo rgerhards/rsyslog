@@ -364,6 +364,7 @@ processDataRcvd(tcps_sess_t *pThis, char c, struct syslogTime *stTime, time_t tt
 			pThis->inputState = eInOctetCnt;
 			pThis->iOctetsRemain = 0;
 			pThis->eFraming = TCP_FRAMING_OCTET_COUNTING;
+			DBGPRINTF("tcps_sess: start of octet-counted frame\n");
 		} else if(pThis->bSPFramingFix && c == ' ') {
 			/* Cisco ASA very occasionally sends a SP after a LF, which
 			 * thrashes framing if not taken special care of. Here,
@@ -374,6 +375,7 @@ processDataRcvd(tcps_sess_t *pThis, char c, struct syslogTime *stTime, time_t tt
 		} else {
 			pThis->inputState = eInMsg;
 			pThis->eFraming = TCP_FRAMING_OCTET_STUFFING;
+			DBGPRINTF("tcps_sess: start of octet-stuffing frame\n");
 		}
 	}
 
@@ -419,6 +421,8 @@ processDataRcvd(tcps_sess_t *pThis, char c, struct syslogTime *stTime, time_t tt
 		   || ((pThis->pSrv->addtlFrameDelim != TCPSRV_NO_ADDTL_DELIMITER) && (c == pThis->pSrv->addtlFrameDelim))
 		   ) && pThis->eFraming == TCP_FRAMING_OCTET_STUFFING) { /* record delimiter? */
 			defaultDoSubmitMessage(pThis, stTime, ttGenTime, pMultiSub);
+			DBGPRINTF("tcps_sess: message complete (%d octets), submit for processing\n",
+				pThis->iMsg);
 			pThis->inputState = eAtStrtFram;
 		} else {
 			/* IMPORTANT: here we copy the actual frame content to the message - for BOTH framing modes!

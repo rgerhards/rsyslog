@@ -559,6 +559,8 @@ doReceive(tcpsrv_t *pThis, tcps_sess_t **ppSess, nspoll_t *pPoll)
 	DBGPRINTF("netstream %p with new data\n", (*ppSess)->pStrm);
 	/* Receive message */
 	iRet = pThis->pRcvData(*ppSess, buf, sizeof(buf), &iRcvd);
+	DBGPRINTF("netstream %p: RcvData iRet %d, received %zd octets\n",
+		(*ppSess)->pStrm, iRet, iRcvd);
 	switch(iRet) {
 	case RS_RET_CLOSED:
 		if(pThis->bEmitMsgOnClose) {
@@ -606,7 +608,7 @@ processWorksetItem(tcpsrv_t *pThis, nspoll_t *pPoll, int idx, void *pUsr)
 	tcps_sess_t *pNewSess = NULL;
 	DEFiRet;
 
-	DBGPRINTF("tcpsrv: processing item %d, pUsr %p, bAbortConn\n", idx, pUsr);
+	DBGPRINTF("tcpsrv: processing item %d, pUsr %p\n", idx, pUsr);
 	if(pUsr == pThis->ppLstn) {
 		DBGPRINTF("New connect on NSD %p.\n", pThis->ppLstn[idx]);
 		iRet = SessAccept(pThis, pThis->ppLstnPort[idx], &pNewSess, pThis->ppLstn[idx]);
