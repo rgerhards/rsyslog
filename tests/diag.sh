@@ -266,6 +266,10 @@ case $1 in
 		cat rsyslog.out.log | grep -qF "$2"
 		if [ "$?" -ne "0" ]; then
 		    echo content-check failed
+		    echo contents of rsyslog.out.log:
+		    cat rsyslog.out.log
+		    echo contents after grep:
+		    cat rsyslog.out.log | grep -qF "$2"
 		    . ./diag.sh error-exit 1
 		fi
 		;;
