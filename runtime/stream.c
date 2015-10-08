@@ -58,6 +58,7 @@
 #include "unicode-helper.h"
 #include "module-template.h"
 #include "cryprov.h"
+#include "errmsg.h"
 #if HAVE_SYS_PRCTL_H
 #  include <sys/prctl.h>
 #endif
@@ -231,12 +232,13 @@ doPhysOpen(strm_t *pThis)
 	if(pThis->fd == -1) {
 		char errStr[1024];
 		int err = errno;
+		const int err_ret = (err == ENOENT) ?  RS_RET_FILE_NOT_FOUND : RS_RET_IO_ERROR;
 		rs_strerror_r(err, errStr, sizeof(errStr));
-		DBGOPRINT((obj_t*) pThis, "open error %d, file '%s': %s\n", errno, pThis->pszCurrFName, errStr);
-		if(err == ENOENT)
-			ABORT_FINALIZE(RS_RET_FILE_NOT_FOUND);
-		else
-			ABORT_FINALIZE(RS_RET_IO_ERROR);
+		DBGOPRINT((obj_t*) pThis, "open error %d, file '%s': %s\n",
+			errno, pThis->pszCurrFName, errStr);
+		errmsg_LogError(0, err_ret, "Could not open file '%s': %s",
+			pThis->pszCurrFName, errStr);
+		ABORT_FINALIZE(err_ret);
 	}
 
 	if(pThis->tOperationsMode == STREAMMODE_READ) {

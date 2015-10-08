@@ -45,4 +45,10 @@ PROTOTYPEObj(errmsg);
 void resetErrMsgsFlag(void);
 int hadErrMsgs(void);
 
+/* In the future, we want to make core functions available without the need
+ * to go through objects (this hasn't proven to be really useful).
+ */
+void __attribute__((format(printf, 3, 4)))
+errmsg_LogError(const int iErrno, const int iErrCode, const char *fmt, ... );
+
 #endif /* #ifndef INCLUDED_ERRMSG_H */

@@ -115,8 +115,8 @@ doLogMsg(const int iErrno, const int iErrCode,  const int severity, const char *
  * maps to a specific error event).
  * rgerhards, 2008-06-27
  */
-static void __attribute__((format(printf, 3, 4)))
-LogError(const int iErrno, const int iErrCode, const char *fmt, ... )
+void __attribute__((format(printf, 3, 4)))
+errmsg_LogError(const int iErrno, const int iErrCode, const char *fmt, ... )
 {
 	va_list ap;
 	char buf[2048];
@@ -178,7 +178,7 @@ CODESTARTobjQueryInterface(errmsg)
 	 * work here (if we can support an older interface version - that,
 	 * of course, also affects the "if" above).
 	 */
-	pIf->LogError = LogError;
+	pIf->LogError = errmsg_LogError;
 	pIf->LogMsg = LogMsg;
 finalize_it:
 ENDobjQueryInterface(errmsg)
