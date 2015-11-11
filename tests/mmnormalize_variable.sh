@@ -3,6 +3,7 @@
 # This file is part of the rsyslog project, released under ASL 2.0
 echo ===============================================================================
 echo \[mmnormalize_variable.sh\]: basic test for mmnormalize module variable-support
+export RSYSLOG_DEBUG="debug nologfuncflow noprintmutexaction "
 . $srcdir/diag.sh init
 . $srcdir/diag.sh startup mmnormalize_variable.conf
 . $srcdir/diag.sh tcpflood -m 1 -I $srcdir/testsuites/date_time_msg
