@@ -4256,7 +4256,10 @@ jsonMerge(struct json_object *existing, struct json_object *json)
 	DEFiRet;
 	struct json_object_iter it;
 
+dbgprintf("jsonMerge enter\n");
+dbgprintf("jsonMerge, pre loop, to merge: '%s', existing '%s'\n", json_object_to_json_string(json), json_object_to_json_string(existing));
 	json_object_object_foreachC(json, it) {
+dbgprintf("jsonMerge, adding: %s\n", json_object_to_json_string(it.val));
 		json_object_object_add(existing, it.key,
 			json_object_get(it.val));
 	}
@@ -4264,6 +4267,7 @@ jsonMerge(struct json_object *existing, struct json_object *json)
 	 * in the loop above. So when we now free(_put) the root object, only
 	 * root gets freed().
 	 */
+dbgprintf("jsonMerge, done, merged: %s\n", json_object_to_json_string(json));
 	json_object_put(json);
 	RETiRet;
 }
