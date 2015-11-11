@@ -238,6 +238,7 @@ if ENABLE_IMPTCP
 TESTS +=  \
 	mmjsonparse_simple.sh \
 	mmjsonparse_cim.sh \
+	mmjsonparse_nonmatch.sh \
 	json_array_subscripting.sh \
 	json_array_looping.sh \
 	json_nonarray_looping.sh
@@ -509,6 +510,8 @@ EXTRA_DIST= \
 	testsuites/mmjsonparse_simple.conf \
 	mmjsonparse_cim.sh \
 	testsuites/mmjsonparse_cim.conf \
+	mmjsonparse_nonmatch.sh \
+	testsuites/mmjsonparse_nonmatch.conf \
 	incltest.sh \
 	testsuites/incltest.conf \
 	incltest_dir.sh \
