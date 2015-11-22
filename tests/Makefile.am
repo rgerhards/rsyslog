@@ -221,6 +221,8 @@ endif
 endif
 
 if ENABLE_MMNORMALIZE
+TESTS +=  \
+	mmnormalize-twice.sh
 if ENABLE_IMPTCP
 TESTS +=  \
 	mmnormalize_regex_defaulted.sh \
@@ -825,6 +827,8 @@ EXTRA_DIST= \
 	mmpstrucdata-invalid-vg.sh \
 	testsuites/mmpstrucdata-invalid.conf \
 	libdbi-basic-vg.sh \
+	mmnormalize-twice.sh \
+	testsuites/mmnormalize-twice.conf \
 	mmnormalize_variable.sh \
 	mmnormalize_tokenized.sh \
 	testsuites/mmnormalize_variable.conf \
