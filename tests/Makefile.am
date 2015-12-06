@@ -12,6 +12,7 @@ TESTS = $(TESTRUNS)
 TESTS +=  \
 	stop-localvar.sh \
 	stop-msgvar.sh \
+	stop-msgvar-caseinsensitive.sh \
 	msgvar-concurrency.sh \
 	localvar-concurrency.sh \
 	fac_authpriv.sh \
@@ -471,6 +472,8 @@ EXTRA_DIST= \
 	testsuites/stop-localvar.conf \
 	stop-msgvar.sh \
 	testsuites/stop-msgvar.conf \
+	stop-msgvar-caseinsensitive.sh \
+	testsuites/stop-msgvar-caseinsensitive.conf \
 	msgvar-concurrency.sh \
 	testsuites/msgvar-concurrency.conf \
 	localvar-concurrency.sh \
