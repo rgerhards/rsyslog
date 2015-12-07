@@ -276,7 +276,7 @@ doDecrypt(FILE *logfp, FILE *eifp, FILE *outfp)
 {
 	off64_t blkEnd;
 	off64_t currOffs = 0;
-	int r;
+	int r = -1;
 	int fd;
         struct stat buf;
 
@@ -286,7 +286,6 @@ doDecrypt(FILE *logfp, FILE *eifp, FILE *outfp)
 			goto done;
 		/* set blkEnd to size of logfp and proceed. */
                 if((fd = fileno(logfp)) == -1) {
-                        r = -1;
                         goto done;
                 }
                 if((r = fstat(fd, &buf)) != 0) goto done;
