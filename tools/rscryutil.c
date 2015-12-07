@@ -439,6 +439,10 @@ main(int argc, char *argv[])
 			break;
 		case 'W':
 			mode = MD_WRITE_KEYFILE;
+			if(optarg == NULL) {
+				fprintf(stderr, "keyfile cannot be empty\n");
+				exit(1);
+			}
 			newKeyFile = optarg;
 			break;
 		case 'k':
