@@ -133,8 +133,14 @@ AC_CHECK_MEMBERS([struct sockaddr.sa_len],,,[$sa_includes])
 AC_FUNC_CHOWN
 AC_FUNC_FORK
 AC_PROG_GCC_TRADITIONAL
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
+if test "${ax_cv_c_compiler_vendor}" = "gnu"
+   then
+   # these macros seem to have problems from time to time with
+   # non-gnu compilers. We get occasional rpl_malloc link failures
+   # when using clang. Web search brought up this is a known issue.
+   AC_FUNC_MALLOC
+   AC_FUNC_REALLOC
+fi
 AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
 AC_FUNC_STAT
