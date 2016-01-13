@@ -78,7 +78,6 @@ TESTS +=  \
 	dynfile_invld_sync.sh \
 	dynfile_invalid2.sh \
 	complex1.sh \
-	queue-persist.sh \
 	pipeaction.sh \
 	execonlyonce.sh \
 	execonlywhenprevsuspended.sh \
@@ -147,6 +146,10 @@ TESTS +=  \
 	linkedlistqueue.sh \
 	lookup_table.sh \
 	key_dereference_on_uninitialized_variable_space.sh
+
+# temporarily disabled:
+#	queue-persist.sh
+# see also: https://github.com/rsyslog/rsyslog/issues/262
 
 
 if HAVE_VALGRIND
