@@ -22,10 +22,10 @@ matrix:
        # on travis Ubuntu 14.04, but not in the regular environments, we
        # need to find out some time why this is).
      - compiler: "gcc"
-       env: CFLAGS="-g -std=c99 -Werror -W -Wall -Wextra -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute"
+       env: CFLAGS="-Werror -g -std=c99 -W -Wall -Wextra -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute"
        dist: trusty
      - compiler: "clang"
-       env: STAT_AN="YES", GROK="YES", CFLAGS="-g -O1 -std=c99 -Werror"
+       env: STAT_AN="YES", GROK="YES", CFLAGS="-Werror -W -Wall -g -O2 -std=c99"
        dist: trusty
      - compiler: "gcc"
        env: BUILD_FROM_TARBALL="YES", CHECK="YES", CFLAGS="-g -O2 -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute"
