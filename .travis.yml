@@ -25,7 +25,7 @@ matrix:
        env: CFLAGS="-g -std=c99 -Werror -W -Wall -Wextra -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute"
        dist: trusty
      - compiler: "clang"
-       env: STAT_AN="YES", GROK="YES", CFLAGS="-g -O1 -std=c99 -Werror"
+       env: STAT_AN="YES", GROK="YES", CFLAGS="-g -O2 -std=c99 -Werror"
        dist: trusty
      - compiler: "gcc"
        env: BUILD_FROM_TARBALL="YES", GROK="YES", CHECK="YES", CFLAGS="-g -O2 -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute", RS_TESTBENCH_VALGRIND_EXTRA_OPTS="--suppressions=travis/trusty.supp --gen-suppressions=all"
@@ -59,6 +59,17 @@ script:
   - if [ "x$CHECK" == "xYES" ] ; then make check ; fi
   - if [ -f tests/test-suite.log ] ; then cat tests/test-suite.log; fi
   - if [ "x$CHECK" == "xYES" ] ; then make distcheck ; fi
+  # for some reason, we get some compiler warnings under statical analysis
+  # that we do not get under a regular build -- even though they do not
+  # originate from the static analyzer. So we actually do the scan-build step
+  # twice until we find a better solution.
+  - if [ "x$STAT_AN" == "xYES" ] ; then make clean ; fi
+  - if [ "x$STAT_AN" == "xYES" ] ; then cd compat; scan-build make && cd .. ; fi
+  - if [ "x$STAT_AN" == "xYES" ] ; then cd runtime; make lmnet_la-net.lo libgcry_la-libgcry.lo ; cd .. ;  fi
+  - if [ "x$STAT_AN" == "xYES" ] ; then scan-build make ; fi
+  #
+  # here comes the second step which does the real static analyzer run
+  #
   - if [ "x$STAT_AN" == "xYES" ] ; then make clean ; fi
   - if [ "x$STAT_AN" == "xYES" ] ; then cd compat; scan-build --status-bugs make && cd .. ; fi
   # we now build those components that we know to need some more work
@@ -71,3 +82,5 @@ script:
   #- env TESTS="json_array_looping.sh" make -e check
   # only for newer autoconf tools you need to add:
   # - cat tests/test-suite.log
+  # if that all worked, we go the traditional gcc & valgrind way
+  #- env TESTS="json_array_looping.sh" make -e check
