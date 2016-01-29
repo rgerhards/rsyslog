@@ -65,7 +65,7 @@ script:
   # twice until we find a better solution.
   - if [ "x$STAT_AN" == "xYES" ] ; then make clean ; fi
   - if [ "x$STAT_AN" == "xYES" ] ; then cd compat; scan-build make && cd .. ; fi
-  - if [ "x$STAT_AN" == "xYES" ] ; then cd runtime; make lmnet_la-net.lo libgcry_la-libgcry.lo ; cd .. ;  fi
+  #- if [ "x$STAT_AN" == "xYES" ] ; then cd runtime; make lmnet_la-net.lo libgcry_la-libgcry.lo ; cd .. ;  fi
   - if [ "x$STAT_AN" == "xYES" ] ; then scan-build make ; fi
   #
   # here comes the second step which does the real static analyzer run
