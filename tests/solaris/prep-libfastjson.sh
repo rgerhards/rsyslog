@@ -1,4 +1,5 @@
 # /bin/bash
+set -e
 set -o xtrace
 PWD_HOME=$PWD
 mkdir local_env
