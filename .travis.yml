@@ -75,6 +75,13 @@ script:
   - if [ "x$CHECK" == "xYES" ] ; then make distcheck ; fi
   - if [ "x$STAT_AN" == "xYES" ] ; then make clean ; fi
   - if [ "x$STAT_AN" == "xYES" ] ; then scan-build-3.5 ./configure $CONFIGURE_OPTS ; fi
+  # for some yet unknown reason, we get compiler errors under static analyzer that we don't
+  # get on regular builds. This sometimes makes build succeed wich actually failed. The only
+  # cure we can currently come up with is to do even an additional build where scan-build report
+  # the result of the compiler rather than of its findings :-( Help to improve this is
+  # definitely appreciated.
+  - if [ "x$STAT_AN" == "xYES" ] ; then scan-build-3.5 make ; fi
+  - if [ "x$STAT_AN" == "xYES" ] ; then make clean ; fi
   - if [ "x$STAT_AN" == "xYES" ] ; then cd compat; scan-build-3.5 --status-bugs make && cd .. ; fi
   # we now build those components that we know to need some more work
   # they will not be included in the later static analyzer run. But by
