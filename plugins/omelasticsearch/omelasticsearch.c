@@ -388,8 +388,8 @@ setCurlURL(wrkrInstanceData_t *pWrkrData, instanceData *pData, uchar **tpls)
 {
 	char authBuf[1024];
 	uchar *searchIndex = 0;
-	uchar *searchType;
-	uchar *parent;
+	uchar *searchType = NULL;
+	uchar *parent = NULL;
 	uchar *bulkId;
 	es_str_t *url;
 	int rLocal;
