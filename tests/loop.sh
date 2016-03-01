@@ -16,7 +16,7 @@ while [ $RUN -le $MAXRUN ]; do
      $1
      if [ "$?" -ne "0" ]; then
      	 let FAIL+=1
-	 echo "FAIL!"
+	 echo "FAIL! run: " $RUN
 	 #vi work
          exit 1
      else
