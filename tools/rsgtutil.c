@@ -48,7 +48,6 @@ typedef unsigned char uchar;
 static enum { MD_DUMP, MD_DETECT_FILE_TYPE, MD_SHOW_SIGBLK_PARAMS,
               MD_VERIFY, MD_EXTEND, MD_CONVERT, MD_EXTRACT
 } mode = MD_DUMP;
-static enum { FILEMODE_LOGSIG, FILEMODE_RECSIG }; 
 static enum { API_GT, API_KSI } apimode = API_GT;
 static int verbose = 0;
 static int debug = 0; 
@@ -732,7 +731,7 @@ done:
 static int
 verifyKSI(char *name, char *errbuf, char *sigfname, char *oldsigfname, char *nsigfname, FILE *logfp, FILE *sigfp, FILE *nsigfp)
 {
-	int FILEMODE = FILEMODE_LOGSIG; /* Default FileMode */ 
+	enum { FILEMODE_LOGSIG, FILEMODE_RECSIG } FILEMODE = FILEMODE_LOGSIG; /* Default FileMode */ 
 	block_sig_t *bs = NULL;
 	block_hdr_t *bh = NULL;
 	ksifile ksi = NULL;
@@ -991,7 +990,6 @@ extractKSI(char *name, char *errbuf, char *sigfname, FILE *logfp, FILE *sigfp)
 	int iLineNumbers = 0;
 	int* paiLineNumbers = NULL; 
 	int r = 0;
-	unsigned int j = 0; 
 	int iReturn = 1;
 	
 	/* KSI Signature related variables */
