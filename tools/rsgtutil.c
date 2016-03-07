@@ -1,7 +1,7 @@
 /* This is a tool for dumping the content of GuardTime TLV
  * files in a (somewhat) human-readable manner.
  * 
- * Copyright 2013-2015 Adiscon GmbH
+ * Copyright 2013-2016 Adiscon GmbH
  *
  * This file is part of rsyslog.
  *
@@ -731,6 +731,9 @@ done:
  * are very similiar.
  *
  * note: here we need to have the LOG file name, not signature!
+ *
+ * TODO: refactor me - split up into smaller functions for different
+ *       file format.
  */
 static int
 verifyKSI(char *name, char *errbuf, char *sigfname, char *oldsigfname, char *nsigfname, FILE *logfp, FILE *sigfp, FILE *nsigfp)
@@ -1054,6 +1057,10 @@ extractKSI(char *name, char *errbuf, char *sigfname, FILE *logfp, FILE *sigfp)
 		writeMode[0] = 'a'; 
 	}
 
+
+	/***** preprocess line numbers so that we know what to extract *****/
+	/* TODO: move this to some better place */
+
 	/* Count number of linenumbers */ 
 	if (strlen(linenumbers) > 0 ) {
 		/* Get count of line numbers */ 
@@ -1121,6 +1128,9 @@ extractKSI(char *name, char *errbuf, char *sigfname, FILE *logfp, FILE *sigfp)
 		r = RSGTE_IO;
 		goto done;
 	}
+
+	/***** end line number processing *****/
+	/* result array paiLineNumbers, one line number per entry, not sorted */
 
 	/* Init KSI library */
 	ksierrctx_t ectx;
@@ -1193,9 +1203,10 @@ extractKSI(char *name, char *errbuf, char *sigfname, FILE *logfp, FILE *sigfp)
 			iLineMax = paiLineNumbers[iIndex]; 
 	} 
 
+	/***** begin the actual extraction process *****/
+
 	/* Main Extraction Loop Starts here */
-	do
-	{
+	do { /* iterate through line number array, process one after the other */
 		/* Free previous hashchain */
 		if (hashchain != NULL) {
 			rsksi_objfree(0x0907, hashchain); 
@@ -1211,6 +1222,7 @@ extractKSI(char *name, char *errbuf, char *sigfname, FILE *logfp, FILE *sigfp)
 		hashchain->stepCount = 0; 
 		hashchain->level = 0; 
 
+		/* TODO: does this work if the line number is too large? */
 		/* Get Next linenumber for extraction */
 		for(iIndex = 0; iIndex < iLineNumbers; iIndex++) {
 			if (paiLineNumbers[iIndex] > iLineSearch) {
@@ -1232,8 +1244,11 @@ extractKSI(char *name, char *errbuf, char *sigfname, FILE *logfp, FILE *sigfp)
 		bLogLineFound = 0; 
 		bBlockSigWritten = 0; 
 
-		do
-		{
+
+/*!!!!!!!!!!!!!!!!!!!!*/
+
+
+		do {	/***** actual extraction process for current line */
 			/* Free memory from last lineRec first*/
 			if (lineRec != NULL) {
 				free(lineRec);
@@ -1253,7 +1268,7 @@ extractKSI(char *name, char *errbuf, char *sigfname, FILE *logfp, FILE *sigfp)
 
 if (debug) printf("debug: extractKSI:\t\t\t line '%d': %.64s...\n", iLineCurrent, lineRec); 
 
-			/* Extract line if correct one */
+			/* Extract line to extract file if correct one */
 			if (iLineCurrent == iLineSearch) {
 				if (debug) printf("debug: extractKSI:\t\t\t Extracted line '%d': %.64s...\n", iLineSearch, lineRec); 
 				
@@ -1318,18 +1333,33 @@ if (debug) printf("debug: extractKSI:\t\t\t line '%d': %.64s...\n", iLineCurrent
 			 */
 			if(bInBlock == 0) rsksi_errctxFrstRecInBlk(&ectx, lineRec);
 
+
+
+
+
 			/* Verify next record in signature file */
-			if ((r = rsksi_vrfy_nextRecExtract(ksi, sigfp, NULL, (unsigned char*)lineRec, ssread, &ectx, hashchain, bLogLineFound)) != RSGTE_SUCCESS) {
-				fprintf(stderr, "extractKSI:\t\t\t error %d while verifiying next signature record for logline (%d): '%.64s...'\n", r, iLineCurrent, lineRec);
+			if ((r = rsksi_vrfy_nextRecExtract(ksi, sigfp, NULL,
+				             (unsigned char*)lineRec, ssread, &ectx,
+						hashchain, bLogLineFound))
+			     != RSGTE_SUCCESS) {
+				fprintf(stderr, "extractKSI:\t\t\t error %d while "
+					"verifiying next signature record for logline "
+					"(%d): '%.64s...'\n", r, iLineCurrent, lineRec);
 				goto done;
 			} 
 
 			if (bLogLineFound == 1) {
 				if (bBlockSigWritten == 0) {
 					/* WRITE BLOCK Signature */
-					if (debug) printf("debug: extractKSI:\t\t\t rsksi_ExtractBlockSignature #1: \n"); 
-					if ((r = rsksi_ExtractBlockSignature(newsigfp, ksi, bs, &ectx, verbose)) != RSGTE_SUCCESS) {
-						fprintf(stderr, "extractKSI:\t\t\t error %d while writing block signature for (%d): '%.64s...'\n", r, iLineCurrent, lineRec);
+					if (debug)
+						printf("debug: extractKSI:\t\t\t "
+							"rsksi_ExtractBlockSignature #1: \n"); 
+					if ((r = rsksi_ExtractBlockSignature(newsigfp, ksi,
+							bs, &ectx, verbose)) != RSGTE_SUCCESS) {
+						fprintf(stderr, "extractKSI:\t\t\t error "
+							"%d while writing block signature for "
+							"(%d): '%.64s...'\n",
+							r, iLineCurrent, lineRec);
 						goto done;
 					}
 					bBlockSigWritten = 1; 
@@ -1338,15 +1368,18 @@ if (debug) printf("debug: extractKSI:\t\t\t line '%d': %.64s...\n", iLineCurrent
 
 			if(ectx.recNum == bs->recCount) {
 				if (bBlockSigWritten == 1) {
-					/* We need additional Block Finish handling! */				
-					if((r = verifySigblkFinishChain(ksi, hashchain, &ksiRootHash, &ectx)) != 0) {
-						fprintf(stderr, "extractKSI:\t\t\t error %d while finishing BLOCK signature\n", r);
+					/* We need additional Block Finish handling! */
+					if((r = verifySigblkFinishChain(ksi, hashchain,
+						&ksiRootHash, &ectx)) != 0) {
+						fprintf(stderr, "extractKSI:\t\t\t error %d "
+							"while finishing BLOCK signature\n", r);
 						goto done;
 					}
 				} else {
 					/* Finish Block ! */				
 					if((r = verifySigblkFinish(ksi, &ksiRootHash)) != 0) {
-						fprintf(stderr, "extractKSI:\t\t\t error %d while finish signature BLOCK\n", r);
+						fprintf(stderr, "extractKSI:\t\t\t error %d "
+							"while finish signature BLOCK\n", r);
 						goto done;
 					}
 				}
@@ -1375,6 +1408,13 @@ if (debug) printf("debug: extractKSI:\t\t\t line '%d': %.64s...\n", iLineCurrent
 			}
 //		} while (iLineCurrent < iLineSearch && r != RSGTE_EOF); 
 		} while (r != RSGTE_EOF); 
+
+
+
+/*!!!!!!!!!!!!!!!!!!!! ENDE aktuell interssant*/
+
+
+
 
 		/* Variables will be resetted at Loop begin */
 	} while ( (iLineMax > iLineSearch || bInBlock == 1) && r != RSGTE_EOF); 
