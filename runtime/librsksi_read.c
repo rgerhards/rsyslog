@@ -47,7 +47,7 @@
 /* TODO: FIX Warnings! */
 //#pragma GCC diagnostic ignored "-Wsign-compare"
 //#pragma GCC diagnostic ignored "-Wunused-label"
-//#pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 
 typedef unsigned char uchar;
 #ifndef VERSION
@@ -1607,6 +1607,7 @@ done:
 	return r;
 }
 
+#if 1
 /* Helper function to verifiy the next record in the signature file
  * To be more precise, this is the helper to generate the hash chain
  * required for extraction.
@@ -1678,7 +1679,7 @@ rsksi_vrfy_nextRecExtract(ksifile ksi, FILE *sigfp, FILE *nsigfp,
 			hashchain->stepCount++; 
 			
 			hashchain->direction = 0x03; /* RIGHT */
-			hashchain->level = 1; 
+			hashchain->level = 0; 
 		}
 	}
 
@@ -1695,7 +1696,7 @@ rsksi_vrfy_nextRecExtract(ksifile ksi, FILE *sigfp, FILE *nsigfp,
 	 */
 	for(j = 0 ; j < ksi->nRoots ; ++j) {
 		if(ksi->roots_valid[j] == 0) {
-			if ((j+1) == hashchain->level) { 
+			if (j == hashchain->level) { 
 				hashchain->direction = 0x02; /* LEFT */
 			}
 
@@ -1710,7 +1711,7 @@ rsksi_vrfy_nextRecExtract(ksifile ksi, FILE *sigfp, FILE *nsigfp,
 			t = NULL;
 			break;
 		} else if(t != NULL) {
-			if ((j+1) == hashchain->level) {
+			if (j == hashchain->level) {
 				if (hashchain->direction == 0x03) {	/*RIGHT*/
 					hashstep = rsksiHashstepFromKSI_DataHash(ksi,
 							ksi->roots_hash[j]); 
@@ -1729,7 +1730,7 @@ rsksi_vrfy_nextRecExtract(ksifile ksi, FILE *sigfp, FILE *nsigfp,
 				}
 
 				hashstep->direction = hashchain->direction;
-				hashstep->level_corr = (j+1) - hashchain->level;	
+				hashstep->level_corr = 0;
 
 				/* Attach to HashChain */
 				/* TODO: does that work for larger log files, where we
@@ -1743,18 +1744,18 @@ rsksi_vrfy_nextRecExtract(ksifile ksi, FILE *sigfp, FILE *nsigfp,
 				hashchain->stepCount++; 
 				
 				/* Set Direction and Chainlevel */
+				hashchain->level = j+1;
 				hashchain->direction = 0x03; /*RIGHT*/
-				hashchain->level = j+2;
 				if(rsksi_read_debug)
 					printf("debug: rsksi_vrfy_nextRecExtract:\t "
 						"NEXT Level=%d\n", hashchain->level);
 			}
 
 			/* hash interim node */
-			ectx->treeLevel = j+2;
+			ectx->treeLevel = j+1;
 			ectx->righthash = t;
 			t_del = t;
-			hash_node_ksi(ksi, &t, ksi->roots_hash[j], t_del, j+2);
+			hash_node_ksi(ksi, &t, ksi->roots_hash[j], t_del, j+1);
 			ksi->roots_valid[j] = 0;
 			if(ksi->bKeepTreeHashes) {
 				ectx->lefthash = ksi->roots_hash[j];
@@ -1767,7 +1768,7 @@ rsksi_vrfy_nextRecExtract(ksifile ksi, FILE *sigfp, FILE *nsigfp,
 	}
 
 	if(t != NULL) {
-		if (ksi->nRoots < hashchain->level) 
+		if (ksi->nRoots < hashchain->level+1)  /* +1 because we are 0-based */
 			hashchain->direction = 0x02; /*LEFT*/
 
 		if(rsksi_read_debug) {
@@ -1795,6 +1796,101 @@ done:
 if(rsksi_read_debug) printf("debug: rsksi_vrfy_nextRecExtract:\t returned %d\n", r);
 	return r;
 }
+
+#else
+
+/* Helper function to verifiy the next record in the signature file
+ * To be more precise, this is the helper to generate the hash chain
+ * required for extraction.
+ */
+int
+rsksi_vrfy_nextRecExtract(ksifile ksi, FILE *sigfp, FILE *nsigfp,
+	const unsigned char *rec, const size_t len,
+	ksierrctx_t *ectx, block_hashchain_t *hashchain,
+	const int storehashchain)
+{
+	int r = 0;
+	KSI_DataHash *x; /* current hash */
+	KSI_DataHash *m, *recHash = NULL, *t, *t_del;
+	uint8_t j;
+	block_hashstep_t *hashstep = NULL; 
+
+	hash_m_ksi(ksi, &m);
+	hash_r_ksi(ksi, &recHash, rec, len);
+	hash_node_ksi(ksi, &x, m, recHash, 1); /* hash leaf */
+
+	/* Store Current Hash for later use */
+	rsksiimprintDel(ksi->x_prev);
+	ksi->x_prev = rsksiImprintFromKSI_DataHash(ksi, x);
+
+	if (storehashchain == 1 && hashchain->rec_hash.data == NULL) { //need to write record?
+		/* Extract and copy record imprint*/
+		rsksiIntoImprintFromKSI_DataHash( &(hashchain->rec_hash), ksi, x ); 
+		hashchain->direction = 0x03; /* RIGHT */
+		hashstep = rsksiHashstepFromKSI_DataHash(ksi, m);
+		if (hashstep == NULL ) { r = RSGTE_IO; goto done; }
+		hashstep->direction = 0x03; // TODO: algo fixed RIGHT!
+		hashstep->level_corr = 0;	/* Level Correction 0 */
+		hashchain->hashsteps[hashchain->stepCount] = hashstep; 
+		hashchain->stepCount++; 
+		hashchain->direction = 0x03; /* RIGHT */
+		hashchain->level = 0; 
+	}
+	t = x;
+	for(j = 0 ; j < ksi->nRoots ; ++j) {
+		if(ksi->roots_valid[j] == 0) {
+			if (j == hashchain->level) { 
+				hashchain->direction = 0x02; /* LEFT */
+			}
+			ksi->roots_hash[j] = t;
+			ksi->roots_valid[j] = 1;
+			t = NULL;
+			break;
+		} else if(t != NULL) {
+			if (j == hashchain->level) {
+				hashstep = rsksiHashstepFromKSI_DataHash(ksi,
+					(hashchain->direction == 0x03)/*RIGHT*/
+						? ksi->roots_hash[j] : t);
+				if(hashstep == NULL ) { r = RSGTE_IO; goto done; }
+				hashstep->direction = hashchain->direction;
+				hashstep->level_corr = 0;
+				/* Attach to HashChain */
+				hashchain->hashsteps[hashchain->stepCount] = hashstep; 
+				hashchain->stepCount++; 
+				/* Set Direction and Chainlevel */
+				hashchain->level = j+1;
+				hashchain->direction = 0x03; /*RIGHT*/
+			}
+
+			/* hash interim node */
+			t_del = t;
+			hash_node_ksi(ksi, &t, ksi->roots_hash[j], t_del, j+1);
+			ksi->roots_valid[j] = 0;
+			KSI_DataHash_free(ksi->roots_hash[j]);
+			KSI_DataHash_free(t_del);
+		}
+	}
+
+	if(t != NULL) {
+		if (ksi->nRoots < hashchain->level+1)  /* +1 because we are 0-based */
+			hashchain->direction = 0x02; /*LEFT*/
+
+		/* new level, append "at the top" */
+		ksi->roots_hash[ksi->nRoots] = t;
+		ksi->roots_valid[ksi->nRoots] = 1;
+		++ksi->nRoots;
+		assert(ksi->nRoots < MAX_ROOTS);
+		t = NULL;
+	}
+	++ksi->nRecords;
+
+	/* cleanup */
+	KSI_DataHash_free(m);
+done:
+	if(recHash != NULL) KSI_DataHash_free(recHash);
+	return r;
+}
+#endif
 
 /* Helper function to verifiy the next hash chain record in the signature file */
 int 
@@ -1958,6 +2054,7 @@ done:
 	return r;
 }
 
+#if 0
 /* Finish Verify Sigblock with additional HashChain handling */
 /* This handles what is described as "finalize" block inside the paper (algo 2) */
 int 
@@ -2019,6 +2116,67 @@ if(rsksi_read_debug) printf("debug: verifySigblkFinishChain:\t\t level_corr=%d\n
 done:
 	ksi->bInBlk = 0;
 	if (rsksi_read_debug && root != NULL) outputKSIHash(stdout, "debug: verifySigblkFinishChain:\t\t ROOT Hash: \t\t", root, 0);
+return r;
+}
+#endif
+
+/* Finish Verify Sigblock with additional HashChain handling */
+/* This handles what is described as "finalize" block inside the paper (algo 2) */
+int 
+verifySigblkFinishChain(ksifile ksi, block_hashchain_t *hashchain, KSI_DataHash **pRoot, ksierrctx_t *ectx)
+{
+	KSI_DataHash *root, *rootDel;
+	int8_t j;
+	int r = 0;
+	root = NULL;
+	block_hashstep_t *hashstep = NULL; 
+
+	if(ksi->nRecords == 0) {
+		if(rsksi_read_debug)
+			printf("debug: verifySigblkFinishChain:\t\t "
+				"Error, No records found! %d\n", r);
+		goto done;
+	}
+
+	for(j = 0 ; j < ksi->nRoots; ++j) {
+		if(root == NULL) {
+			if (j == hashchain->level ) {
+				hashchain->direction = 0x03; /*RIGHT*/
+			}
+
+			root = ksi->roots_valid[j] ? ksi->roots_hash[j] : NULL;
+			ksi->roots_valid[j] = 0; /* Sets Root-J to NONE ....guess this is redundant with init, maybe del */
+		} else if(ksi->roots_valid[j]) {
+			if (j >= hashchain->level ) {
+				if (hashchain->direction == 0x03) {	/*RIGHT*/
+					hashstep = rsksiHashstepFromKSI_DataHash(ksi, ksi->roots_hash[j]); 
+					if(hashstep == NULL ) { r = RSGTE_IO; goto done; }
+				} else {		/*LEFT*/
+					hashstep = rsksiHashstepFromKSI_DataHash(ksi, root); 
+					if(hashstep == NULL ) { r = RSGTE_IO; goto done; }
+				}
+				hashstep->direction = hashchain->direction;
+				hashstep->level_corr = j - hashchain->level;	
+
+				/* Attach to HashChain */
+				hashchain->hashsteps[hashchain->stepCount] = hashstep; 
+				hashchain->stepCount++; 
+
+				/* Set Direction and Chainlevel */
+				hashchain->direction = 0x03; /*RIGHT*/
+				hashchain->level = j+1;
+			}
+			rootDel = root;
+			hash_node_ksi(ksi, &root, ksi->roots_hash[j], root, j+2);
+			KSI_DataHash_free(rootDel);
+			ksi->roots_valid[j-1] = 0; /* Previous ROOT has been deleted! */
+		}
+	}
+
+	*pRoot = root;
+	r = 0;
+done:
+	ksi->bInBlk = 0;
 return r;
 }
 

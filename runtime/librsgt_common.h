@@ -71,6 +71,7 @@ struct block_sig_s {
 	} sig;
 };
 
+#define KSI_LEVEL_NONE 0xff
 struct block_hashstep_s {
 	uint8_t direction;	/* left-link or right-link */
 	uint8_t level_corr;

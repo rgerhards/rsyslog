@@ -1220,7 +1220,7 @@ extractKSI(char *name, char *errbuf, char *sigfname, FILE *logfp, FILE *sigfp)
 		}
 		hashchain->rec_hash.data = NULL; 
 		hashchain->stepCount = 0; 
-		hashchain->level = 0; 
+		hashchain->level = KSI_LEVEL_NONE; 
 
 		/* TODO: does this work if the line number is too large? */
 		/* Get Next linenumber for extraction */
