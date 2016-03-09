@@ -440,6 +440,7 @@ main(int argc, char *argv[])
 			break;
 		case 'W':
 			mode = MD_WRITE_KEYFILE;
+			assert(optarg != NULL);
 			newKeyFile = optarg;
 			break;
 		case 'k':
