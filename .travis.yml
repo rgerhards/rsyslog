@@ -72,7 +72,9 @@ matrix:
 before_install:
   - sudo add-apt-repository ppa:adiscon/v8-stable -y
   - sudo add-apt-repository ppa:qpid/released -y
+  - sudo add-apt-repository "http://llvm.org/apt/trusty/ llvm-toolchain-trusty-2.8 main"
   - sudo apt-get update -qq
+  - clang -v
   - mysql -u root -e "CREATE USER 'rsyslog'@'localhost' IDENTIFIED BY 'testbench';"
   - mysql -u root -e "GRANT ALL PRIVILEGES ON * . * TO 'rsyslog'@'localhost'; FLUSH PRIVILEGES;"
   - mysql -u root -e "CREATE DATABASE Syslog; GRANT ALL ON Syslog.* to 'rsyslog'@'localhost' identified by 'testbench';"
