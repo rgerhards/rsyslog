@@ -203,8 +203,8 @@ parse_fields(instanceData *pData, msg_t *pMsg, uchar *msgtext, int lenMsg)
 {
 	uchar fieldbuf[32*1024];
 	uchar fieldname[512];
-	struct json_object *json;
-	struct json_object *jval;
+	struct fjson_object *json;
+	struct fjson_object *jval;
 	int field;
 	uchar *buf;
 	int currIdx = 0;
@@ -216,7 +216,7 @@ parse_fields(instanceData *pData, msg_t *pMsg, uchar *msgtext, int lenMsg)
 		CHKmalloc(buf = malloc(lenMsg+1));
 	}
 
-	json =  json_object_new_object();
+	json =  fjson_object_new_object();
 	if(json == NULL) {
 		ABORT_FINALIZE(RS_RET_ERR);
 	}
@@ -226,8 +226,8 @@ parse_fields(instanceData *pData, msg_t *pMsg, uchar *msgtext, int lenMsg)
 		DBGPRINTF("mmfields: field %d: '%s'\n", field, buf);
 		snprintf((char*)fieldname, sizeof(fieldname), "f%d", field);
 		fieldname[sizeof(fieldname)-1] = '\0';
-		jval = json_object_new_string((char*)buf);
-		json_object_object_add(json, (char*)fieldname, jval);
+		jval = fjson_object_new_string((char*)buf);
+		fjson_object_object_add(json, (char*)fieldname, jval);
 		field++;
 	}
  	msgAddJSON(pMsg, pData->jsonRoot, json, 0, 0);

@@ -273,17 +273,17 @@ finalize_it:
 static rsRetVal
 execForeach(struct cnfstmt *stmt, msg_t *pMsg, wti_t *pWti)
 {
-	json_object *arr = NULL;
+	fjson_object *arr = NULL;
 	DEFiRet;
 	arr = cnfexprEvalCollection(stmt->d.s_foreach.iter->collection, pMsg);
-	if (arr == NULL || !json_object_is_type(arr, json_type_array)) {
+	if (arr == NULL || !fjson_object_is_type(arr, fjson_type_array)) {
 		DBGPRINTF("foreach loop skipped, as object to iterate upon is either empty or not an array\n");
 		FINALIZE;
 	}
-	int len = json_object_array_length(arr);
-	json_object *curr;
+	int len = fjson_object_array_length(arr);
+	fjson_object *curr;
 	for (int i = 0; i < len; i++) {
-		curr = json_object_array_get_idx(arr, i);
+		curr = fjson_object_array_get_idx(arr, i);
 		struct var v;
 		v.d.json = curr;
 		v.datatype = 'J';
@@ -292,7 +292,7 @@ execForeach(struct cnfstmt *stmt, msg_t *pMsg, wti_t *pWti)
 	}
 	CHKiRet(msgDelJSON(pMsg, (uchar*)stmt->d.s_foreach.iter->var));
 finalize_it:
-	if (arr != NULL) json_object_put(arr);
+	if (arr != NULL) fjson_object_put(arr);
 	RETiRet;
 }
 

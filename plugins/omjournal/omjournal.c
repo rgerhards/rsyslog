@@ -181,7 +181,7 @@ ENDtryResume
 
 
 struct iovec *
-build_iovec(size_t *argc, struct json_object *json) {
+build_iovec(size_t *argc, struct fjson_object *json) {
 
     struct lh_entry *entry ;
     struct iovec *iov;
@@ -192,17 +192,17 @@ build_iovec(size_t *argc, struct json_object *json) {
     size_t vec_len;
     size_t i;
 
-    *argc = json_object_object_length(json);
+    *argc = fjson_object_object_length(json);
     iov = malloc( sizeof(struct iovec) * *argc );
-    entry = json_object_get_object(json)->head;
+    entry = fjson_object_get_object(json)->head;
 
     if(NULL == iov)
         goto fail;
 
     /* 
-     * we have to avoid using json_object_object_foreachC because clang static analyzer doesn't believe
+     * we have to avoid using fjson_object_object_foreachC because clang static analyzer doesn't believe
      * that I've correct initialised all the elements of iov.
-     * I'm assuming that json_object_object_length isn't lying to me, and that the json object isn't
+     * I'm assuming that fjson_object_object_length isn't lying to me, and that the json object isn't
      * changing under my feet so that we can do an explicit `for` iteration instead of just walking the
      * the linked list.
      */
@@ -210,7 +210,7 @@ build_iovec(size_t *argc, struct json_object *json) {
     for(i = 0; i < *argc; i++)
     {
         key = (char *)entry->k;
-        val = json_object_get_string((struct json_object*)entry->v);
+        val = fjson_object_get_string((struct fjson_object*)entry->v);
 
         key_len = strlen(key);
         val_len = strlen(val);
@@ -268,7 +268,7 @@ send_non_template_message(msg_t *pMsg) {
 }
 
 void
-send_template_message(struct json_object* json){
+send_template_message(struct fjson_object* json){
 
     size_t argc;
     struct iovec *iovec;
@@ -292,7 +292,7 @@ CODESTARTdoAction
 	if (pData->tplName == NULL) {
 		send_non_template_message((msg_t*) ((void**)pMsgData)[0]);
 	} else {
-		send_template_message((struct json_object*) ((void**)pMsgData)[0]);
+		send_template_message((struct fjson_object*) ((void**)pMsgData)[0]);
 	}
  ENDdoAction
 

@@ -34,7 +34,7 @@
 #include <time.h>
 #include <mongo.h>
 #include <json.h>
-/* For struct json_object_iter, should not be necessary in future versions */
+/* For struct fjson_object_iter, should not be necessary in future versions */
 #include <json_object_private.h>
 
 #include "rsyslog.h"
@@ -59,7 +59,7 @@ DEFobjCurrIf(datetime)
 
 typedef struct _instanceData {
 	mongo_sync_connection *conn;
-	struct json_tokener *json_tokener; /* only if (tplName != NULL) */
+	struct fjson_tokener *fjson_tokener; /* only if (tplName != NULL) */
 	uchar *server;
 	int port;
         uchar *db;
@@ -125,8 +125,8 @@ static void closeMongoDB(instanceData *pData)
 BEGINfreeInstance
 CODESTARTfreeInstance
 	closeMongoDB(pData);
-	if (pData->json_tokener != NULL)
-		json_tokener_free(pData->json_tokener);
+	if (pData->fjson_tokener != NULL)
+		fjson_tokener_free(pData->fjson_tokener);
 	free(pData->server);
 	free(pData->db);
 	free(pData->collection);
@@ -335,37 +335,37 @@ getDefaultBSON(msg_t *pMsg)
 	return doc;
 }
 
-static bson *BSONFromJSONArray(struct json_object *json);
-static bson *BSONFromJSONObject(struct json_object *json);
-static gboolean BSONAppendExtendedJSON(bson *doc, const gchar *name, struct json_object *json);
+static bson *BSONFromJSONArray(struct fjson_object *json);
+static bson *BSONFromJSONObject(struct fjson_object *json);
+static gboolean BSONAppendExtendedJSON(bson *doc, const gchar *name, struct fjson_object *json);
 
 /* Append a BSON variant of json to doc using name.  Return TRUE on success */
 static gboolean
-BSONAppendJSONObject(bson *doc, const gchar *name, struct json_object *json)
+BSONAppendJSONObject(bson *doc, const gchar *name, struct fjson_object *json)
 {
-	switch(json != NULL ? json_object_get_type(json) : json_type_null) {
-	case json_type_null:
+	switch(json != NULL ? fjson_object_get_type(json) : fjson_type_null) {
+	case fjson_type_null:
 		return bson_append_null(doc, name);
-	case json_type_boolean:
+	case fjson_type_boolean:
 		return bson_append_boolean(doc, name,
-					   json_object_get_boolean(json));
-	case json_type_double:
+					   fjson_object_get_boolean(json));
+	case fjson_type_double:
 		return bson_append_double(doc, name,
-					  json_object_get_double(json));
-	case json_type_int: {
+					  fjson_object_get_double(json));
+	case fjson_type_int: {
 		int64_t i;
 
 #ifdef HAVE_JSON_OBJECT_NEW_INT64
-		i = json_object_get_int64(json);
+		i = fjson_object_get_int64(json);
 #else /* HAVE_JSON_OBJECT_NEW_INT64 */
-		i = json_object_get_int(json);
+		i = fjson_object_get_int(json);
 #endif /* HAVE_JSON_OBJECT_NEW_INT64 */
 		if (i >= INT32_MIN && i <= INT32_MAX)
 			return bson_append_int32(doc, name, i);
 		else
 			return bson_append_int64(doc, name, i);
 	}
-	case json_type_object: {
+	case fjson_type_object: {
 
 		if (BSONAppendExtendedJSON(doc, name, json) == TRUE)
 		    return TRUE;
@@ -380,7 +380,7 @@ BSONAppendJSONObject(bson *doc, const gchar *name, struct json_object *json)
 		bson_free(sub);
 		return ok;
 	}
-	case json_type_array: {
+	case fjson_type_array: {
 		bson *sub;
 		gboolean ok;
 
@@ -391,9 +391,9 @@ BSONAppendJSONObject(bson *doc, const gchar *name, struct json_object *json)
 		bson_free(sub);
 		return ok;
 	}
-	case json_type_string:
+	case fjson_type_string:
 		return bson_append_string(doc, name,
-					  json_object_get_string(json), -1);
+					  fjson_object_get_string(json), -1);
 
 	default:
 		return FALSE;
@@ -401,25 +401,25 @@ BSONAppendJSONObject(bson *doc, const gchar *name, struct json_object *json)
 }
 
 static gboolean
-BSONAppendExtendedJSON(bson *doc, const gchar *name, struct json_object *json)
+BSONAppendExtendedJSON(bson *doc, const gchar *name, struct fjson_object *json)
 {
     struct lh_entry *entry;
 
-    entry = json_object_get_object(json)->head;
+    entry = fjson_object_get_object(json)->head;
     if (entry) {
         char *key;
         key = (char*)entry->k;
         if (strcmp(key, "$date") == 0) {
             struct tm tm;
             gint64 ts;
-            struct json_object *val;
+            struct fjson_object *val;
 
-            val = (struct json_object*)entry->v;
+            val = (struct fjson_object*)entry->v;
 
-            DBGPRINTF("ommongodb: extended json date detected %s", json_object_get_string(val));
+            DBGPRINTF("ommongodb: extended json date detected %s", fjson_object_get_string(val));
 
             tm.tm_isdst = -1;
-            strptime(json_object_get_string(val), "%Y-%m-%dT%H:%M:%S%z", &tm);
+            strptime(fjson_object_get_string(val), "%Y-%m-%dT%H:%M:%S%z", &tm);
             ts = 1000 * (gint64) mktime(&tm);
             return bson_append_utc_datetime(doc, name, ts);
         }
@@ -428,9 +428,9 @@ BSONAppendExtendedJSON(bson *doc, const gchar *name, struct json_object *json)
     return FALSE;
 }
 
-/* Return a BSON variant of json, which must be a json_type_array */
+/* Return a BSON variant of json, which must be a fjson_type_array */
 static bson *
-BSONFromJSONArray(struct json_object *json)
+BSONFromJSONArray(struct fjson_object *json)
 {
 	/* Way more than necessary */
 	bson *doc = NULL;
@@ -440,14 +440,14 @@ BSONFromJSONArray(struct json_object *json)
 	if(doc == NULL)
 		goto error;
 
-	array_len = json_object_array_length(json);
+	array_len = fjson_object_array_length(json);
 	for (i = 0; i < array_len; i++) {
 		char buf[sizeof(size_t) * CHAR_BIT + 1];
 
 		if ((size_t)snprintf(buf, sizeof(buf), "%zu", i) >= sizeof(buf))
 			goto error;
 		if (BSONAppendJSONObject(doc, buf,
-					 json_object_array_get_idx(json, i))
+					 fjson_object_array_get_idx(json, i))
 		    == FALSE)
 			goto error;
 	}
@@ -463,18 +463,18 @@ error:
 	return NULL;
 }
 
-/* Return a BSON variant of json, which must be a json_type_object */
+/* Return a BSON variant of json, which must be a fjson_type_object */
 static bson *
-BSONFromJSONObject(struct json_object *json)
+BSONFromJSONObject(struct fjson_object *json)
 {
 	bson *doc = NULL;
-	struct json_object_iter it;
+	struct fjson_object_iter it;
 
 	doc = bson_new();
 	if(doc == NULL)
 		goto error;
 
-	json_object_object_foreachC(json, it) {
+	fjson_object_object_foreachC(json, it) {
 		if (BSONAppendJSONObject(doc, it.key, it.val) == FALSE)
 			goto error;
 	}
@@ -511,7 +511,7 @@ CODESTARTdoAction
 	if(pData->tplName == NULL) {
 		doc = getDefaultBSON((msg_t*)pMsgData);
 	} else {
-		doc = BSONFromJSONObject((struct json_object *)pMsgData);
+		doc = BSONFromJSONObject((struct fjson_object *)pMsgData);
 	}
 	if(doc == NULL) {
 		dbgprintf("ommongodb: error creating BSON doc\n");
@@ -586,7 +586,7 @@ CODESTARTnewActInst
 	} else {
 		CHKiRet(OMSRsetEntry(*ppOMSR, 0, ustrdup(pData->tplName),
 				     OMSR_TPL_AS_JSON));
-		CHKmalloc(pData->json_tokener = json_tokener_new());
+		CHKmalloc(pData->fjson_tokener = fjson_tokener_new());
 	}
 
 	if(pData->db == NULL)

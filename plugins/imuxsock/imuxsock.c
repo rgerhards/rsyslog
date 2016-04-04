@@ -821,33 +821,33 @@ SubmitMsg(uchar *pRcv, int lenRcv, lstn_t *pLstn, struct ucred *cred, struct tim
 		int lenProp;
 
 		if (pLstn->bParseTrusted) {
-			struct json_object *json, *jval;
+			struct fjson_object *json, *jval;
 
 #define CHKjson(operation, toBeFreed)					\
 			if((operation) == NULL) {			\
-				json_object_put(toBeFreed);		\
+				fjson_object_put(toBeFreed);		\
 				ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);	\
 			}
 
-			CHKmalloc(json = json_object_new_object());
+			CHKmalloc(json = fjson_object_new_object());
 			/* create value string, create field, and add it */
-			CHKjson(jval = json_object_new_int(cred->pid), json);
-			json_object_object_add(json, "pid", jval);
-			CHKjson(jval = json_object_new_int(cred->uid), json);
-			json_object_object_add(json, "uid", jval);
-			CHKjson(jval = json_object_new_int(cred->gid), json);
-			json_object_object_add(json, "gid", jval);
+			CHKjson(jval = fjson_object_new_int(cred->pid), json);
+			fjson_object_object_add(json, "pid", jval);
+			CHKjson(jval = fjson_object_new_int(cred->uid), json);
+			fjson_object_object_add(json, "uid", jval);
+			CHKjson(jval = fjson_object_new_int(cred->gid), json);
+			fjson_object_object_add(json, "gid", jval);
 			if(getTrustedProp(cred, "comm", propBuf, sizeof(propBuf), &lenProp) == RS_RET_OK) {
-				CHKjson(jval = json_object_new_string((char*)propBuf), json);
-				json_object_object_add(json, "appname", jval);
+				CHKjson(jval = fjson_object_new_string((char*)propBuf), json);
+				fjson_object_object_add(json, "appname", jval);
 			}
 			if(getTrustedExe(cred, propBuf, sizeof(propBuf), &lenProp) == RS_RET_OK) {
-				CHKjson(jval = json_object_new_string((char*)propBuf), json);
-				json_object_object_add(json, "exe", jval);
+				CHKjson(jval = fjson_object_new_string((char*)propBuf), json);
+				fjson_object_object_add(json, "exe", jval);
 			}
 			if(getTrustedProp(cred, "cmdline", propBuf, sizeof(propBuf), &lenProp) == RS_RET_OK) {
-				CHKjson(jval = json_object_new_string((char*)propBuf), json);
-				json_object_object_add(json, "cmd", jval);
+				CHKjson(jval = fjson_object_new_string((char*)propBuf), json);
+				fjson_object_object_add(json, "cmd", jval);
 			}
 #undef CHKjson
 

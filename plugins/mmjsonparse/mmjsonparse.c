@@ -67,7 +67,7 @@ typedef struct _instanceData {
 
 typedef struct wrkrInstanceData {
 	instanceData *pData;
-	struct json_tokener *tokener;
+	struct fjson_tokener *tokener;
 } wrkrInstanceData_t;
 
 struct modConfData_s {
@@ -125,7 +125,7 @@ ENDcreateInstance
 
 BEGINcreateWrkrInstance
 CODESTARTcreateWrkrInstance
-	pWrkrData->tokener = json_tokener_new();
+	pWrkrData->tokener = fjson_tokener_new();
 	if(pWrkrData->tokener == NULL) {
 		errmsg.LogError(0, RS_RET_ERR, "error: could not create json "
 				"tokener, cannot activate instance");
@@ -149,7 +149,7 @@ ENDfreeInstance
 BEGINfreeWrkrInstance
 CODESTARTfreeWrkrInstance
 	if(pWrkrData->tokener != NULL)
-		json_tokener_free(pWrkrData->tokener);
+		fjson_tokener_free(pWrkrData->tokener);
 ENDfreeWrkrInstance
 
 
@@ -167,32 +167,28 @@ ENDtryResume
 static rsRetVal
 processJSON(wrkrInstanceData_t *pWrkrData, msg_t *pMsg, char *buf, size_t lenBuf)
 {
-	struct json_object *json;
+	struct fjson_object *json;
 	const char *errMsg;
 	DEFiRet;
 
 	assert(pWrkrData->tokener != NULL);
 	DBGPRINTF("mmjsonparse: toParse: '%s'\n", buf);
-	json_tokener_reset(pWrkrData->tokener);
+	fjson_tokener_reset(pWrkrData->tokener);
 
-	json = json_tokener_parse_ex(pWrkrData->tokener, buf, lenBuf);
+	json = fjson_tokener_parse_ex(pWrkrData->tokener, buf, lenBuf);
 	if(Debug) {
 		errMsg = NULL;
 		if(json == NULL) {
-			enum json_tokener_error err;
+			enum fjson_tokener_error err;
 
 			err = pWrkrData->tokener->err;
-			if(err != json_tokener_continue)
-#				if HAVE_JSON_TOKENER_ERROR_DESC
-					errMsg = json_tokener_error_desc(err);
-#				else
-					errMsg = json_tokener_errors[err];
-#				endif
+			if(err != fjson_tokener_continue)
+				errMsg = fjson_tokener_error_desc(err);
 			else
 				errMsg = "Unterminated input";
 		} else if((size_t)pWrkrData->tokener->char_offset < lenBuf)
 			errMsg = "Extra characters after JSON object";
-		else if(!json_object_is_type(json, json_type_object))
+		else if(!fjson_object_is_type(json, fjson_type_object))
 			errMsg = "JSON value is not an object";
 		if(errMsg != NULL) {
 			DBGPRINTF("mmjsonparse: Error parsing JSON '%s': %s\n",
@@ -201,10 +197,10 @@ processJSON(wrkrInstanceData_t *pWrkrData, msg_t *pMsg, char *buf, size_t lenBuf
 	}
 	if(json == NULL
 	   || ((size_t)pWrkrData->tokener->char_offset < lenBuf)
-	   || (!json_object_is_type(json, json_type_object))) {
+	   || (!fjson_object_is_type(json, fjson_type_object))) {
 		if(json != NULL) {
 			/* Release json object as we are not going to add it to pMsg */
-			json_object_put(json);
+			fjson_object_put(json);
 		}
 		ABORT_FINALIZE(RS_RET_NO_CEE_MSG);
 	}
@@ -220,8 +216,8 @@ BEGINdoAction_NoStrings
 	uchar *buf;
 	rs_size_t len;
 	int bSuccess = 0;
-	struct json_object *jval;
-	struct json_object *json;
+	struct fjson_object *jval;
+	struct fjson_object *json;
 	instanceData *pData;
 CODESTARTdoAction
 	pData = pWrkrData->pData;
@@ -248,9 +244,9 @@ CODESTARTdoAction
 finalize_it:
 	if(iRet == RS_RET_NO_CEE_MSG) {
 		/* add buf as msg */
-		json = json_object_new_object();
-		jval = json_object_new_string((char*)buf);
-		json_object_object_add(json, "msg", jval);
+		json = fjson_object_new_object();
+		jval = fjson_object_new_string((char*)buf);
+		fjson_object_object_add(json, "msg", jval);
 		msgAddJSON(pMsg, pData->container, json, 0, 0);
 		iRet = RS_RET_OK;
 	}

@@ -434,12 +434,12 @@ httpfs_parse_exception(char* buf, int length, httpfs_json_remote_exception* jre)
         return RS_RET_JSON_PARSE_ERR;
     }
 
-    struct json_tokener* jt = json_tokener_new();
-    json_tokener_reset(jt);
+    struct fjson_tokener* jt = fjson_tokener_new();
+    fjson_tokener_reset(jt);
 
-    struct json_object *json;
-    json = json_tokener_parse_ex(jt, buf, length);
-    if (!json_object_is_type(json, json_type_object)) {
+    struct fjson_object *json;
+    json = fjson_tokener_parse_ex(jt, buf, length);
+    if (!fjson_object_is_type(json, fjson_type_object)) {
 		ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
     }
 
@@ -447,7 +447,7 @@ httpfs_parse_exception(char* buf, int length, httpfs_json_remote_exception* jre)
 	ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
     }
 
-    struct json_object *jobj;
+    struct fjson_object *jobj;
 
     memset(jre, 0, sizeof(*jre));
 
@@ -455,25 +455,25 @@ httpfs_parse_exception(char* buf, int length, httpfs_json_remote_exception* jre)
     size_t len;
 
     RS_json_object_object_get_ex(json, "javaClassName", &jobj);
-    str = json_object_get_string(jobj);
+    str = fjson_object_get_string(jobj);
     len = strlen(str);
     strncpy(jre->class, str, len);
 
     RS_json_object_object_get_ex(json, "exception", &jobj);
-    str = json_object_get_string(jobj);
+    str = fjson_object_get_string(jobj);
     len = strlen(str);
     strncpy(jre->exception, str, len);
 
     RS_json_object_object_get_ex(json, "message", &jobj);
-    str = json_object_get_string(jobj);
+    str = fjson_object_get_string(jobj);
     len = strlen(str);
     strncpy(jre->message, str, len);
 
 finalize_it:
 	if(jt != NULL)
-		json_tokener_free(jt);
+		fjson_tokener_free(jt);
 	if(json != NULL)
-		json_object_put(json); 
+		fjson_object_put(json); 
 	RETiRet;
 }	
 

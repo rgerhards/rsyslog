@@ -1244,9 +1244,9 @@ var2Number(struct var *r, int *bSuccess)
 	} else {
 		if(r->datatype == 'J') {
 #ifdef HAVE_JSON_OBJECT_NEW_INT64
-			n = (r->d.json == NULL) ? 0 : json_object_get_int64(r->d.json);
+			n = (r->d.json == NULL) ? 0 : fjson_object_get_int64(r->d.json);
 #else /* HAVE_JSON_OBJECT_NEW_INT64 */
-			n = (r->d.json == NULL) ? 0 : json_object_get_int(r->d.json);
+			n = (r->d.json == NULL) ? 0 : fjson_object_get_int(r->d.json);
 #endif /* HAVE_JSON_OBJECT_NEW_INT64 */
 		} else {
 			n = r->d.n;
@@ -1274,7 +1274,7 @@ var2String(struct var *__restrict__ const r, int *__restrict__ const bMustFree)
 			cstr = "",
 			lenstr = 0;
 		} else {
-			cstr = (char*)json_object_get_string(r->d.json);
+			cstr = (char*)fjson_object_get_string(r->d.json);
 			lenstr = strlen(cstr);
 		}
 		estr = es_newStrFromCStr(cstr, lenstr);
@@ -1310,7 +1310,7 @@ static void
 varFreeMembersSelectively(const struct var *r, const int skipMask)
 {
 	if(r->datatype == 'J') {
-		json_object_put(r->d.json);
+		fjson_object_put(r->d.json);
 	} else if( !(skipMask & SKIP_STRING) && (r->datatype == 'S')) {
 		es_deleteStr(r->d.estr);
 	}
@@ -1886,7 +1886,7 @@ evalVar(struct cnfvar *__restrict__ const var, void *__restrict__ const usrptr,
 	uchar *pszProp = NULL;
 	unsigned short bMustBeFreed = 0;
 	rsRetVal localRet;
-	struct json_object *json;
+	struct fjson_object *json;
 	uchar *cstr;
 
 	if(var->prop.id == PROP_CEE        ||
@@ -1898,7 +1898,7 @@ evalVar(struct cnfvar *__restrict__ const var, void *__restrict__ const usrptr,
 			ret->d.json = (localRet == RS_RET_OK) ? json : NULL;
 			DBGPRINTF("rainerscript: (json) var %d:%s: '%s'\n",
 				var->prop.id, var->prop.name,
-			  (ret->d.json == NULL) ? "" : json_object_get_string(ret->d.json));
+			  (ret->d.json == NULL) ? "" : fjson_object_get_string(ret->d.json));
 		} else { /* we have a string */
 			ret->datatype = 'S';
 			ret->d.estr = (localRet == RS_RET_OK) ?
@@ -2600,7 +2600,7 @@ cnfexprEvalBool(struct cnfexpr *__restrict__ const expr, void *__restrict__ cons
 	return retVal;
 }
 
-struct json_object*
+struct fjson_object*
 cnfexprEvalCollection(struct cnfexpr *__restrict__ const expr, void *__restrict__ const usrptr)
 {
 	struct var ret;

@@ -103,7 +103,7 @@ struct var {
 		es_str_t *estr;
 		struct cnfarray *ar;
 		long long n;
-		struct json_object *json;
+		struct fjson_object *json;
 	} d;
 	char datatype; /* 'N' number, 'S' string, 'J' JSON, 'A' array
 			* Note: 'A' is only supported during config phase
@@ -359,7 +359,7 @@ struct cnfexpr* cnfexprNew(unsigned nodetype, struct cnfexpr *l, struct cnfexpr 
 void cnfexprPrint(struct cnfexpr *expr, int indent);
 void cnfexprEval(const struct cnfexpr *const expr, struct var *ret, void *pusr);
 int cnfexprEvalBool(struct cnfexpr *expr, void *usrptr);
-struct json_object* cnfexprEvalCollection(struct cnfexpr * const expr, void * const usrptr);
+struct fjson_object* cnfexprEvalCollection(struct cnfexpr * const expr, void * const usrptr);
 void cnfexprDestruct(struct cnfexpr *expr);
 struct cnfnumval* cnfnumvalNew(long long val);
 struct cnfstringval* cnfstringvalNew(es_str_t *estr);

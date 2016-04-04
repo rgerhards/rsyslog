@@ -328,13 +328,13 @@ finalize_it:
  * rgerhards, 2012-08-29
  */
 rsRetVal
-tplToJSON(struct template *pTpl, msg_t *pMsg, struct json_object **pjson, struct syslogTime *ttNow)
+tplToJSON(struct template *pTpl, msg_t *pMsg, struct fjson_object **pjson, struct syslogTime *ttNow)
 {
 	struct templateEntry *pTpe;
 	rs_size_t propLen;
 	unsigned short bMustBeFreed;
 	uchar *pVal;
-	struct json_object *json, *jsonf;
+	struct fjson_object *json, *jsonf;
 	rsRetVal localRet;
 	DEFiRet;
 
@@ -343,40 +343,40 @@ tplToJSON(struct template *pTpl, msg_t *pMsg, struct json_object **pjson, struct
 			*pjson = NULL;
 		if(*pjson == NULL) {
 			/* we need to have a root object! */
-			*pjson = json_object_new_object();
+			*pjson = fjson_object_new_object();
 		} else {
-			json_object_get(*pjson); /* inc refcount */
+			fjson_object_get(*pjson); /* inc refcount */
 		}
 		FINALIZE;
 	}
 
-	json = json_object_new_object();
+	json = fjson_object_new_object();
 	for(pTpe = pTpl->pEntryRoot ; pTpe != NULL ; pTpe = pTpe->pNext) {
 		if(pTpe->eEntryType == CONSTANT) {
 			if(pTpe->fieldName == NULL)
 				continue;
-			jsonf = json_object_new_string((char*) pTpe->data.constant.pConstant);
-			json_object_object_add(json, (char*)pTpe->fieldName, jsonf);
+			jsonf = fjson_object_new_string((char*) pTpe->data.constant.pConstant);
+			fjson_object_object_add(json, (char*)pTpe->fieldName, jsonf);
 		} else 	if(pTpe->eEntryType == FIELD) {
 			if(pTpe->data.field.msgProp.id == PROP_CEE        ||
 			   pTpe->data.field.msgProp.id == PROP_LOCAL_VAR  ||
 			   pTpe->data.field.msgProp.id == PROP_GLOBAL_VAR   ) {
 				localRet = msgGetJSONPropJSON(pMsg, &pTpe->data.field.msgProp, &jsonf);
 				if(localRet == RS_RET_OK) {
-					json_object_object_add(json, (char*)pTpe->fieldName, json_object_get(jsonf));
+					fjson_object_object_add(json, (char*)pTpe->fieldName, fjson_object_get(jsonf));
 				} else {
 					DBGPRINTF("tplToJSON: error %d looking up property %s\n",
 						  localRet, pTpe->fieldName);
 					if(pTpe->data.field.options.bMandatory) {
-						json_object_object_add(json, (char*)pTpe->fieldName, NULL);
+						fjson_object_object_add(json, (char*)pTpe->fieldName, NULL);
 					}
 				}
 			} else  {
 				pVal = (uchar*) MsgGetProp(pMsg, pTpe, &pTpe->data.field.msgProp,
 							   &propLen, &bMustBeFreed, ttNow);
 				if(pTpe->data.field.options.bMandatory || propLen > 0) {
-					jsonf = json_object_new_string_len((char*)pVal, propLen+1);
-					json_object_object_add(json, (char*)pTpe->fieldName, jsonf);
+					jsonf = fjson_object_new_string_len((char*)pVal, propLen+1);
+					fjson_object_object_add(json, (char*)pTpe->fieldName, jsonf);
 				}
 				if(bMustBeFreed) { /* json-c makes its own private copy! */
 					free(pVal);

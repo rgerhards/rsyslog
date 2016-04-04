@@ -445,27 +445,27 @@ writeDataError(instanceData *const pData,
 	const int kafkaErr)
 {
 	int bLocked = 0;
-	struct json_object *json = NULL;
+	struct fjson_object *json = NULL;
 	DEFiRet;
 
 	if(pData->errorFile == NULL) {
 		FINALIZE;
 	}
 
-	json = json_object_new_object();
+	json = fjson_object_new_object();
 	if(json == NULL) {
 		ABORT_FINALIZE(RS_RET_ERR);
 	}
-	struct json_object *jval;
-	jval = json_object_new_int(kafkaErr);
-	json_object_object_add(json, "errcode", jval);
-	jval = json_object_new_string(rd_kafka_err2str(kafkaErr));
-	json_object_object_add(json, "errmsg", jval);
-	jval = json_object_new_string_len(data, lenData);
-	json_object_object_add(json, "data", jval);
+	struct fjson_object *jval;
+	jval = fjson_object_new_int(kafkaErr);
+	fjson_object_object_add(json, "errcode", jval);
+	jval = fjson_object_new_string(rd_kafka_err2str(kafkaErr));
+	fjson_object_object_add(json, "errmsg", jval);
+	jval = fjson_object_new_string_len(data, lenData);
+	fjson_object_object_add(json, "data", jval);
 
 	struct iovec iov[2];
-	iov[0].iov_base = (void*) json_object_get_string(json);
+	iov[0].iov_base = (void*) fjson_object_get_string(json);
 	iov[0].iov_len = strlen(iov[0].iov_base);
 	iov[1].iov_base = "\n";
 	iov[1].iov_len = 1;
@@ -498,7 +498,7 @@ finalize_it:
 	if(bLocked)
 		pthread_mutex_unlock(&pData->mutErrFile);
 	if(json != NULL)
-		json_object_put(json);
+		fjson_object_put(json);
 	RETiRet;
 }
 

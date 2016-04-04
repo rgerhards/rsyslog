@@ -924,7 +924,7 @@ prepareDoActionParams(action_t * __restrict__ const pAction,
 		      struct syslogTime *ttNow)
 {
 	int i;
-	struct json_object *json;
+	struct fjson_object *json;
 	actWrkrIParams_t *iparams;
 	actWrkrInfo_t *__restrict__ pWrkrInfo;
 	DEFiRet;
@@ -1002,7 +1002,7 @@ releaseDoActionParams(action_t *__restrict__ const pAction, wti_t *__restrict__ 
 			}
 			break;
 		case ACT_JSON_PASSING:
-			json_object_put((struct json_object*)
+			fjson_object_put((struct fjson_object*)
 					pWrkrInfo->p.nontx.actParams[j].param);
 			pWrkrInfo->p.nontx.actParams[j].param = NULL;
 			break;

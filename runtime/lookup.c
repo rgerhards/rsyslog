@@ -349,9 +349,9 @@ lookupKey_sprsArr(lookup_t *pThis, lookup_key_t key) {
 	ABORT_FINALIZE(RS_RET_INVALID_VALUE);
 
 static inline rsRetVal
-build_StringTable(lookup_t *pThis, struct json_object *jtab, const uchar* name) {
+build_StringTable(lookup_t *pThis, struct fjson_object *jtab, const uchar* name) {
 	uint32_t i;
-	struct json_object *jrow, *jindex, *jvalue;
+	struct fjson_object *jrow, *jindex, *jvalue;
 	uchar *value, *canonicalValueRef;
 	DEFiRet;
 	
@@ -361,14 +361,14 @@ build_StringTable(lookup_t *pThis, struct json_object *jtab, const uchar* name) 
 		CHKmalloc(pThis->table.str->entries = calloc(pThis->nmemb, sizeof(lookup_string_tab_entry_t)));
 
 		for(i = 0; i < pThis->nmemb; i++) {
-			jrow = json_object_array_get_idx(jtab, i);
-			jindex = json_object_object_get(jrow, "index");
-			jvalue = json_object_object_get(jrow, "value");
-			if (jindex == NULL || json_object_is_type(jindex, json_type_null)) {
+			jrow = fjson_object_array_get_idx(jtab, i);
+			jindex = fjson_object_object_get(jrow, "index");
+			jvalue = fjson_object_object_get(jrow, "value");
+			if (jindex == NULL || fjson_object_is_type(jindex, fjson_type_null)) {
 				NO_INDEX_ERROR("string", name);
 			}
-			CHKmalloc(pThis->table.str->entries[i].key = ustrdup((uchar*) json_object_get_string(jindex)));
-			value = (uchar*) json_object_get_string(jvalue);
+			CHKmalloc(pThis->table.str->entries[i].key = ustrdup((uchar*) fjson_object_get_string(jindex)));
+			value = (uchar*) fjson_object_get_string(jvalue);
 			canonicalValueRef = *(uchar**) bsearch(value, pThis->interned_vals, pThis->interned_val_count, sizeof(uchar*), bs_arrcmp_str);
 			assert(canonicalValueRef != NULL);
 			pThis->table.str->entries[i].interned_val_ref = canonicalValueRef;
@@ -383,9 +383,9 @@ finalize_it:
 }
 
 static inline rsRetVal
-build_ArrayTable(lookup_t *pThis, struct json_object *jtab, const uchar *name) {
+build_ArrayTable(lookup_t *pThis, struct fjson_object *jtab, const uchar *name) {
 	uint32_t i;
-	struct json_object *jrow, *jindex, *jvalue;
+	struct fjson_object *jrow, *jindex, *jvalue;
 	uchar *canonicalValueRef;
 	uint32_t prev_index, index;
 	uint8_t prev_index_set;
@@ -401,14 +401,14 @@ build_ArrayTable(lookup_t *pThis, struct json_object *jtab, const uchar *name) {
 		CHKmalloc(pThis->table.arr->interned_val_refs = calloc(pThis->nmemb, sizeof(uchar*)));
 
 		for(i = 0; i < pThis->nmemb; i++) {
-			jrow = json_object_array_get_idx(jtab, i);
-			jindex = json_object_object_get(jrow, "index");
-			jvalue = json_object_object_get(jrow, "value");
-			if (jindex == NULL || json_object_is_type(jindex, json_type_null)) {
+			jrow = fjson_object_array_get_idx(jtab, i);
+			jindex = fjson_object_object_get(jrow, "index");
+			jvalue = fjson_object_object_get(jrow, "value");
+			if (jindex == NULL || fjson_object_is_type(jindex, fjson_type_null)) {
 				NO_INDEX_ERROR("array", name);
 			}
-			indexes[i].index = (uint32_t) json_object_get_int(jindex);
-			indexes[i].val = (uchar*) json_object_get_string(jvalue);
+			indexes[i].index = (uint32_t) fjson_object_get_int(jindex);
+			indexes[i].val = (uchar*) fjson_object_get_string(jvalue);
 		}
 		qsort(indexes, pThis->nmemb, sizeof(uint32_index_val_t), qs_arrcmp_uint32_index_val);
 		for(i = 0; i < pThis->nmemb; i++) {
@@ -439,9 +439,9 @@ finalize_it:
 }
 
 static inline rsRetVal
-build_SparseArrayTable(lookup_t *pThis, struct json_object *jtab, const uchar* name) {
+build_SparseArrayTable(lookup_t *pThis, struct fjson_object *jtab, const uchar* name) {
 	uint32_t i;
-	struct json_object *jrow, *jindex, *jvalue;
+	struct fjson_object *jrow, *jindex, *jvalue;
 	uchar *value, *canonicalValueRef;
 	DEFiRet;
 	
@@ -451,14 +451,14 @@ build_SparseArrayTable(lookup_t *pThis, struct json_object *jtab, const uchar* n
 		CHKmalloc(pThis->table.sprsArr->entries = calloc(pThis->nmemb, sizeof(lookup_sparseArray_tab_entry_t)));
 
 		for(i = 0; i < pThis->nmemb; i++) {
-			jrow = json_object_array_get_idx(jtab, i);
-			jindex = json_object_object_get(jrow, "index");
-			jvalue = json_object_object_get(jrow, "value");
-			if (jindex == NULL || json_object_is_type(jindex, json_type_null)) {
+			jrow = fjson_object_array_get_idx(jtab, i);
+			jindex = fjson_object_object_get(jrow, "index");
+			jvalue = fjson_object_object_get(jrow, "value");
+			if (jindex == NULL || fjson_object_is_type(jindex, fjson_type_null)) {
 				NO_INDEX_ERROR("sparseArray", name);
 			}
-			pThis->table.sprsArr->entries[i].key = (uint32_t) json_object_get_int(jindex);
-			value = (uchar*) json_object_get_string(jvalue);
+			pThis->table.sprsArr->entries[i].key = (uint32_t) fjson_object_get_int(jindex);
+			value = (uchar*) fjson_object_get_string(jvalue);
 			canonicalValueRef = *(uchar**) bsearch(value, pThis->interned_vals, pThis->interned_val_count, sizeof(uchar*), bs_arrcmp_str);
 			assert(canonicalValueRef != NULL);
 			pThis->table.sprsArr->entries[i].interned_val_ref = canonicalValueRef;
@@ -487,9 +487,9 @@ finalize_it:
 }
 
 static rsRetVal
-lookupBuildTable_v1(lookup_t *pThis, struct json_object *jroot, const uchar* name) {
-	struct json_object *jnomatch, *jtype, *jtab;
-	struct json_object *jrow, *jvalue;
+lookupBuildTable_v1(lookup_t *pThis, struct fjson_object *jroot, const uchar* name) {
+	struct fjson_object *jnomatch, *jtype, *jtab;
+	struct fjson_object *jrow, *jvalue;
 	const char *table_type, *nomatch_value;
 	const uchar **all_values;
 	const uchar *curr, *prev;
@@ -499,15 +499,15 @@ lookupBuildTable_v1(lookup_t *pThis, struct json_object *jroot, const uchar* nam
 	DEFiRet;
 	all_values = NULL;
 
-	jnomatch = json_object_object_get(jroot, "nomatch");
-	jtype = json_object_object_get(jroot, "type");
-	jtab = json_object_object_get(jroot, "table");
-	if (jtab == NULL || !json_object_is_type(jtab, json_type_array)) {
+	jnomatch = fjson_object_object_get(jroot, "nomatch");
+	jtype = fjson_object_object_get(jroot, "type");
+	jtab = fjson_object_object_get(jroot, "table");
+	if (jtab == NULL || !fjson_object_is_type(jtab, fjson_type_array)) {
 		errmsg.LogError(0, RS_RET_INVALID_VALUE, "lookup table named: '%s' has invalid table definition", name);
 		ABORT_FINALIZE(RS_RET_INVALID_VALUE);
 	}
-	pThis->nmemb = json_object_array_length(jtab);
-	table_type = json_object_get_string(jtype);
+	pThis->nmemb = fjson_object_array_length(jtab);
+	table_type = fjson_object_get_string(jtype);
 	if (table_type == NULL) {
 		table_type = "string";
 	}
@@ -516,13 +516,13 @@ lookupBuildTable_v1(lookup_t *pThis, struct json_object *jroot, const uchar* nam
 
 	/* before actual table can be loaded, prepare all-value list and remove duplicates*/
 	for(i = 0; i < pThis->nmemb; i++) {
-		jrow = json_object_array_get_idx(jtab, i);
-		jvalue = json_object_object_get(jrow, "value");
-		if (jvalue == NULL || json_object_is_type(jvalue, json_type_null)) {
+		jrow = fjson_object_array_get_idx(jtab, i);
+		jvalue = fjson_object_object_get(jrow, "value");
+		if (jvalue == NULL || fjson_object_is_type(jvalue, fjson_type_null)) {
 			errmsg.LogError(0, RS_RET_INVALID_VALUE, "'%s' lookup table named: '%s' has record(s) without 'value' field", table_type, name);
 			ABORT_FINALIZE(RS_RET_INVALID_VALUE);
 		}
-		all_values[i] = (const uchar*) json_object_get_string(jvalue);
+		all_values[i] = (const uchar*) fjson_object_get_string(jvalue);
 	}
 	qsort(all_values, pThis->nmemb, sizeof(uchar*), qs_arrcmp_ustrs);
 	uniq_values = 1;
@@ -549,7 +549,7 @@ lookupBuildTable_v1(lookup_t *pThis, struct json_object *jroot, const uchar* nam
 	}
 	/* uniq values captured (sorted) */
 
-	nomatch_value = json_object_get_string(jnomatch);
+	nomatch_value = fjson_object_get_string(jnomatch);
 	if (nomatch_value != NULL) {
 		CHKmalloc(pThis->nomatch = (uchar*) strdup(nomatch_value));
 	}
@@ -573,16 +573,16 @@ finalize_it:
 }
 
 rsRetVal
-lookupBuildTable(lookup_t *pThis, struct json_object *jroot, const uchar* name)
+lookupBuildTable(lookup_t *pThis, struct fjson_object *jroot, const uchar* name)
 {
-	struct json_object *jversion;
+	struct fjson_object *jversion;
 	int version = 1;
 
 	DEFiRet;
 
-	jversion = json_object_object_get(jroot, "version");
-	if (jversion != NULL && !json_object_is_type(jversion, json_type_null)) {
-		version = json_object_get_int(jversion);
+	jversion = fjson_object_object_get(jroot, "version");
+	if (jversion != NULL && !fjson_object_is_type(jversion, fjson_type_null)) {
+		version = fjson_object_get_int(jversion);
 	} else {
 		errmsg.LogError(0, RS_RET_INVALID_VALUE, "lookup table named: '%s' doesn't specify version (will use default value: %d)", name, version);
 	}
@@ -812,7 +812,7 @@ lookupKey(lookup_ref_t *pThis, lookup_key_t key)
 }
 
 
-/* note: widely-deployed json_c 0.9 does NOT support incremental
+/* note: widely-deployed fjson_c 0.9 does NOT support incremental
  * parsing. In order to keep compatible with e.g. Ubuntu 12.04LTS,
  * we read the file into one big memory buffer and parse it at once.
  * While this is not very elegant, it will not pose any real issue
@@ -822,8 +822,8 @@ lookupKey(lookup_ref_t *pThis, lookup_key_t key)
 static rsRetVal
 lookupReadFile(lookup_t *pThis, const uchar *name, const uchar *filename)
 {
-	struct json_tokener *tokener = NULL;
-	struct json_object *json = NULL;
+	struct fjson_tokener *tokener = NULL;
+	struct fjson_object *json = NULL;
 	int eno;
 	char errStr[1024];
 	char *iobuf = NULL;
@@ -851,7 +851,7 @@ lookupReadFile(lookup_t *pThis, const uchar *name, const uchar *filename)
 		ABORT_FINALIZE(RS_RET_FILE_NOT_FOUND);
 	}
 
-	tokener = json_tokener_new();
+	tokener = fjson_tokener_new();
 	nread = read(fd, iobuf, sb.st_size);
 	if(nread != (ssize_t) sb.st_size) {
 		eno = errno;
@@ -861,7 +861,7 @@ lookupReadFile(lookup_t *pThis, const uchar *name, const uchar *filename)
 		ABORT_FINALIZE(RS_RET_READ_ERR);
 	}
 
-	json = json_tokener_parse_ex(tokener, iobuf, sb.st_size);
+	json = fjson_tokener_parse_ex(tokener, iobuf, sb.st_size);
 	if(json == NULL) {
 		errmsg.LogError(0, RS_RET_JSON_PARSE_ERR,
 			"lookup table file '%s' json parsing error",
@@ -877,9 +877,9 @@ lookupReadFile(lookup_t *pThis, const uchar *name, const uchar *filename)
 finalize_it:
 	free(iobuf);
 	if(tokener != NULL)
-		json_tokener_free(tokener);
+		fjson_tokener_free(tokener);
 	if(json != NULL)
-		json_object_put(json);
+		fjson_object_put(json);
 	RETiRet;
 }
 

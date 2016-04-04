@@ -42,7 +42,7 @@
 #include <netdb.h>
 #include <libestr.h>
 #include <json.h>
-/* For struct json_object_iter, should not be necessary in future versions */
+/* For struct fjson_object_iter, should not be necessary in future versions */
 #include <json_object_private.h>
 #if HAVE_MALLOC_H
 #  include <malloc.h>
@@ -72,7 +72,7 @@
  * right now before vacation -- rgerhards, 2013-07-22
  */
 static pthread_mutex_t glblVars_lock;
-struct json_object *global_var_root = NULL;
+struct fjson_object *global_var_root = NULL;
 
 /* static data */
 DEFobjStaticHelpers
@@ -401,10 +401,10 @@ static pthread_mutex_t mutTrimCtr;	 /* mutex to handle malloc trim */
 
 /* some forward declarations */
 static int getAPPNAMELen(msg_t * const pM, sbool bLockMutex);
-static rsRetVal jsonPathFindParent(struct json_object *jroot, uchar *name, uchar *leaf, struct json_object **parent, int bCreate);
+static rsRetVal jsonPathFindParent(struct fjson_object *jroot, uchar *name, uchar *leaf, struct fjson_object **parent, int bCreate);
 static uchar * jsonPathGetLeaf(uchar *name, int lenName);
-static struct json_object *jsonDeepCopy(struct json_object *src);
-static json_bool jsonVarExtract(struct json_object* root, const char *key, struct json_object **value);
+static struct fjson_object *jsonDeepCopy(struct fjson_object *src);
+static fjson_bool jsonVarExtract(struct fjson_object* root, const char *key, struct fjson_object **value);
 void getRawMsgAfterPRI(msg_t * const pM, uchar **pBuf, int *piLen);
 
 
@@ -972,9 +972,9 @@ CODESTARTobjDestruct(msg)
 		if(pThis->pCSMSGID != NULL)
 			rsCStrDestruct(&pThis->pCSMSGID);
 		if(pThis->json != NULL)
-			json_object_put(pThis->json);
+			fjson_object_put(pThis->json);
 		if(pThis->localvars != NULL)
-			json_object_put(pThis->localvars);
+			fjson_object_put(pThis->localvars);
 		if(pThis->pszUUID != NULL)
 			free(pThis->pszUUID);
 #	ifndef HAVE_ATOMIC_BUILTINS
@@ -1188,11 +1188,11 @@ static rsRetVal MsgSerialize(msg_t *pThis, strm_t *pStrm)
 	psz = pThis->pszStrucData; 
 	CHKiRet(obj.SerializeProp(pStrm, UCHAR_CONSTANT("pszStrucData"), PROPTYPE_PSZ, (void*) psz));
 	if(pThis->json != NULL) {
-		psz = (uchar*) json_object_get_string(pThis->json);
+		psz = (uchar*) fjson_object_get_string(pThis->json);
 		CHKiRet(obj.SerializeProp(pStrm, UCHAR_CONSTANT("json"), PROPTYPE_PSZ, (void*) psz));
 	}
 	if(pThis->localvars != NULL) {
-		psz = (uchar*) json_object_get_string(pThis->localvars);
+		psz = (uchar*) fjson_object_get_string(pThis->localvars);
 		CHKiRet(obj.SerializeProp(pStrm, UCHAR_CONSTANT("localvars"), PROPTYPE_PSZ, (void*) psz));
 	}
 
@@ -1246,7 +1246,7 @@ MsgDeserialize(msg_t * const pMsg, strm_t *pStrm)
 	prop_t *myProp;
 	prop_t *propRcvFrom = NULL;
 	prop_t *propRcvFromIP = NULL;
-	struct json_tokener *tokener;
+	struct fjson_tokener *tokener;
 	var_t *pVar = NULL;
 	DEFiRet;
 
@@ -1329,18 +1329,18 @@ MsgDeserialize(msg_t * const pMsg, strm_t *pStrm)
 		CHKiRet(objDeserializeProperty(pVar, pStrm));
 	}
 	if(isProp("json")) {
-		tokener = json_tokener_new();
-		pMsg->json = json_tokener_parse_ex(tokener, (char*)rsCStrGetSzStrNoNULL(pVar->val.pStr),
+		tokener = fjson_tokener_new();
+		pMsg->json = fjson_tokener_parse_ex(tokener, (char*)rsCStrGetSzStrNoNULL(pVar->val.pStr),
 					     cstrLen(pVar->val.pStr));
-		json_tokener_free(tokener);
+		fjson_tokener_free(tokener);
 		reinitVar(pVar);
 		CHKiRet(objDeserializeProperty(pVar, pStrm));
 	}
 	if(isProp("localvars")) {
-		tokener = json_tokener_new();
-		pMsg->localvars = json_tokener_parse_ex(tokener, (char*)rsCStrGetSzStrNoNULL(pVar->val.pStr),
+		tokener = fjson_tokener_new();
+		pMsg->localvars = fjson_tokener_parse_ex(tokener, (char*)rsCStrGetSzStrNoNULL(pVar->val.pStr),
 						        cstrLen(pVar->val.pStr));
-		json_tokener_free(tokener);
+		fjson_tokener_free(tokener);
 		reinitVar(pVar);
 		CHKiRet(objDeserializeProperty(pVar, pStrm));
 	}
@@ -2262,87 +2262,87 @@ void MsgSetParseSuccess(msg_t * const pMsg, int bSuccess)
 const uchar*
 msgGetJSONMESG(msg_t *__restrict__ const pMsg)
 {
-	struct json_object *json;
-	struct json_object *jval;
+	struct fjson_object *json;
+	struct fjson_object *jval;
 	uchar *pRes; /* result pointer */
 	rs_size_t bufLen = -1; /* length of string or -1, if not known */
 
-	json = json_object_new_object();
+	json = fjson_object_new_object();
 
-	jval = json_object_new_string((char*)getMSG(pMsg));
-	json_object_object_add(json, "msg", jval);
+	jval = fjson_object_new_string((char*)getMSG(pMsg));
+	fjson_object_object_add(json, "msg", jval);
 
 	getRawMsg(pMsg, &pRes, &bufLen);
-	jval = json_object_new_string((char*)pRes);
-	json_object_object_add(json, "rawmsg", jval);
+	jval = fjson_object_new_string((char*)pRes);
+	fjson_object_object_add(json, "rawmsg", jval);
 
 	pRes = (uchar*)getTimeReported(pMsg, tplFmtRFC3339Date);
-	jval = json_object_new_string((char*)pRes);
-	json_object_object_add(json, "timereported", jval);
+	jval = fjson_object_new_string((char*)pRes);
+	fjson_object_object_add(json, "timereported", jval);
 
-	jval = json_object_new_string(getHOSTNAME(pMsg));
-	json_object_object_add(json, "hostname", jval);
+	jval = fjson_object_new_string(getHOSTNAME(pMsg));
+	fjson_object_object_add(json, "hostname", jval);
 
 	getTAG(pMsg, &pRes, &bufLen);
-	jval = json_object_new_string((char*)pRes);
-	json_object_object_add(json, "syslogtag", jval);
+	jval = fjson_object_new_string((char*)pRes);
+	fjson_object_object_add(json, "syslogtag", jval);
 
 	getInputName(pMsg, &pRes, &bufLen);
-	jval = json_object_new_string((char*)pRes);
-	json_object_object_add(json, "inputname", jval);
+	jval = fjson_object_new_string((char*)pRes);
+	fjson_object_object_add(json, "inputname", jval);
 
-	jval = json_object_new_string((char*)getRcvFrom(pMsg));
-	json_object_object_add(json, "fromhost", jval);
+	jval = fjson_object_new_string((char*)getRcvFrom(pMsg));
+	fjson_object_object_add(json, "fromhost", jval);
 
-	jval = json_object_new_string((char*)getRcvFromIP(pMsg));
-	json_object_object_add(json, "fromhost-ip", jval);
+	jval = fjson_object_new_string((char*)getRcvFromIP(pMsg));
+	fjson_object_object_add(json, "fromhost-ip", jval);
 
-	jval = json_object_new_string(getPRI(pMsg));
-	json_object_object_add(json, "pri", jval);
+	jval = fjson_object_new_string(getPRI(pMsg));
+	fjson_object_object_add(json, "pri", jval);
 
-	jval = json_object_new_string(getFacility(pMsg));
-	json_object_object_add(json, "syslogfacility", jval);
+	jval = fjson_object_new_string(getFacility(pMsg));
+	fjson_object_object_add(json, "syslogfacility", jval);
 
-	jval = json_object_new_string(getSeverity(pMsg));
-	json_object_object_add(json, "syslogseverity", jval);
+	jval = fjson_object_new_string(getSeverity(pMsg));
+	fjson_object_object_add(json, "syslogseverity", jval);
 
 	pRes = (uchar*)getTimeGenerated(pMsg, tplFmtRFC3339Date);
-	jval = json_object_new_string((char*)pRes);
-	json_object_object_add(json, "timegenerated", jval);
+	jval = fjson_object_new_string((char*)pRes);
+	fjson_object_object_add(json, "timegenerated", jval);
 
-	jval = json_object_new_string((char*)getProgramName(pMsg, LOCK_MUTEX));
-	json_object_object_add(json, "programname", jval);
+	jval = fjson_object_new_string((char*)getProgramName(pMsg, LOCK_MUTEX));
+	fjson_object_object_add(json, "programname", jval);
 
-	jval = json_object_new_string(getProtocolVersionString(pMsg));
-	json_object_object_add(json, "protocol-version", jval);
+	jval = fjson_object_new_string(getProtocolVersionString(pMsg));
+	fjson_object_object_add(json, "protocol-version", jval);
 
 	MsgGetStructuredData(pMsg, &pRes, &bufLen);
-	jval = json_object_new_string((char*)pRes);
-	json_object_object_add(json, "structured-data", jval);
+	jval = fjson_object_new_string((char*)pRes);
+	fjson_object_object_add(json, "structured-data", jval);
 
-	jval = json_object_new_string(getAPPNAME(pMsg, LOCK_MUTEX));
-	json_object_object_add(json, "app-name", jval);
+	jval = fjson_object_new_string(getAPPNAME(pMsg, LOCK_MUTEX));
+	fjson_object_object_add(json, "app-name", jval);
 
-	jval = json_object_new_string(getPROCID(pMsg, LOCK_MUTEX));
-	json_object_object_add(json, "procid", jval);
+	jval = fjson_object_new_string(getPROCID(pMsg, LOCK_MUTEX));
+	fjson_object_object_add(json, "procid", jval);
 
-	jval = json_object_new_string(getMSGID(pMsg));
-	json_object_object_add(json, "msgid", jval);
+	jval = fjson_object_new_string(getMSGID(pMsg));
+	fjson_object_object_add(json, "msgid", jval);
 
 #ifdef USE_LIBUUID
 	if(pMsg->pszUUID == NULL) {
 		jval = NULL;
 	} else {
 		getUUID(pMsg, &pRes, &bufLen);
-		jval = json_object_new_string((char*)pRes);
+		jval = fjson_object_new_string((char*)pRes);
 	}
-	json_object_object_add(json, "uuid", jval);
+	fjson_object_object_add(json, "uuid", jval);
 #endif
 
-	json_object_object_add(json, "$!", json_object_get(pMsg->json));
+	fjson_object_object_add(json, "$!", fjson_object_get(pMsg->json));
 
-	pRes = (uchar*) strdup(json_object_get_string(json));
-	json_object_put(json);
+	pRes = (uchar*) strdup(fjson_object_get_string(json));
+	fjson_object_put(json);
 	return pRes;
 }
 
@@ -2952,9 +2952,9 @@ rsRetVal
 getJSONPropVal(msg_t * const pMsg, msgPropDescr_t *pProp, uchar **pRes, rs_size_t *buflen, unsigned short *pbMustBeFreed)
 {
 	uchar *leaf;
-	struct json_object *jroot;
-	struct json_object *parent;
-	struct json_object *field;
+	struct fjson_object *jroot;
+	struct fjson_object *parent;
+	struct fjson_object *field;
 	DEFiRet;
 
 	if(*pbMustBeFreed)
@@ -2987,7 +2987,7 @@ getJSONPropVal(msg_t * const pMsg, msgPropDescr_t *pProp, uchar **pRes, rs_size_
 			field = NULL;
 	}
 	if(field != NULL) {
-		*pRes = (uchar*) strdup(json_object_get_string(field));
+		*pRes = (uchar*) strdup(fjson_object_get_string(field));
 		*buflen = (int) ustrlen(*pRes);
 		*pbMustBeFreed = 1;
 	}
@@ -3018,12 +3018,12 @@ finalize_it:
  * it if is being returned.
  */
 rsRetVal
-msgGetJSONPropJSONorString(msg_t * const pMsg, msgPropDescr_t *pProp, struct json_object **pjson,
+msgGetJSONPropJSONorString(msg_t * const pMsg, msgPropDescr_t *pProp, struct fjson_object **pjson,
 	uchar **pcstr)
 {
-	struct json_object *jroot;
+	struct fjson_object *jroot;
 	uchar *leaf;
-	struct json_object *parent;
+	struct fjson_object *parent;
 	DEFiRet;
 
 	*pjson = NULL, *pcstr = NULL;
@@ -3056,8 +3056,8 @@ msgGetJSONPropJSONorString(msg_t * const pMsg, msgPropDescr_t *pProp, struct jso
 		/* we had a NULL json object and represent this as empty string */
 		*pcstr = (uchar*) strdup("");
 	} else {
-		if(json_object_get_type(*pjson) == json_type_string) {
-			*pcstr = (uchar*) strdup(json_object_get_string(*pjson));
+		if(fjson_object_get_type(*pjson) == fjson_type_string) {
+			*pcstr = (uchar*) strdup(fjson_object_get_string(*pjson));
 			*pjson = NULL;
 		}
 	}
@@ -3077,11 +3077,11 @@ finalize_it:
 
 /* Get a JSON-based-variable as native json object */
 rsRetVal
-msgGetJSONPropJSON(msg_t * const pMsg, msgPropDescr_t *pProp, struct json_object **pjson)
+msgGetJSONPropJSON(msg_t * const pMsg, msgPropDescr_t *pProp, struct fjson_object **pjson)
 {
-	struct json_object *jroot;
+	struct fjson_object *jroot;
 	uchar *leaf;
-	struct json_object *parent;
+	struct fjson_object *parent;
 	DEFiRet;
 
 	*pjson = NULL;
@@ -3625,9 +3625,9 @@ uchar *MsgGetProp(msg_t *__restrict__ const pMsg, struct templateEntry *__restri
 				} else if(pProp->id == PROP_CEE_ALL_JSON_PLAIN) {
 					jflag = JSON_C_TO_STRING_PLAIN;
 				}
-				jstr = json_object_to_json_string_ext(pMsg->json, jflag);
+				jstr = fjson_object_to_json_string_ext(pMsg->json, jflag);
 #else
-				jstr = json_object_to_json_string(pMsg->json);
+				jstr = fjson_object_to_json_string(pMsg->json);
 #endif
 				MsgUnlock(pMsg);
 				if(jstr == NULL) {
@@ -4388,7 +4388,7 @@ uchar *MsgGetProp(msg_t *__restrict__ const pMsg, struct templateEntry *__restri
  * property name is extracted from the JSON object.
  */
 static rsRetVal
-msgSetPropViaJSON(msg_t *__restrict__ const pMsg, const char *name, struct json_object *json, int sharedReference)
+msgSetPropViaJSON(msg_t *__restrict__ const pMsg, const char *name, struct fjson_object *json, int sharedReference)
 {
 	const char *psz;
 	int val;
@@ -4396,48 +4396,48 @@ msgSetPropViaJSON(msg_t *__restrict__ const pMsg, const char *name, struct json_
 	prop_t *propRcvFromIP = NULL;
 	DEFiRet;
 
-	/* note: json_object_get_string() manages the memory of the returned
+	/* note: fjson_object_get_string() manages the memory of the returned
 	 *       string. So we MUST NOT free it!
 	 */
 	dbgprintf("DDDD: msgSetPropViaJSON key: '%s'\n", name);
 	if(!strcmp(name, "rawmsg")) {
-		psz = json_object_get_string(json);
+		psz = fjson_object_get_string(json);
 		MsgSetRawMsg(pMsg, psz, strlen(psz));
 	} else if(!strcmp(name, "msg")) {
-		psz = json_object_get_string(json);
+		psz = fjson_object_get_string(json);
 		MsgReplaceMSG(pMsg, (const uchar*)psz, strlen(psz)); 
 	} else if(!strcmp(name, "syslogtag")) {
-		psz = json_object_get_string(json);
+		psz = fjson_object_get_string(json);
 		MsgSetTAG(pMsg, (const uchar*)psz, strlen(psz)); 
 	} else if(!strcmp(name, "syslogfacility")) {
-		val = json_object_get_int(json);
+		val = fjson_object_get_int(json);
 		if(val >= 0 && val <= 24)
 			pMsg->iFacility = val;
 		else
 			DBGPRINTF("mmexternal: invalid fac %d requested -- ignored\n", val);
 	} else if(!strcmp(name, "syslogseverity")) {
-		val = json_object_get_int(json);
+		val = fjson_object_get_int(json);
 		if(val >= 0 && val <= 7)
 			pMsg->iSeverity = val;
 		else
 			DBGPRINTF("mmexternal: invalid fac %d requested -- ignored\n", val);
 	} else if(!strcmp(name, "procid")) {
-		psz = json_object_get_string(json);
+		psz = fjson_object_get_string(json);
 		MsgSetPROCID(pMsg, psz);
 	} else if(!strcmp(name, "msgid")) {
-		psz = json_object_get_string(json);
+		psz = fjson_object_get_string(json);
 		MsgSetMSGID(pMsg, psz);
 	} else if(!strcmp(name, "structured-data")) {
-		psz = json_object_get_string(json);
+		psz = fjson_object_get_string(json);
 		MsgSetStructuredData(pMsg, psz);
 	} else if(!strcmp(name, "hostname") || !strcmp(name, "source")) {
-		psz = json_object_get_string(json);
+		psz = fjson_object_get_string(json);
 		MsgSetHOSTNAME(pMsg, (const uchar*)psz, strlen(psz)); 
 	} else if(!strcmp(name, "fromhost")) {
-		psz = json_object_get_string(json);
+		psz = fjson_object_get_string(json);
 		MsgSetRcvFromStr(pMsg, (const uchar*) psz, 0, &propFromHost);
 	} else if(!strcmp(name, "fromhost-ip")) {
-		psz = json_object_get_string(json);
+		psz = fjson_object_get_string(json);
 		MsgSetRcvFromIPStr(pMsg, (const uchar*)psz, strlen(psz), &propRcvFromIP);
 	} else if(!strcmp(name, "$!")) {
 		msgAddJSON(pMsg, (uchar*)"!", json, 0, sharedReference);
@@ -4462,8 +4462,8 @@ msgSetPropViaJSON(msg_t *__restrict__ const pMsg, const char *name, struct json_
 rsRetVal
 MsgSetPropsViaJSON(msg_t *__restrict__ const pMsg, const uchar *__restrict__ const jsonstr)
 {
-	struct json_tokener *tokener = NULL;
-	struct json_object *json;
+	struct fjson_tokener *tokener = NULL;
+	struct fjson_object *json;
 	const char *errMsg;
 	DEFiRet;
 
@@ -4471,42 +4471,38 @@ MsgSetPropsViaJSON(msg_t *__restrict__ const pMsg, const uchar *__restrict__ con
 	if(!strcmp((char*)jsonstr, "{}")) /* shortcut for a common case */
 		FINALIZE;
 
-	tokener = json_tokener_new();
+	tokener = fjson_tokener_new();
 
-	json = json_tokener_parse_ex(tokener, (char*)jsonstr, ustrlen(jsonstr));
+	json = fjson_tokener_parse_ex(tokener, (char*)jsonstr, ustrlen(jsonstr));
 	if(Debug) {
 		errMsg = NULL;
 		if(json == NULL) {
-			enum json_tokener_error err;
+			enum fjson_tokener_error err;
 
 			err = tokener->err;
-			if(err != json_tokener_continue)
-#				if HAVE_JSON_TOKENER_ERROR_DESC
-					errMsg = json_tokener_error_desc(err);
-#				else
-					errMsg = json_tokener_errors[err];
-#				endif
+			if(err != fjson_tokener_continue)
+				errMsg = fjson_tokener_error_desc(err);
 			else
 				errMsg = "Unterminated input";
-		} else if(!json_object_is_type(json, json_type_object))
+		} else if(!fjson_object_is_type(json, fjson_type_object))
 			errMsg = "JSON value is not an object";
 		if(errMsg != NULL) {
 			DBGPRINTF("MsgSetPropsViaJSON: Error parsing JSON '%s': %s\n",
 					jsonstr, errMsg);
 		}
 	}
-	if(json == NULL || !json_object_is_type(json, json_type_object)) {
+	if(json == NULL || !fjson_object_is_type(json, fjson_type_object)) {
 		ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
 	}
  
-	json_object_object_foreach(json, name, val) {
+	fjson_object_object_foreach(json, name, val) {
 		msgSetPropViaJSON(pMsg, name, val, 0);
 	}
-	json_object_put(json);
+	fjson_object_put(json);
 
 finalize_it:
 	if(tokener != NULL)
-		json_tokener_free(tokener);
+		fjson_tokener_free(tokener);
 	RETiRet;
 }
 
@@ -4540,13 +4536,13 @@ jsonPathGetLeaf(uchar *name, int lenName)
 	return name + i;
 }
 
-static json_bool jsonVarExtract(struct json_object* root, const char *key, struct json_object **value) {
+static fjson_bool jsonVarExtract(struct fjson_object* root, const char *key, struct fjson_object **value) {
     char namebuf[MAX_VARIABLE_NAME_LEN];
     int key_len = strlen(key);
     char *array_idx_start = strstr(key, "[");
     char *array_idx_end = NULL;
     char *array_idx_num_end_discovered = NULL;
-    struct json_object *arr = NULL;
+    struct fjson_object *arr = NULL;
     if (array_idx_start != NULL) {
         array_idx_end = strstr(array_idx_start, "]");
     }
@@ -4556,11 +4552,11 @@ static json_bool jsonVarExtract(struct json_object* root, const char *key, struc
         if (errno == 0 && array_idx_num_end_discovered == array_idx_end) {
             memcpy(namebuf, key, array_idx_start - key);
             namebuf[array_idx_start - key] = '\0';
-            json_bool found_obj = RS_json_object_object_get_ex(root, namebuf, &arr);
-            if (found_obj && json_object_is_type(arr, json_type_array)) {
-                int len = json_object_array_length(arr);
+            fjson_bool found_obj = RS_json_object_object_get_ex(root, namebuf, &arr);
+            if (found_obj && fjson_object_is_type(arr, fjson_type_array)) {
+                int len = fjson_object_array_length(arr);
                 if (len > idx) {
-                    *value = json_object_array_get_idx(arr, idx);
+                    *value = fjson_object_array_get_idx(arr, idx);
                     if (*value != NULL) return TRUE;
                 }
                 return FALSE;
@@ -4572,11 +4568,11 @@ static json_bool jsonVarExtract(struct json_object* root, const char *key, struc
 
 
 static rsRetVal
-jsonPathFindNext(struct json_object *root, uchar *namestart, uchar **name, uchar *leaf,
-		 struct json_object **found, int bCreate)
+jsonPathFindNext(struct fjson_object *root, uchar *namestart, uchar **name, uchar *leaf,
+		 struct fjson_object **found, int bCreate)
 {
 	uchar namebuf[MAX_VARIABLE_NAME_LEN];
-	struct json_object *json;
+	struct fjson_object *json;
 	size_t i;
 	uchar *p = *name;
 	DEFiRet;
@@ -4595,8 +4591,8 @@ jsonPathFindNext(struct json_object *root, uchar *namestart, uchar **name, uchar
 		if(!bCreate) {
 			ABORT_FINALIZE(RS_RET_JNAME_INVALID);
 		} else {
-			json = json_object_new_object();
-			json_object_object_add(root, (char*)namebuf, json);
+			json = fjson_object_new_object();
+			fjson_object_object_add(root, (char*)namebuf, json);
 		}
 	}
 
@@ -4607,7 +4603,7 @@ finalize_it:
 }
 
 static rsRetVal
-jsonPathFindParent(struct json_object *jroot, uchar *name, uchar *leaf, struct json_object **parent, int bCreate)
+jsonPathFindParent(struct fjson_object *jroot, uchar *name, uchar *leaf, struct fjson_object **parent, int bCreate)
 {
 	uchar *namestart;
 	DEFiRet;
@@ -4623,31 +4619,31 @@ finalize_it:
 }
 
 static rsRetVal
-jsonMerge(struct json_object *existing, struct json_object *json)
+jsonMerge(struct fjson_object *existing, struct fjson_object *json)
 {
 	/* TODO: check & handle duplicate names */
 	DEFiRet;
-	struct json_object_iter it;
+	struct fjson_object_iter it;
 
-	json_object_object_foreachC(json, it) {
-		json_object_object_add(existing, it.key,
-			json_object_get(it.val));
+	fjson_object_object_foreachC(json, it) {
+		fjson_object_object_add(existing, it.key,
+			fjson_object_get(it.val));
 	}
 	/* note: json-c does ref counting. We added all descandants refcounts
 	 * in the loop above. So when we now free(_put) the root object, only
 	 * root gets freed().
 	 */
-	json_object_put(json);
+	fjson_object_put(json);
 	RETiRet;
 }
 
 /* find a JSON structure element (field or container doesn't matter).  */
 rsRetVal
-jsonFind(struct json_object *jroot, msgPropDescr_t *pProp, struct json_object **jsonres)
+jsonFind(struct fjson_object *jroot, msgPropDescr_t *pProp, struct fjson_object **jsonres)
 {
 	uchar *leaf;
-	struct json_object *parent;
-	struct json_object *field;
+	struct fjson_object *parent;
+	struct fjson_object *field;
 	DEFiRet;
 
 	if(jroot == NULL) {
@@ -4670,12 +4666,12 @@ finalize_it:
 }
 
 rsRetVal
-msgAddJSON(msg_t * const pM, uchar *name, struct json_object *json, int force_reset, int sharedReference)
+msgAddJSON(msg_t * const pM, uchar *name, struct fjson_object *json, int force_reset, int sharedReference)
 {
 	/* TODO: error checks! This is a quick&dirty PoC! */
-	struct json_object **pjroot;
-	struct json_object *parent, *leafnode;
-	struct json_object *given = NULL;
+	struct fjson_object **pjroot;
+	struct fjson_object *parent, *leafnode;
+	struct fjson_object *given = NULL;
 	uchar *leaf;
 	DEFiRet;
 
@@ -4690,7 +4686,7 @@ msgAddJSON(msg_t * const pM, uchar *name, struct json_object *json, int force_re
 		if (sharedReference) {
 			given = json;
 			json = jsonDeepCopy(json);
-			json_object_put(given);
+			fjson_object_put(given);
 		}
 		pthread_mutex_lock(&glblVars_lock);
 	} else {
@@ -4706,14 +4702,14 @@ msgAddJSON(msg_t * const pM, uchar *name, struct json_object *json, int force_re
 	} else {
 		if(*pjroot == NULL) {
 			/* now we need a root obj */
-			*pjroot = json_object_new_object();
+			*pjroot = fjson_object_new_object();
 		}
 		leaf = jsonPathGetLeaf(name, ustrlen(name));
 		CHKiRet(jsonPathFindParent(*pjroot, name, leaf, &parent, 1));
-		if (json_object_get_type(parent) != json_type_object) {
+		if (fjson_object_get_type(parent) != fjson_type_object) {
 			DBGPRINTF("msgAddJSON: not a container in json path,"
 				"name is '%s'\n", name);
-			json_object_put(json);
+			fjson_object_put(json);
 			ABORT_FINALIZE(RS_RET_INVLD_SETOP);
 		}
 		if(jsonVarExtract(parent, (char*)leaf, &leafnode) == FALSE)
@@ -4723,25 +4719,25 @@ msgAddJSON(msg_t * const pM, uchar *name, struct json_object *json, int force_re
 		 * as part of the interface spec. We still use it,
 		 * because it speeds up processing. If it does not work
 		 * at some point, use
-		 * json_object_object_del(parent, (char*)leaf);
+		 * fjson_object_object_del(parent, (char*)leaf);
 		 * before adding. rgerhards, 2012-09-17
 		 */
 		if (force_reset || (leafnode == NULL)) {
-			json_object_object_add(parent, (char*)leaf, json);
+			fjson_object_object_add(parent, (char*)leaf, json);
 		} else {
-			if(json_object_get_type(json) == json_type_object) {
+			if(fjson_object_get_type(json) == fjson_type_object) {
 				CHKiRet(jsonMerge(*pjroot, json));
 			} else {
 				/* TODO: improve the code below, however, the current
 				 *       state is not really bad */
-				if(json_object_get_type(leafnode) == json_type_object) {
+				if(fjson_object_get_type(leafnode) == fjson_type_object) {
 					DBGPRINTF("msgAddJSON: trying to update a container "
 							  "node with a leaf, name is %s - "
 							  "forbidden", name);
-					json_object_put(json);
+					fjson_object_put(json);
 					ABORT_FINALIZE(RS_RET_INVLD_SETOP);
 				}
-				json_object_object_add(parent, (char*)leaf, json);
+				fjson_object_object_add(parent, (char*)leaf, json);
 			}
 		}
 	}
@@ -4758,8 +4754,8 @@ finalize_it:
 rsRetVal
 msgDelJSON(msg_t * const pM, uchar *name)
 {
-	struct json_object **jroot;
-	struct json_object *parent, *leafnode;
+	struct fjson_object **jroot;
+	struct fjson_object *parent, *leafnode;
 	uchar *leaf;
 	DEFiRet;
 
@@ -4789,7 +4785,7 @@ msgDelJSON(msg_t * const pM, uchar *name)
 		 * we trust rsyslog.conf to be written by the admin.
 		 */
 		DBGPRINTF("unsetting JSON root object\n");
-		json_object_put(*jroot);
+		fjson_object_put(*jroot);
 		*jroot = NULL;
 	} else {
 		leaf = jsonPathGetLeaf(name, ustrlen(name));
@@ -4802,8 +4798,8 @@ msgDelJSON(msg_t * const pM, uchar *name)
 		} else {
 			DBGPRINTF("deleting JSON value path '%s', "
 				  "leaf '%s', type %d\n",
-				  name, leaf, json_object_get_type(leafnode));
-			json_object_object_del(parent, (char*)leaf);
+				  name, leaf, fjson_object_get_type(leafnode));
+			fjson_object_object_del(parent, (char*)leaf);
 		}
 	}
 
@@ -4827,64 +4823,64 @@ msgAddMetadata(msg_t *const __restrict__ pMsg,
 	       uchar *const __restrict__ metaval)
 {
 	DEFiRet;
-	struct json_object *const json = json_object_new_object();
+	struct fjson_object *const json = fjson_object_new_object();
 	CHKmalloc(json);
-	struct json_object *const jval = json_object_new_string((char*)metaval);
+	struct fjson_object *const jval = fjson_object_new_string((char*)metaval);
 	if(jval == NULL) {
-		json_object_put(json);
+		fjson_object_put(json);
 		ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
 	}
-	json_object_object_add(json, (const char *const)metaname, jval);
+	fjson_object_object_add(json, (const char *const)metaname, jval);
 	iRet = msgAddJSON(pMsg, (uchar*)"!metadata", json, 0, 0);
 finalize_it:
 	RETiRet;
 }
 
 
-static struct json_object *
-jsonDeepCopy(struct json_object *src)
+static struct fjson_object *
+jsonDeepCopy(struct fjson_object *src)
 {
-	struct json_object *dst = NULL, *json;
-	struct json_object_iter it;
+	struct fjson_object *dst = NULL, *json;
+	struct fjson_object_iter it;
 	int arrayLen, i;
 
 	if(src == NULL) goto done;
 
-	switch(json_object_get_type(src)) {
-	case json_type_boolean:
-		dst = json_object_new_boolean(json_object_get_boolean(src));
+	switch(fjson_object_get_type(src)) {
+	case fjson_type_boolean:
+		dst = fjson_object_new_boolean(fjson_object_get_boolean(src));
 		break;
-	case json_type_double:
-		dst = json_object_new_double(json_object_get_double(src));
+	case fjson_type_double:
+		dst = fjson_object_new_double(fjson_object_get_double(src));
 		break;
-	case json_type_int:
+	case fjson_type_int:
 #ifdef HAVE_JSON_OBJECT_NEW_INT64
-		dst = json_object_new_int64(json_object_get_int64(src));
+		dst = fjson_object_new_int64(fjson_object_get_int64(src));
 #else /* HAVE_JSON_OBJECT_NEW_INT64 */
-		dst = json_object_new_int(json_object_get_int(src));
+		dst = fjson_object_new_int(fjson_object_get_int(src));
 #endif /* HAVE_JSON_OBJECT_NEW_INT64 */
 		break;
-	case json_type_string:
-		dst = json_object_new_string(json_object_get_string(src));
+	case fjson_type_string:
+		dst = fjson_object_new_string(fjson_object_get_string(src));
 		break;
-	case json_type_object:
-		dst = json_object_new_object();
-		json_object_object_foreachC(src, it) {
+	case fjson_type_object:
+		dst = fjson_object_new_object();
+		fjson_object_object_foreachC(src, it) {
 			json = jsonDeepCopy(it.val);
-			json_object_object_add(dst, it.key, json);
+			fjson_object_object_add(dst, it.key, json);
 		}
 		break;
-	case json_type_array:
-		arrayLen = json_object_array_length(src);
-		dst = json_object_new_array();
+	case fjson_type_array:
+		arrayLen = fjson_object_array_length(src);
+		dst = fjson_object_new_array();
 		for(i = 0 ; i < arrayLen ; ++i) {
-			json = json_object_array_get_idx(src, i);
+			json = fjson_object_array_get_idx(src, i);
 			json = jsonDeepCopy(json);
-			json_object_array_add(dst, json);
+			fjson_object_array_add(dst, json);
 		}
 		break;
 	default:DBGPRINTF("jsonDeepCopy(): error unknown type %d\n",
-			 json_object_get_type(src));
+			 fjson_object_get_type(src));
 		dst = NULL;
 		break;
 	}
@@ -4895,21 +4891,17 @@ done:	return dst;
 rsRetVal
 msgSetJSONFromVar(msg_t * const pMsg, uchar *varname, struct var *v, int force_reset)
 {
-	struct json_object *json = NULL;
+	struct fjson_object *json = NULL;
 	char *cstr;
 	DEFiRet;
 	switch(v->datatype) {
 	case 'S':/* string */
 		cstr = es_str2cstr(v->d.estr, NULL);
-		json = json_object_new_string(cstr);
+		json = fjson_object_new_string(cstr);
 		free(cstr);
 		break;
 	case 'N':/* number (integer) */
-#ifdef HAVE_JSON_OBJECT_NEW_INT64
-		json = json_object_new_int64(v->d.n);
-#else /* HAVE_JSON_OBJECT_NEW_INT64 */
-		json = json_object_new_int((int) v->d.n);
-#endif /* HAVE_JSON_OBJECT_NEW_INT64 */
+		json = fjson_object_new_int64(v->d.n);
 		break;
 	case 'J':/* native JSON */
 		json = jsonDeepCopy(v->d.json);

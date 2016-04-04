@@ -226,12 +226,12 @@ parseSD_NAME(uchar *sdbuf, int lenbuf, int *curridx, uchar *namebuf)
 
 
 static inline rsRetVal
-parseSD_PARAM(uchar *sdbuf, int lenbuf, int *curridx, struct json_object *jroot)
+parseSD_PARAM(uchar *sdbuf, int lenbuf, int *curridx, struct fjson_object *jroot)
 {
 	int i;
 	uchar pName[33];
 	uchar pVal[32*1024];
-	struct json_object *jval;
+	struct fjson_object *jval;
 	DEFiRet;
 	
 	i = *curridx;
@@ -250,8 +250,8 @@ parseSD_PARAM(uchar *sdbuf, int lenbuf, int *curridx, struct json_object *jroot)
 	}
 	++i;
 
-	jval = json_object_new_string((char*)pVal);
-	json_object_object_add(jroot, (char*)pName, jval);
+	jval = fjson_object_new_string((char*)pVal);
+	fjson_object_object_add(jroot, (char*)pName, jval);
 
 	*curridx = i;
 finalize_it:
@@ -260,11 +260,11 @@ finalize_it:
 
 
 static inline rsRetVal
-parseSD_ELEMENT(uchar *sdbuf, int lenbuf, int *curridx, struct json_object *jroot)
+parseSD_ELEMENT(uchar *sdbuf, int lenbuf, int *curridx, struct fjson_object *jroot)
 {
 	int i;
 	uchar sd_id[33];
-	struct json_object *json = NULL;
+	struct fjson_object *json = NULL;
 	DEFiRet;
 	
 	i = *curridx;
@@ -274,7 +274,7 @@ parseSD_ELEMENT(uchar *sdbuf, int lenbuf, int *curridx, struct json_object *jroo
 	++i; /* eat '[' */
 
 	CHKiRet(parseSD_NAME(sdbuf, lenbuf, &i, sd_id));
-	json =  json_object_new_object();
+	json =  fjson_object_new_object();
 
 	while(i < lenbuf) {
 		if(sdbuf[i] == ']') {
@@ -295,23 +295,23 @@ parseSD_ELEMENT(uchar *sdbuf, int lenbuf, int *curridx, struct json_object *jroo
 	}
 	++i; /* eat ']' */
 	*curridx = i;
-	json_object_object_add(jroot, (char*)sd_id, json);
+	fjson_object_object_add(jroot, (char*)sd_id, json);
 finalize_it:
 	if(iRet != RS_RET_OK && json != NULL)
-		json_object_put(json);
+		fjson_object_put(json);
 	RETiRet;
 }
 
 static inline rsRetVal
 parse_sd(instanceData *pData, msg_t *pMsg)
 {
-	struct json_object *json, *jroot;
+	struct fjson_object *json, *jroot;
 	uchar *sdbuf;
 	int lenbuf;
 	int i = 0;
 	DEFiRet;
 
-	json =  json_object_new_object();
+	json =  fjson_object_new_object();
 	if(json == NULL) {
 		ABORT_FINALIZE(RS_RET_ERR);
 	}
@@ -320,15 +320,15 @@ parse_sd(instanceData *pData, msg_t *pMsg)
 		CHKiRet(parseSD_ELEMENT(sdbuf, lenbuf, &i, json));
 	}
 
-	jroot =  json_object_new_object();
+	jroot =  fjson_object_new_object();
 	if(jroot == NULL) {
 		ABORT_FINALIZE(RS_RET_ERR);
 	}
-	json_object_object_add(jroot, "rfc5424-sd", json);
+	fjson_object_object_add(jroot, "rfc5424-sd", json);
  	msgAddJSON(pMsg, pData->jsonRoot, jroot, 0, 0);
 finalize_it:
 	if(iRet != RS_RET_OK && json != NULL)
-		json_object_put(json);
+		fjson_object_put(json);
 	RETiRet;
 }
 

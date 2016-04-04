@@ -161,7 +161,7 @@ int tplRequiresDateCall(struct template *pTpl);
  * rgerhards, 2007-08-06
  */
 rsRetVal tplToArray(struct template *pTpl, msg_t *pMsg, uchar*** ppArr, struct syslogTime *ttNow);
-rsRetVal tplToJSON(struct template *pTpl, msg_t *pMsg, struct json_object **, struct syslogTime *ttNow);
+rsRetVal tplToJSON(struct template *pTpl, msg_t *pMsg, struct fjson_object **, struct syslogTime *ttNow);
 rsRetVal doEscape(uchar **pp, rs_size_t *pLen, unsigned short *pbMustBeFreed, int escapeMode);
 rsRetVal
 tplToString(struct template *__restrict__ const pTpl,

@@ -87,7 +87,7 @@ initConfigSettings(void)
  * rgerhards, 2008-04-12
  */
 static rsRetVal
-enqMsg(uchar *msg, uchar* pszTag, syslog_pri_t pri, struct timeval *tp, struct json_object *json)
+enqMsg(uchar *msg, uchar* pszTag, syslog_pri_t pri, struct timeval *tp, struct fjson_object *json)
 {
 	struct syslogTime st;
 	msg_t *pMsg;
@@ -140,7 +140,7 @@ rsRetVal imkmsgLogIntMsg(syslog_pri_t priority, char *fmt, ...)
 
 /* log a message from /dev/kmsg
  */
-rsRetVal Syslog(syslog_pri_t priority, uchar *pMsg, struct timeval *tp, struct json_object *json)
+rsRetVal Syslog(syslog_pri_t priority, uchar *pMsg, struct timeval *tp, struct fjson_object *json)
 {
 	DEFiRet;
 	iRet = enqMsg((uchar*)pMsg, (uchar*) "kernel:", priority, tp, json);

@@ -206,12 +206,12 @@ msg_to_json(GList *list,instanceData *pData)
 {
     GList *it= list;
 
-    struct json_object *json;
-    struct json_object *jval;
+    struct fjson_object *json;
+    struct fjson_object *jval;
     
     DEFiRet;
     
-    json = json_object_new_object();
+    json = fjson_object_new_object();
     if(json == NULL)
     {
             ABORT_FINALIZE(RS_RET_ERR);
@@ -224,8 +224,8 @@ msg_to_json(GList *list,instanceData *pData)
 	int value_len = ((result_t *)it->data)->value_len;
 	char *value = (char *)malloc(value_len+1);
         snprintf(value,value_len+1,"%.*s",value_len,((result_t*)it->data)->value);
-	jval = json_object_new_string(value);
-	json_object_object_add(json,key,jval);
+	jval = fjson_object_new_string(value);
+	fjson_object_object_add(json,key,jval);
 	free(key);
 	free(value);
     }

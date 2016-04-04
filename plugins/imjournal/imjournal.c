@@ -173,7 +173,7 @@ finalize_it:
  * by the caller.
  */
 static rsRetVal
-enqMsg(uchar *msg, uchar *pszTag, int iFacility, int iSeverity, struct timeval *tp, struct json_object *json, int sharedJsonProperties)
+enqMsg(uchar *msg, uchar *pszTag, int iFacility, int iSeverity, struct timeval *tp, struct fjson_object *json, int sharedJsonProperties)
 {
 	struct syslogTime st;
 	msg_t *pMsg;
@@ -224,7 +224,7 @@ readjournal() {
 	struct timeval tv;
 	uint64_t timestamp;
 
-	struct json_object *json = NULL;
+	struct fjson_object *json = NULL;
 	int r;
 
 	/* Information from messages */
@@ -238,7 +238,7 @@ readjournal() {
 	size_t pidlength;
 
 	const void *equal_sign;
-	struct json_object *jval;
+	struct fjson_object *jval;
 	size_t l;
 
 	long prefixlen = 0;
@@ -315,7 +315,7 @@ readjournal() {
 		ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
 	}
 
-	json = json_object_new_object();
+	json = fjson_object_new_object();
 
 	SD_JOURNAL_FOREACH_DATA(j, get, l) {
 		char *data;
@@ -345,8 +345,8 @@ readjournal() {
 		}
 
 		/* and save them to json object */
-		jval = json_object_new_string((char *)data);
-		json_object_object_add(json, name, jval);
+		jval = fjson_object_new_string((char *)data);
+		fjson_object_object_add(json, name, jval);
 		free (data);
 		free (name);
 	}
