@@ -239,6 +239,11 @@ static struct cnfparamblk inppblk =
 
 #include "im-helper.h" /* must be included AFTER the type definitions! */
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+
 
 #if HAVE_INOTIFY_INIT
 /* support for inotify mode */
@@ -474,7 +479,10 @@ static void pollFileCancelCleanup(void *pArg)
 
 
 /* poll a file, need to check file rollover etc. open file if not open */
+/*  AIXPORT : gcc pragma ignored */
+#ifndef _AIX
 #pragma GCC diagnostic ignored "-Wempty-body"
+#endif
 static rsRetVal pollFile(fileInfo_t *pThis, int *pbHadFileData)
 {
 	cstr_t *pCStr = NULL;
@@ -515,7 +523,9 @@ finalize_it:
 
 	RETiRet;
 }
+#ifndef _AIX
 #pragma GCC diagnostic warning "-Wempty-body"
+#endif
 
 
 /* create input instance, set default paramters, and
@@ -1362,8 +1372,16 @@ CODESTARTrunInput
 		 (runModConf->opMode == OPMODE_POLLING) ? "polling" : "inotify");
 	if(runModConf->opMode == OPMODE_POLLING)
 		iRet = doPolling();
+#ifdef _AIX
+#if HAVE_INOTIFY_INIT
 	else
 		iRet = do_inotify();
+#endif
+#else
+	else
+		iRet = do_inotify();
+#endif
+
 
 	DBGPRINTF("imfile: terminating upon request of rsyslog core\n");
 ENDrunInput

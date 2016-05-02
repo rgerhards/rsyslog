@@ -21,6 +21,10 @@
 #ifndef INCLUDED_PARSER_H
 #define INCLUDED_PARSER_H
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
 /* we create a small helper object, a list of parsers, that we can use to
  * build a chain of them whereever this is needed (initially thought to be
  * used in ruleset.c as well as ourselvs).
@@ -68,5 +72,10 @@ void printParserList(parserList_t *pList);
 PROTOTYPEObj(parser);
 rsRetVal parserConstructViaModAndName(modInfo_t *pMod, uchar *const pName, void *parserInst);
 
+
+
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
 
 #endif /* #ifndef INCLUDED_PARSER_H */

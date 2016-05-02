@@ -51,6 +51,12 @@
 #include "wti.h"
 #include "dirty.h" /* for main ruleset queue creation */
 
+#ifdef _AIX
+#define msg_t msg_tt
+#define var var_tt
+#endif
+
+
 /* static data */
 DEFobjStaticHelpers
 DEFobjCurrIf(errmsg)

@@ -28,6 +28,11 @@
 #include "syslogd-types.h"
 #include "queue.h"
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+
 /* external data */
 extern int glbliActionResumeRetryCount;
 extern int bActionReportSuspension;
@@ -101,5 +106,9 @@ void actionCommitAllDirect(wti_t *pWti);
 
 /* external data */
 extern int iActionNbr;
+
+#ifdef _AIX
+#undef msg_t
+#endif
 
 #endif /* #ifndef ACTION_H_INCLUDED */

@@ -3,6 +3,30 @@
 
 AC_PREREQ(2.61)
 AC_INIT([rsyslog],[8.4.2],[rsyslog@lists.adiscon.com])
+
+# AIXPORT START: Detect the underlying OS
+unamestr=$(uname)
+AM_CONDITIONAL([AIX], [test x$unamestr = xAIX])
+# AIXPORT END
+
+
+# AIXPORT END: Set the required variables for AIX config script
+if test "$unamestr" = "AIX"; then
+  export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig:/usr/lib/pkgconfig"
+  LIBS="-lbsd -lsrc"
+  CPPFLAGS="-D_THREAD_SAFE -D_BSD=43"
+  LDFLAGS="-qcpluscmt -brtl -bexpall -bE:strippedsymbols.exp "
+  LIBESTR_LIBS="-L/usr/lib/ -lestr"
+  LIBESTR_CFLAGS="-I/usr/include"
+  LIBLOGGING_STDLOG_LIBS="-L/usr/lib/ -llogging-stdlog"
+  LIBLOGGING_STDLOG_CFLAGS="-I/usr/include"
+  JSON_C_CFLAGS="-I/usr/include/json-c"
+  JSON_C_LIBS="-L/usr/lib/ -ljson-c"
+  CC="xlc"
+  AC_PREFIX_DEFAULT(/usr)
+fi
+# AIXPORT END
+
 AM_INIT_AUTOMAKE([subdir-objects])
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -23,6 +47,11 @@ AC_PROG_YACC
 AC_PROG_CC
 AM_PROG_CC_C_O
 AC_DISABLE_STATIC
+# AIXPORT START: enable dlopen
+if test "$unamestr" = "AIX"; then
+  AC_LIBTOOL_DLOPEN
+fi
+# AIXPORT end
 AC_PROG_LIBTOOL
 AC_CANONICAL_HOST
 
@@ -67,6 +96,12 @@ case "${host}" in
     LIBUUID_LIBS=${LIBUUID_LIBS:=-luuid}
     AC_SUBST(SOL_LIBS)
   ;;
+# AIXPORT START
+  *-*-aix*)
+    os_type="aix"
+    AC_DEFINE([OS_AIX], [1], [Indicator for a AIX OS])
+  ;;
+# AIXPORT END
 esac
 
 AC_DEFINE_UNQUOTED([HOSTENV], "$host", [the host environment, can be queried via a system variable])
@@ -118,7 +153,21 @@ AC_CHECK_MEMBERS([struct sockaddr.sa_len],,,[$sa_includes])
 AC_FUNC_CHOWN
 AC_FUNC_FORK
 AC_PROG_GCC_TRADITIONAL
+
+# AIXPORT START: hack to avoid defining rpl_malloc
+if test "$unamestr" = "AIX"; then
+  ac_cv_func_malloc_0_nonnull=yes
+fi
+# AIXPORT END
+
 AC_FUNC_MALLOC
+
+# AIXPORT START: hack to avoid defining rpl_realloc
+if test "$unamestr" = "AIX"; then
+  ac_cv_func_realloc_0_nonnull=yes
+fi
+# AIXPORT END
+
 AC_FUNC_REALLOC
 AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
@@ -280,6 +329,9 @@ AC_CHECK_HEADERS(
           PTHREADS_LIBS="-lpthread"
  	  case "${os_type}" in
  	  solaris) PTHREADS_CFLAGS="-pthreads" ;;
+# AIXPORT START: AIX compiler doesn't support -pthread or -pthreads
+ 	  aix)     PTHREADS_CFLAGS="" ;;
+# AIXPORT END
  	  *)       PTHREADS_CFLAGS="-pthread" ;;
  	  esac
           AC_SUBST(PTHREADS_LIBS)
@@ -788,6 +840,13 @@ fi
 AM_CONDITIONAL(ENABLE_GNUTLS, test x$enable_gnutls = xyes)
 
 # libgcrypt support
+
+# AIXPORT START: Disable use of libgcrypt by default
+if test "$unamestr" = "AIX"; then
+  enable_libgcrypt="no"
+fi
+# AIXPORT END
+
 AC_ARG_ENABLE(libgcrypt,
         [AS_HELP_STRING([--enable-libgcrypt],[Enable log file encryption support (libgcrypt) @<:@default=yes@:>@])],
         [case "${enableval}" in

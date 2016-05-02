@@ -116,6 +116,11 @@
 #include "msg.h"
 #include "net.h" /* for permittedPeers, may be removed when this is removed */
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+
 /* the define is from tcpsrv.h, we need to find a new (but easier!!!) abstraction layer some time ... */
 #define TCPSRV_NO_ADDTL_DELIMITER -1 /* specifies that no additional delimiter is to be used in TCP framing */
 

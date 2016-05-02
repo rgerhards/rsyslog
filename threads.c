@@ -205,6 +205,12 @@ static void* thrdStarter(void *arg)
 	sigaddset(&sigSet, SIGTTIN);
 	pthread_sigmask(SIG_UNBLOCK, &sigSet, NULL);
 
+#ifdef _AIX /* AIXPORT unblock SIGSEGV so that the process core dumps on segmentation fault */
+	sigemptyset(&sigSet);
+	sigaddset(&sigSet, SIGSEGV);
+	pthread_sigmask(SIG_UNBLOCK, &sigSet, NULL);
+#endif /* AIXPORT */
+
 	/* setup complete, we are now ready to execute the user code. We will not
 	 * regain control until the user code is finished, in which case we terminate
 	 * the thread.
@@ -235,6 +241,9 @@ rsRetVal thrdCreate(rsRetVal (*thrdMain)(thrdInfo_t*), rsRetVal(*afterRun)(thrdI
 {
 	DEFiRet;
 	thrdInfo_t *pThis;
+#if defined (_AIX)
+	pthread_attr_t aix_attr;
+#endif
 
 	assert(thrdMain != NULL);
 
@@ -244,6 +253,11 @@ rsRetVal thrdCreate(rsRetVal (*thrdMain)(thrdInfo_t*), rsRetVal(*afterRun)(thrdI
 	pThis->pAfterRun = afterRun;
 	pThis->bNeedsCancel = bNeedsCancel;
 	pThis->name = ustrdup(name);
+#if defined (_AIX)
+	pthread_attr_init(&aix_attr);
+	pthread_attr_setstacksize(&aix_attr, 4096*512);
+	pthread_create(&pThis->thrdID, &aix_attr, thrdStarter, pThis);
+#else
 	pthread_create(&pThis->thrdID,
 #ifdef HAVE_PTHREAD_SETSCHEDPARAM
 			   &default_thread_attr,
@@ -251,6 +265,7 @@ rsRetVal thrdCreate(rsRetVal (*thrdMain)(thrdInfo_t*), rsRetVal(*afterRun)(thrdI
 			   NULL,
 #endif
 			   thrdStarter, pThis);
+#endif
 	CHKiRet(llAppend(&llThrds, NULL, pThis));
 
 finalize_it:

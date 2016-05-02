@@ -29,7 +29,9 @@
   */
 
 %{
+#ifdef _AIX
 #include "config.h"
+#endif
 #include "parserif.h"
 extern char *strdup(__const char*); /* somehow we may not get this from string.h... */
 %}
@@ -92,7 +94,7 @@ extern int yydebug;
 /* somehow, I need these prototype even though the headers are 
  * included. I guess that's some autotools magic I don't understand...
  */
-#if !defined(__FreeBSD__)
+#if !defined(__FreeBSD__) && !defined(_AIX)
 int fileno(FILE *stream);
 #endif
 

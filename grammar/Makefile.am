@@ -2,6 +2,9 @@ BUILT_SOURCES = grammar.h
 CLEANFILES = grammar.h grammar.c
 AM_YFLAGS = -d
 noinst_LTLIBRARIES = libgrammar.la
+if AIX
+AM_CFLAGS = -D_LARGE_FILES
+endif
 #bin_PROGRAMS = testdriver # TODO: make this conditional
 
 libgrammar_la_SOURCES = \

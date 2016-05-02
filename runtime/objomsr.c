@@ -73,10 +73,26 @@ rsRetVal OMSRconstruct(omodStringRequest_t **ppThis, int iNumEntries)
 	/* allocate string for template name array. The individual strings will be
 	 * allocated as the code progresses (we do not yet know the string sizes)
 	 */
+#if defined (_AIX)
+/* AIXPORT : 834123 : We avoid calloc of zero */
+        if(iNumEntries != 0)
+        {
+                CHKmalloc(pThis->ppTplName = calloc(iNumEntries, sizeof(uchar*)));
+
+                /* allocate the template options array. */
+                CHKmalloc(pThis->piTplOpts = calloc(iNumEntries, sizeof(int)));
+        }
+        else  /* This is what calloc of zero, would have returned */
+        {
+                pThis->ppTplName = NULL;
+                pThis->piTplOpts = NULL;
+        }
+#else
 	CHKmalloc(pThis->ppTplName = calloc(iNumEntries, sizeof(uchar*)));
 
 	/* allocate the template options array. */
 	CHKmalloc(pThis->piTplOpts = calloc(iNumEntries, sizeof(int)));
+#endif
 	
 finalize_it:
 	if(iRet != RS_RET_OK) {

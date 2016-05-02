@@ -37,6 +37,9 @@
 #if HAVE_FCNTL_H
 #include <fcntl.h>
 #endif
+#ifdef _AIX
+#include <pthread.h> 
+#endif
 #include "dirty.h"
 #include "syslogd-types.h"
 #include "net.h"

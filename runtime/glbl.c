@@ -361,6 +361,13 @@ setDebugLevel(void __attribute__((unused)) *pVal, int level)
 	RETiRet;
 }
 
+#ifdef _AIX
+/* set the maximum message size */
+static rsRetVal setMaxMsgSize(void __attribute__((unused)) *pVal, long iNewVal)
+{
+        return SetMaxLine(iNewVal);
+}
+#endif
 
 /* return our local IP.
  * If no local IP is set, "127.0.0.1" is selected *and* set. This
@@ -994,7 +1001,9 @@ BEGINAbstractObjClassInit(glbl, 1, OBJ_IS_CORE_MODULE) /* class, version */
 	CHKiRet(regCfSysLineHdlr((uchar *)"localhostipif", 0, eCmdHdlrGetWord, setLocalHostIPIF, NULL, NULL));
 	CHKiRet(regCfSysLineHdlr((uchar *)"optimizeforuniprocessor", 0, eCmdHdlrBinary, NULL, &bOptimizeUniProc, NULL));
 	CHKiRet(regCfSysLineHdlr((uchar *)"preservefqdn", 0, eCmdHdlrBinary, NULL, &bPreserveFQDN, NULL));
-	CHKiRet(regCfSysLineHdlr((uchar *)"maxmessagesize", 0, eCmdHdlrSize, NULL, &iMaxLine, NULL));
+#ifdef _AIX
+	CHKiRet(regCfSysLineHdlr((uchar *)"maxmessagesize", 0, eCmdHdlrSize, setMaxMsgSize, NULL, NULL));
+#endif
 
 	/* Deprecated parser config options */
 	CHKiRet(regCfSysLineHdlr((uchar *)"controlcharacterescapeprefix", 0, eCmdHdlrGetChar, NULL, &cCCEscapeChar, NULL));

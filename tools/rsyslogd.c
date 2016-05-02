@@ -56,6 +56,63 @@
 #include "dirty.h"
 #include "janitor.h"
 
+#if defined(_AIX)
+/* AIXPORT : start
+ * The following includes and declarations are for support of the System
+ * Resource Controller (SRC) .
+ */
+static void deinitAll(void);
+#include <spc.h>
+
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+static  struct srcreq srcpacket;
+int     cont;
+struct  srchdr *srchdr;
+char    progname[128];
+
+
+/* Normally defined as locals in main
+ * But here since the functionality is split
+ * across multiple functions, we make it global
+ */
+static int rc;
+static socklen_t addrsz;
+static struct sockaddr srcaddr;
+static int ch;
+extern int optind;
+extern char *optarg;
+static  struct filed *f;
+int src_exists =  TRUE;
+/* src end */
+
+/*
+ * SRC packet processing - .
+ */
+#define SRCMIN(a, b)  (a < b) ? a : b
+void
+dosrcpacket(msgno, txt, len)
+        int msgno;
+        char *txt;
+        int len;
+{
+        struct srcrep reply;
+
+        reply.svrreply.rtncode = msgno;
+/* AIXPORT : 833996 : srv was corrected to syslogd */
+        strcpy(reply.svrreply.objname, "syslogd");
+        snprintf(reply.svrreply.rtnmsg,
+                SRCMIN(sizeof(reply.svrreply.rtnmsg)-1, strlen(txt)), "%s", txt);
+        srchdr = srcrrqs((char *)&srcpacket);
+        srcsrpy(srchdr, (char *)&reply, len, cont);
+}
+
+#endif
+
+/* AIXPORT : end  */
+
 DEFobjCurrIf(obj)
 DEFobjCurrIf(prop)
 DEFobjCurrIf(parser)
@@ -722,7 +779,12 @@ rsyslogdInit(void)
 
 	memset(&sigAct, 0, sizeof (sigAct));
 	sigemptyset(&sigAct.sa_mask);
+/* AIXPORT : Typecasting to avoid compiler warning */
+#if defined(_AIX)
+	sigAct.sa_handler = (void(*)(int))syslogd_sighup_handler;
+#else
 	sigAct.sa_handler = syslogd_sighup_handler;
+#endif
 	sigaction(SIGHUP, &sigAct, NULL);
 
 	CHKiRet(rsconf.Activate(ourConf));
@@ -769,7 +831,12 @@ initAll(int argc, char **argv)
 	 * of other options, we do this during the inital option processing.
 	 * rgerhards, 2008-04-04
 	 */
+#if defined(_AIX)
+        /* AIXPORT : -R is a no-op for AIX */
+	while((ch = getopt(argc, argv, "46a:Ac:dDef:g:hi:l:m:M:nN:op:qQr::s:S:t:T:u:vwxR")) != EOF) {
+#else
 	while((ch = getopt(argc, argv, "46a:Ac:dDef:g:hi:l:m:M:nN:op:qQr::s:S:t:T:u:vwx")) != EOF) {
+#endif
 		switch((char)ch) {
                 case '4':
                 case '6':
@@ -789,6 +856,10 @@ initAll(int argc, char **argv)
 		case 'x': /* disable dns for remote messages */
 			CHKiRet(bufOptAdd(ch, optarg));
 			break;
+#if defined(_AIX)
+                case 'R':  /* This option is a no-op for AIX */
+			break;   
+#endif
 		case 'd': /* debug - must be handled now, so that debug is active during init! */
 			debugging_on = 1;
 			Debug = 1;
@@ -808,6 +879,7 @@ initAll(int argc, char **argv)
 			exit(0); /* exit for -v option - so this is a "good one" */
 		case '?':
 		default:
+			printf("Option is %c\n",ch);
 			rsyslogd_usage();
 		}
 	}
@@ -965,6 +1037,10 @@ initAll(int argc, char **argv)
 	if(!iConfigVerify)
 		CHKiRet(syslogd_doGlblProcessInit());
 
+
+#if defined(_AIX) /* AIXPORT : src support start */
+        if(!src_exists)
+#endif /* AIXPORT : src end  */
 	/* Send a signal to the parent so it can terminate.  */
 	if(glblGetOurPid() != ppid)
 		kill(ppid, SIGTERM);
@@ -1033,7 +1109,12 @@ rsyslogdDebugSwitch()
 
 	memset(&sigAct, 0, sizeof (sigAct));
 	sigemptyset(&sigAct.sa_mask);
+#if defined(_AIX)
+	/*  AIXPORT : Typecasting to avoid compiler warnings */
+	sigAct.sa_handler = (void(*)(int))rsyslogdDebugSwitch;
+#else
 	sigAct.sa_handler = rsyslogdDebugSwitch;
+#endif
 	sigaction(SIGUSR1, &sigAct, NULL);
 }
 
@@ -1185,15 +1266,80 @@ static void
 mainloop(void)
 {
 	struct timeval tvSelectTimeout;
+	/* AIXPORT :  SRC support start */
+#if defined(_AIX)
+	char buf[256];
+        fd_set rfds;
+#endif
+	/* AIXPORT : src end */
+
 
 	BEGINfunc
 	/* first check if we have any internal messages queued and spit them out. */
 	processImInternal();
 
 	while(!bFinished){
+
+#if defined(_AIX) /* AIXPORT :  SRC support start */
+        	if(src_exists)
+		{
+			FD_ZERO(&rfds);
+                	FD_SET(SRC_FD, &rfds);
+		}
+#endif /* AIXPORT : src end */
 		tvSelectTimeout.tv_sec = janitorInterval * 60; /* interval is in minutes! */
 		tvSelectTimeout.tv_usec = 0;
+#ifndef _AIX
 		select(1, NULL, NULL, NULL, &tvSelectTimeout);
+#else
+
+		/* AIXPORT :  SRC support start */
+		if(!src_exists)
+        		select(1, NULL, NULL, NULL, &tvSelectTimeout);
+		else if(select(SRC_FD + 1, (fd_set *)&rfds, NULL, NULL, &tvSelectTimeout))
+		{
+	        	if(FD_ISSET(SRC_FD, &rfds))
+        		{
+        			rc = recvfrom(SRC_FD, &srcpacket, SRCMSG, 0, &srcaddr, &addrsz);
+               			if(rc < 0)
+                		if (errno != EINTR)
+                		{
+                        		fprintf(stderr,"%s: ERROR: '%d' recvfrom\n", progname,errno);
+                        		exit(1);
+                		} else  /* punt on short read */
+                        		continue;
+
+                		switch(srcpacket.subreq.action)
+                		{
+                    		  case START:
+                        		dosrcpacket(SRC_SUBMSG,"ERROR: rsyslogd does not support this option.\n",sizeof(struct srcrep));
+                        		break;
+                    		  case STOP:
+                        		if (srcpacket.subreq.object == SUBSYSTEM) {
+                                		dosrcpacket(SRC_OK,NULL,sizeof(struct srcrep));
+						(void) snprintf(buf, sizeof(buf) / sizeof(char), " [origin software=\"rsyslogd\" " "swVersion=\"" VERSION \
+								"\" x-pid=\"%d\" x-info=\"http://www.rsyslog.com\"]" " exiting due to stopsrc.",
+								(int) glblGetOurPid());
+						errno = 0;
+						logmsgInternal(NO_ERRCODE, LOG_SYSLOG|LOG_INFO, (uchar*)buf, 0);
+						return ;
+                        		} else
+                              			dosrcpacket(SRC_SUBMSG,"ERROR: rsyslogd does not support this option.\n",sizeof(struct srcrep));
+                        		break;
+                    		  case REFRESH:
+                        		dosrcpacket(SRC_SUBMSG,"ERROR: rsyslogd does not support this option.\n", sizeof(struct srcrep));
+                        		break;
+                    	  	default:
+                        		dosrcpacket(SRC_SUBICMD,NULL,sizeof(struct srcrep));
+                        		break;
+
+                		}
+
+        		}
+#endif
+		}
+/* AIXPORT : SRC end */
+
 		if(bFinished)
 			break;	/* exit as quickly as possible */
 
@@ -1314,6 +1460,29 @@ deinitAll(void)
 int
 main(int argc, char **argv)
 {
+#if defined(_AIX)
+	/* AIXPORT : start
+	 * SRC support : fd 0 (stdin) must be the SRC socket
+ 	 * startup.  fd 0 is duped to a new descriptor so that stdin can be used
+ 	 * internally by rsyslogd.
+ 	 */
+
+        strncpy(progname,argv[0], sizeof(progname)-1);
+        addrsz = sizeof(srcaddr);
+        if ((rc = getsockname(0, &srcaddr, &addrsz)) < 0) {
+                fprintf(stderr, "%s: continuing without SRC support\n", progname);
+                src_exists = FALSE;
+        }
+        if (src_exists) 
+                if(dup2(0, SRC_FD) == -1)
+		{
+                	fprintf(stderr, "%s: dup2 failed exiting now...\n", progname);
+			/* In the unlikely event of dup2 failing we exit */
+			exit(-1);
+		}
+#endif
+/* AIXPORT : src end */
+
 	dbgClassInit();
 	initAll(argc, argv);
 	sd_notify(0, "READY=1");

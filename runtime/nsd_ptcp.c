@@ -433,6 +433,10 @@ LstnInit(netstrms_t *pNS, void *pUsr, rsRetVal(*fAddLstn)(void*,netstrm_t*),
 		/* We need to enable BSD compatibility. Otherwise an attacker
 		 * could flood our log files by sending us tons of ICMP errors.
 		 */
+/* AIXPORT : SO_BSDCOMPAT socket option is depricated , and its usage has been discontinued
+             on most unixes, AIX does not support this option , hence remove the call.
+*/
+#if !defined(_AIX)
 #ifndef BSD	
 		if(net.should_use_so_bsdcompat()) {
 			if (setsockopt(sock, SOL_SOCKET, SO_BSDCOMPAT,
@@ -443,6 +447,7 @@ LstnInit(netstrms_t *pNS, void *pUsr, rsRetVal(*fAddLstn)(void*,netstrm_t*),
 				continue;
 			}
 		}
+#endif
 #endif
 
 	        if( (bind(sock, r->ai_addr, r->ai_addrlen) < 0)
@@ -535,6 +540,10 @@ Rcv(nsd_t *pNsd, uchar *pRcvBuf, ssize_t *pLenBuf)
 	DEFiRet;
 	nsd_ptcp_t *pThis = (nsd_ptcp_t*) pNsd;
 	ISOBJ_TYPE_assert(pThis, nsd_ptcp);
+/*  AIXPORT : MSG_DONTWAIT not supported */ 
+#if defined (_AIX)
+#define MSG_DONTWAIT    MSG_NONBLOCK
+#endif
 
 	*pLenBuf = recv(pThis->sock, pRcvBuf, *pLenBuf, MSG_DONTWAIT);
 

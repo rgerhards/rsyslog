@@ -35,6 +35,11 @@
 #include "regexp.h"
 #include "stringbuf.h"
 
+#ifdef _AIX
+#include "msg.h"
+#define msg_t msg_tt
+#endif
+
 struct template {
 	struct template *pNext;
 	char *pszName;
@@ -69,7 +74,9 @@ enum tplRegexType { TPL_REGEX_BRE = 0, /* posix BRE */
 		    TPL_REGEX_ERE = 1  /* posix ERE */
 		  };
 
+#ifndef _AIX
 #include "msg.h"
+#endif
 
 /* a specific parse entry */
 struct templateEntry {
@@ -167,6 +174,10 @@ tplToString(struct template *__restrict__ const pTpl,
 
 rsRetVal templateInit();
 rsRetVal tplProcessCnf(struct cnfobj *o);
+
+#ifdef _AIX
+#undef msg_t
+#endif
 
 #endif /* #ifndef TEMPLATE_H_INCLUDED */
 /* vim:set ai:

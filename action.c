@@ -92,6 +92,9 @@
 #include <strings.h>
 #include <time.h>
 #include <errno.h>
+#ifdef _AIX
+#include <pthread.h>
+#endif 
 #include <json.h>
 
 #include "dirty.h"
@@ -110,6 +113,12 @@
 #include "ruleset.h"
 #include "parserif.h"
 #include "statsobj.h"
+
+#ifdef _AIX
+#define msg_t msg_tt
+#define cs cs_t
+#endif
+
 
 #define NO_TIME_PROVIDED 0 /* indicate we do not provide any cached time */
 
@@ -1479,7 +1488,9 @@ finalize_it:
 /* Call configured action, most complex case with all features supported (and thus slow).
  * rgerhards, 2010-06-08
  */
+#ifndef _AIX
 #pragma GCC diagnostic ignored "-Wempty-body"
+#endif
 static rsRetVal
 doSubmitToActionQComplex(action_t * const pAction, wti_t * const pWti, msg_t *pMsg)
 {
@@ -1508,7 +1519,9 @@ finalize_it:
 
 	RETiRet;
 }
+#ifndef _AIX
 #pragma GCC diagnostic warning "-Wempty-body"
+#endif
 
 
 /* helper to activateActions, it activates a specific action.

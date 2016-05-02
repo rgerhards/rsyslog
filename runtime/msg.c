@@ -67,6 +67,12 @@
 #include "rsconf.h"
 #include "parserif.h"
 
+#ifdef _AIX
+#define msg_t msg_tt
+#define var var_tt
+#endif
+
+
 /* TODO: move the global variable root to the config object - had no time to to it
  * right now before vacation -- rgerhards, 2013-07-22
  */
@@ -332,6 +338,19 @@ static char hexdigit[16] =
 	 '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 
 /*syslog facility names (as of RFC5424) */
+#if defined(_AIX)
+/* AIXPORT : replace facility names with aso and caa only for AIX */
+static char *syslog_fac_names[LOG_NFACILITIES] = { "kern", "user", "mail", "daemon", "auth", "syslog", "lpr",
+			    	      "news", "uucp", "cron", "authpriv", "ftp", "aso", "audit",
+			    	      "alert", "caa", "local0", "local1", "local2", "local3",
+			    	      "local4", "local5", "local6", "local7", "invld"	 };
+/* length of the facility names string (for optimizatiions) */
+static short len_syslog_fac_names[LOG_NFACILITIES] = { 4, 4, 4, 6, 4, 6, 3,
+			    	          4, 4, 4, 8, 3, 3, 5,
+			    	          5, 3, 6, 6, 6, 6,
+			    	          6, 6, 6, 6, 5 };
+
+#else
 static char *syslog_fac_names[LOG_NFACILITIES] = { "kern", "user", "mail", "daemon", "auth", "syslog", "lpr",
 			    	      "news", "uucp", "cron", "authpriv", "ftp", "ntp", "audit",
 			    	      "alert", "clock", "local0", "local1", "local2", "local3",
@@ -341,6 +360,7 @@ static short len_syslog_fac_names[LOG_NFACILITIES] = { 4, 4, 4, 6, 4, 6, 3,
 			    	          4, 4, 4, 8, 3, 3, 5,
 			    	          5, 5, 6, 6, 6, 6,
 			    	          6, 6, 6, 6, 5 };
+#endif
 
 /* table of severity names (in numerical order)*/
 static char *syslog_severity_names[8] = { "emerg", "alert", "crit", "err", "warning", "notice", "info", "debug" };
@@ -836,8 +856,18 @@ static inline void freeHOSTNAME(msg_t *pThis)
 		free(pThis->pszHOSTNAME);
 }
 
-
+#ifndef _AIX
+/* AIXPORT : We cannot use macro only for msg due to symbol clash for msg_t,
+ *           msg_t was replaced in the entire code by msg_t
+ *           find . -type f | xargs perl -pi -e 's/msg_t/msg_t/g'
+ */
 BEGINobjDestruct(msg) /* be sure to specify the object type also in END and CODESTART macros! */
+#else
+rsRetVal msgDestruct(msg_t __attribute__((unused)) **ppThis) 
+{ 
+	DEFiRet;
+        msg_t *pThis;
+#endif
 	int currRefCount;
 #	if HAVE_MALLOC_TRIM
 	int currCnt;

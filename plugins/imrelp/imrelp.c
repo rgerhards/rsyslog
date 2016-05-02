@@ -159,6 +159,11 @@ static struct cnfparamblk inppblk =
 	};
 
 #include "im-helper.h" /* must be included AFTER the type definitions! */
+
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
 static int bLegacyCnfModGlobalsPermitted;/* are legacy module-global config parameters permitted? */
 
 /* ------------------------------ callbacks ------------------------------ */

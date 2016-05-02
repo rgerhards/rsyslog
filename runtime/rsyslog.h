@@ -28,6 +28,16 @@
 #include <pthread.h>
 #include "typedefs.h"
 
+#if defined(_AIX)
+#include <sys/select.h>
+/* AIXPORT : start*/
+#define SRC_FD          13
+#define SRCMSG          (sizeof(srcpacket))
+extern int src_exists;
+#endif
+/* src end */
+
+
 /* ############################################################# *
  * #                 Some constant values                      # *
  * ############################################################# */
@@ -106,6 +116,10 @@
 #define	LOG_CRON	(9<<3)	/* clock daemon */
 #define	LOG_AUTHPRIV	(10<<3)	/* security/authorization messages (private) */
 #define	LOG_FTP		(11<<3)	/* ftp daemon */
+#if defined(_AIX)  		/* AIXPORT : These are necessary for AIX */
+#define LOG_ASO         (12<<3) /* Active System Optimizer. Reserved for internal use */
+#define LOG_CAA         (15<<3) /* Cluster aware AIX subsystem */
+#endif
 #define	LOG_LOCAL0	(16<<3)	/* reserved for local use */
 #define	LOG_LOCAL1	(17<<3)	/* reserved for local use */
 #define	LOG_LOCAL2	(18<<3)	/* reserved for local use */

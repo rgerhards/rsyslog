@@ -1214,6 +1214,12 @@ int *create_udp_socket(uchar *hostname, uchar *pszPort, int bIsServer, int rcvbu
 		hints.ai_flags = AI_NUMERICSERV;
         hints.ai_family = glbl.GetDefPFFamily();
         hints.ai_socktype = SOCK_DGRAM;
+ #if defined (_AIX)
+/* AIXPORT : SOCK_DGRAM has the protocol IPPROTO_UDP 
+ *           getaddrinfo needs this hint on AIX
+ */
+        hints.ai_protocol = IPPROTO_UDP;
+#endif
         error = getaddrinfo((char*) hostname, (char*) pszPort, &hints, &res);
         if(error) {
                errmsg.LogError(0, NO_ERRCODE, "%s",  gai_strerror(error));
@@ -1234,7 +1240,12 @@ int *create_udp_socket(uchar *hostname, uchar *pszPort, int bIsServer, int rcvbu
         *socks = 0;   /* num of sockets counter at start of array */
         s = socks + 1;
 	for (r = res; r != NULL ; r = r->ai_next) {
+#if defined (_AIX)
+/* AIXPORT : socktype will be SOCK_DGRAM, as set in hints above */
+               *s = socket(r->ai_family, SOCK_DGRAM, r->ai_protocol);
+#else
                *s = socket(r->ai_family, r->ai_socktype, r->ai_protocol);
+#endif
         	if (*s < 0) {
 			if(!(r->ai_family == PF_INET6 && errno == EAFNOSUPPORT))
 				errmsg.LogError(errno, NO_ERRCODE, "create_udp_socket(), socket");
@@ -1275,7 +1286,10 @@ int *create_udp_socket(uchar *hostname, uchar *pszPort, int bIsServer, int rcvbu
 		/* We need to enable BSD compatibility. Otherwise an attacker
 		 * could flood our log files by sending us tons of ICMP errors.
 		 */
-#if !defined(OS_BSD) && !defined(__hpux)
+/* AIXPORT : SO_BSDCOMPAT socket option is depricated , and its usage has been discontinued
+             on most unixes, AIX does not support this option , hence avoid the call.
+*/
+#if !defined(OS_BSD) && !defined(__hpux)  && !defined(_AIX)
 		if (should_use_so_bsdcompat()) {
 			if (setsockopt(*s, SOL_SOCKET, SO_BSDCOMPAT,
 					(char *) &on, sizeof(on)) < 0) {
@@ -1457,8 +1471,13 @@ finalize_it:
 static rsRetVal
 getIFIPAddr(uchar *szif, int family, uchar *pszbuf, int lenBuf)
 {
+#ifdef _AIX
 	struct ifaddrs * ifaddrs = NULL;
 	struct ifaddrs * ifa;
+#else
+	struct ifaddrs * ifaddrs = NULL;
+	struct ifaddrs * ifa;
+#endif
 	void * pAddr;
 	DEFiRet;
 

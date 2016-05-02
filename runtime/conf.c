@@ -69,6 +69,10 @@
 #ifdef OS_SOLARIS
 #	define NAME_MAX MAXNAMELEN
 #endif
+/* AIXPORT : Define NAME_MAX  */
+#if defined (_AIX)
+#define NAME_MAX         255    /* # chars in a file name */
+#endif
 
 /* forward definitions */
 

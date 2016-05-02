@@ -99,10 +99,18 @@ BEGINobjConstruct(wtp) /* be sure to specify the object type also in END macro! 
 #endif
 	pthread_attr_setdetachstate(&pThis->attrThrd, PTHREAD_CREATE_DETACHED);
 	/* set all function pointers to "not implemented" dummy so that we can safely call them */
+#ifdef _AIX
+/* AIXPORT : typecase required here to avoid warning */
+	pThis->pfChkStopWrkr = (rsRetVal(*)(void*,int))NotImplementedDummy;
+	pThis->pfGetDeqBatchSize = (rsRetVal(*)(void*,int*))NotImplementedDummy;
+	pThis->pfDoWork = (rsRetVal(*)(void*,void*))NotImplementedDummy;
+	pThis->pfObjProcessed = (rsRetVal(*)(void*,struct wti_s*))NotImplementedDummy;
+#else
 	pThis->pfChkStopWrkr = NotImplementedDummy;
 	pThis->pfGetDeqBatchSize = NotImplementedDummy;
 	pThis->pfDoWork = NotImplementedDummy;
 	pThis->pfObjProcessed = NotImplementedDummy;
+#endif
 	INIT_ATOMIC_HELPER_MUT(pThis->mutCurNumWrkThrd);
 	INIT_ATOMIC_HELPER_MUT(pThis->mutWtpState);
 ENDobjConstruct(wtp)
@@ -215,8 +223,10 @@ finalize_it:
 	RETiRet;
 }
 
-
+/*  AIXPORT : gcc pragma removed */
+#ifndef _AIX
 #pragma GCC diagnostic ignored "-Wempty-body"
+#endif
 /* Send a shutdown command to all workers and see if they terminate.
  * A timeout may be specified. This function may also be called with
  * the current number of workers being 0, in which case it does not
@@ -269,7 +279,10 @@ wtpShutdownAll(wtp_t *pThis, wtpState_t tShutdownCmd, struct timespec *ptTimeout
 	
 	RETiRet;
 }
-#pragma GCC diagnostic warning "-Wempty-body"
+/*  AIXPORT : gcc pragma removed */
+#ifndef _AIX
+        #pragma GCC diagnostic warning "-Wempty-body"
+#endif
 
 
 /* Unconditionally cancel all running worker threads.
@@ -350,7 +363,10 @@ wtpWrkrExecCancelCleanup(void *arg)
  * wti worker.
  * rgerhards, 2008-01-21
  */
-#pragma GCC diagnostic ignored "-Wempty-body"
+/*  AIXPORT : gcc pragma removed */
+#ifndef _AIX
+        #pragma GCC diagnostic ignored "-Wempty-body"
+#endif
 static void *
 wtpWorker(void *arg) /* the arg is actually a wti object, even though we are in wtp! */
 {
@@ -376,6 +392,12 @@ wtpWorker(void *arg) /* the arg is actually a wti object, even though we are in 
 	sigaddset(&sigSet, SIGTTIN);
 	pthread_sigmask(SIG_UNBLOCK, &sigSet, NULL);
 
+#ifdef _AIX /*AIXPORT unblock SIGSEGV so that the process core dumps on segmentation fault */
+	sigemptyset(&sigSet);
+	sigaddset(&sigSet, SIGSEGV);
+	pthread_sigmask(SIG_UNBLOCK, &sigSet, NULL);
+#endif /*AIXPORT*/
+
 #	if HAVE_PRCTL && defined PR_SET_NAME
 	/* set thread name - we ignore if the call fails, has no harsh consequences... */
 	pszDbgHdr = wtpGetDbgHdr(pThis);
@@ -399,7 +421,10 @@ wtpWorker(void *arg) /* the arg is actually a wti object, even though we are in 
 	pthread_cond_broadcast(&pThis->condThrdTrm); /* activate anyone waiting on thread shutdown */
 	pthread_exit(0);
 }
-#pragma GCC diagnostic warning "-Wempty-body"
+/*  AIXPORT : gcc pragma removed */
+#ifndef _AIX
+        #pragma GCC diagnostic warning "-Wempty-body"
+#endif
 
 
 /* start a new worker */

@@ -48,6 +48,11 @@
 #include "parserif.h"
 #include "unicode-helper.h"
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+
 /* static data */
 DEFobjCurrIf(obj)
 DEFobjCurrIf(errmsg)

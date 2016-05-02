@@ -37,6 +37,12 @@
 #include "template.h"
 #include "atomic.h"
 
+#ifdef _AIX
+#define msg_t msg_tt
+#define var var_tt
+#endif
+
+
 /* rgerhards 2004-11-08: The following structure represents a
  * syslog message. 
  *
@@ -257,6 +263,15 @@ MsgGetRuleset(msg_t *pMsg)
 	return pMsg->pRuleset;
 }
 
+
+#ifdef _AIX
+#undef msg_t
+#undef var
+#endif
+
+#ifdef _AIX
+#undef msg_t
+#endif
 
 #endif /* #ifndef MSG_H_INCLUDED */
 /* vim:set ai:

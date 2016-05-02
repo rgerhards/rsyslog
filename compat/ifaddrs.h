@@ -36,7 +36,7 @@ extern "C" {
  * The `getifaddrs' function generates a linked list of these structures.
  * Each element of the list describes one network interface.
  */
-#if defined(_INT64_TYPE)
+#if defined(_INT64_TYPE) || defined(_AIX)
 struct ifaddrs {
 	struct ifaddrs	*ifa_next;	/* Pointer to the next structure. */
 	char		*ifa_name;	/* Name of this network interface. */

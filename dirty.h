@@ -27,6 +27,10 @@
 #ifndef	DIRTY_H_INCLUDED
 #define	DIRTY_H_INCLUDED 1
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
 rsRetVal __attribute__((deprecated)) multiSubmitMsg(multi_submit_t *pMultiSub);
 rsRetVal multiSubmitMsg2(multi_submit_t *pMultiSub); /* friends only! */
 rsRetVal submitMsg2(msg_t *pMsg);
@@ -41,4 +45,9 @@ extern int MarkInterval;
 extern qqueue_t *pMsgQueue;				/* the main message queue */
 extern int iConfigVerify;				/* is this just a config verify run? */
 extern int bHaveMainQueue;
+
+#ifdef AIX
+#undef msg_t
+#endif
+
 #endif /* #ifndef DIRTY_H_INCLUDED */

@@ -55,6 +55,11 @@
 #include "queue.h"
 #include "net.h" /* for permittedPeers, may be removed when this is removed */
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+
 MODULE_TYPE_INPUT
 MODULE_TYPE_NOKEEP
 

@@ -61,6 +61,11 @@
 #include "statsobj.h"
 #include "parserif.h"
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+
 #ifdef OS_SOLARIS
 #	include <sched.h>
 #endif
@@ -82,7 +87,12 @@ unsigned int iOverallQueueSize = 0;
 static inline rsRetVal doEnqSingleObj(qqueue_t *pThis, flowControl_t flowCtlType, msg_t *pMsg);
 static rsRetVal qqueueChkPersist(qqueue_t *pThis, int nUpdates);
 static rsRetVal RateLimiter(qqueue_t *pThis);
+/*  AIXPORT : return type mismatch corrected */
+#if defined (_AIX)
+static rsRetVal qqueueChkStopWrkrDA(qqueue_t *pThis);
+#else
 static int qqueueChkStopWrkrDA(qqueue_t *pThis);
+#endif
 static rsRetVal GetDeqBatchSize(qqueue_t *pThis, int *pVal);
 static rsRetVal ConsumerDA(qqueue_t *pThis, wti_t *pWti);
 static rsRetVal batchProcessed(qqueue_t *pThis, wti_t *pWti);

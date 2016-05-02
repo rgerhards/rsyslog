@@ -31,7 +31,10 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <wait.h>
+#ifdef _AIX /* AIXPORT */
+#include <sys/wait.h>
+#include <errno.h>
+#endif /* AIXPORT */
 #include <sys/uio.h>
 #include "conf.h"
 #include "syslogd-types.h"
@@ -40,6 +43,11 @@
 #include "msg.h"
 #include "errmsg.h"
 #include "cfsysline.h"
+
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
 
 MODULE_TYPE_OUTPUT
 MODULE_TYPE_NOKEEP
@@ -380,7 +388,7 @@ finalize_it:
 static inline rsRetVal
 cleanup(wrkrInstanceData_t *pWrkrData)
 {
-	int status;
+	int status = 0;
 	int ret;
 	char errStr[1024];
 	DEFiRet;
@@ -395,6 +403,7 @@ cleanup(wrkrInstanceData_t *pWrkrData)
 		/* check if we should print out some diagnostic information */
 		DBGPRINTF("mmexternal: waitpid status return for program '%s': %2.2x\n",
 			  pWrkrData->pData->szBinary, status);
+#ifndef _AIX
 		if(WIFEXITED(status)) {
 			errmsg.LogError(0, NO_ERRCODE, "program '%s' exited normally, state %d",
 					pWrkrData->pData->szBinary, WEXITSTATUS(status));
@@ -402,6 +411,7 @@ cleanup(wrkrInstanceData_t *pWrkrData)
 			errmsg.LogError(0, NO_ERRCODE, "program '%s' terminated by signal %d.",
 					pWrkrData->pData->szBinary, WTERMSIG(status));
 		}
+#endif
 	}
 
 	if(pWrkrData->fdOutput != -1) {

@@ -29,6 +29,11 @@
 #include <string.h>
 #include "msg.h"
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+
 /* enum for batch states. Actually, we violate a layer here, in that we assume that a batch is used
  * for action processing. So far, this seems acceptable, the status is simply ignored inside the
  * main message queue. But over time, it could potentially be useful to split the two.
@@ -148,4 +153,9 @@ batchState2String(const batch_state_t state) {
 	}
 	return "ERROR, batch state not known!";
 }
+
+#ifdef _AIX
+#undef msg_t
+#endif
+
 #endif /* #ifndef BATCH_H_INCLUDED */

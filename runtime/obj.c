@@ -696,6 +696,11 @@ finalize_it:
 			}
 		}
 	}
+#ifdef _AIX
+	/* AIXPORT: Set varType to VARTYPE_NONE if some error occured */
+	if(iRet != RS_RET_OK)
+		pProp->varType = VARTYPE_NONE;
+#endif
 	RETiRet;
 }
 
@@ -786,6 +791,10 @@ static rsRetVal objDeserializeProperties(obj_t *pObj, rsRetVal (*objSetProperty)
 		if(pVar->varType == VARTYPE_STR) {
 			if(pVar->val.pStr != NULL)
 				rsCStrDestruct(&pVar->val.pStr);
+#ifdef _AIX
+			/* AIXPORT: Clear the varType once the object is destroyed as it's no longer valid */
+			pVar->varType = VARTYPE_NONE;
+#endif
 		}
 		iRet = objDeserializeProperty(pVar, pStrm);
 	}

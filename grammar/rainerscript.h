@@ -25,6 +25,10 @@
 #include <regex.h>
 #include "typedefs.h"
 
+#ifdef _AIX
+#define var var_tt
+#endif
+
 #define LOG_NFACILITIES 24+1 /* we copy&paste this as including rsyslog.h gets us in off64_t trouble... :-( */
 #define CNFFUNC_MAX_ARGS 32
 	/**< maximum number of arguments that any function can have (among
@@ -374,4 +378,9 @@ char * tokenval2str(int tok);
 
 /* debug helper */
 void cstrPrint(char *text, es_str_t *estr);
+
+#ifdef _AIX
+#undef var
+#endif
+
 #endif

@@ -57,6 +57,10 @@
 #include "hashtable.h"
 #include "ratelimit.h"
 
+#ifdef _AIX
+#define ucred ucred_t
+#endif
+
 MODULE_TYPE_INPUT
 MODULE_TYPE_NOKEEP
 MODULE_CNFNAME("imuxsock")
@@ -275,6 +279,11 @@ static struct cnfparamblk inppblk =
 
 /* we do not use this, because we do not bind to a ruleset so far
  * enable when this is changed: #include "im-helper.h" */ /* must be included AFTER the type definitions! */
+
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
 
 static int bLegacyCnfModGlobalsPermitted;/* are legacy module-global config parameters permitted? */
 
@@ -1003,6 +1012,10 @@ static rsRetVal readSocket(lstn_t *pLstn)
 	msgiov.iov_len = iMaxLine;
 	msgh.msg_iov = &msgiov;
 	msgh.msg_iovlen = 1;
+/*  AIXPORT : MSG_DONTWAIT not supported */
+#if defined (_AIX)
+#define MSG_DONTWAIT    MSG_NONBLOCK
+#endif
 	iRcvd = recvmsg(pLstn->fd, &msgh, MSG_DONTWAIT);
  
 	DBGPRINTF("Message from UNIX socket: #%d\n", pLstn->fd);

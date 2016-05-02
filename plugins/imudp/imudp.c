@@ -188,6 +188,11 @@ static struct cnfparamblk inppblk =
 
 #include "im-helper.h" /* must be included AFTER the type definitions! */
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+
 /* create input instance, set default paramters, and
  * add it to the list of instances.
  */

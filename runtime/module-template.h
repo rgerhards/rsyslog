@@ -30,6 +30,11 @@
 #include "objomsr.h"
 #include "threads.h"
 
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
+
 /* macro to define standard output-module static data members
  */
 #define DEF_MOD_STATIC_DATA \
@@ -1170,6 +1175,10 @@ static rsRetVal GetStrgenName(uchar **ppSz)\
 	return RS_RET_OK;\
 }
 
+
+#ifdef _AIX
+#undef msg_t
+#endif
 
 #endif /* #ifndef MODULE_TEMPLATE_H_INCLUDED */
 

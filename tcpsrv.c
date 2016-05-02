@@ -722,7 +722,10 @@ finalize_it:
  * This variant here is only used if we need to work with a netstream driver
  * that does not support epoll().
  */
-#pragma GCC diagnostic ignored "-Wempty-body"
+/*  AIXPORT : gcc pragma removed */
+#ifndef _AIX
+        #pragma GCC diagnostic ignored "-Wempty-body"
+#endif
 static inline rsRetVal
 RunSelect(tcpsrv_t *pThis, nsd_epworkset_t workset[], size_t sizeWorkset)
 {
@@ -826,7 +829,10 @@ finalize_it: /* this is a very special case - this time only we do not exit the 
 
 	RETiRet;
 }
-#pragma GCC diagnostic warning "-Wempty-body"
+/*  AIXPORT : gcc pragma removed */
+#ifndef _AIX
+        #pragma GCC diagnostic warning "-Wempty-body"
+#endif
 
 
 /* This function is called to gather input. It tries doing that via the epoll()
@@ -1005,7 +1011,12 @@ static rsRetVal
 SetCBOnListenDeinit(tcpsrv_t *pThis, int (*pCB)(void*))
 {
 	DEFiRet;
+/* AIXPORT : Typecasting required to avoid warning */
+#if defined (_AIX)
+	pThis->pOnListenDeinit = (rsRetVal(*)(void*))pCB;
+#else
 	pThis->pOnListenDeinit = pCB;
+#endif
 	RETiRet;
 }
 
@@ -1307,7 +1318,12 @@ CODESTARTobjQueryInterface(tcpsrv)
 	pIf->SetCBIsPermittedHost = SetCBIsPermittedHost;
 	pIf->SetCBOpenLstnSocks = SetCBOpenLstnSocks;
 	pIf->SetCBRcvData = SetCBRcvData;
+/* AIXPORT : Typecasting required to avoid warnings */
+#if defined (_AIX)
+	pIf->SetCBOnListenDeinit = (rsRetVal(*)(struct tcpsrv_s*,rsRetVal(*)(void*)))SetCBOnListenDeinit;
+#else
 	pIf->SetCBOnListenDeinit = SetCBOnListenDeinit;
+#endif
 	pIf->SetCBOnSessAccept = SetCBOnSessAccept;
 	pIf->SetCBOnSessConstructFinalize = SetCBOnSessConstructFinalize;
 	pIf->SetCBOnSessDestruct = SetCBOnSessDestruct;

@@ -182,6 +182,11 @@ static struct cnfparamblk inppblk =
 	};
 
 #include "im-helper.h" /* must be included AFTER the type definitions! */
+
+#ifdef _AIX
+#define msg_t msg_tt
+#endif
+
 static int bLegacyCnfModGlobalsPermitted;/* are legacy module-global config parameters permitted? */
 
 /* data elements describing our running config */
@@ -426,6 +431,10 @@ startupSrv(ptcpsrv_t *pSrv)
 		/* We need to enable BSD compatibility. Otherwise an attacker
 		 * could flood our log files by sending us tons of ICMP errors.
 		 */
+/* AIXPORT : SO_BSDCOMPAT socket option is depricated.AIX does not support this option 
+             hence remove the call.
+*/
+#if !defined (_AIX)
 #ifndef BSD	
 		if(net.should_use_so_bsdcompat()) {
 			if (setsockopt(sock, SOL_SOCKET, SO_BSDCOMPAT,
@@ -436,6 +445,7 @@ startupSrv(ptcpsrv_t *pSrv)
 				continue;
 			}
 		}
+#endif
 #endif
 
 	        if( (bind(sock, r->ai_addr, r->ai_addrlen) < 0)

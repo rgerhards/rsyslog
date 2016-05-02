@@ -135,7 +135,11 @@ void rsyslogdDoDie(int sig);
 
 
 #ifndef _PATH_LOGPID
+#if defined(_AIX)  /* AIXPORT : Add _AIX */
+#	define _PATH_LOGPID "/etc/rsyslogd.pid"
+#else
 #	define _PATH_LOGPID "/var/run/rsyslogd.pid"
+#endif
 #endif
 
 #ifndef _PATH_TTY
@@ -155,7 +159,11 @@ int	doFork = 1; 	/* fork - run in daemon mode - read-only after startup */
 
 /* up to the next comment, prototypes that should be removed by reordering */
 /* Function prototypes. */
+#ifdef _AIX
+static void reapchild(void);
+#else
 static void reapchild();
+#endif
 
 
 #define LIST_DELIMITER	':'		/* delimiter between two hosts */
@@ -268,7 +276,11 @@ void untty(void)
 
 /* function stems back to sysklogd */
 static void
+#ifdef _AIX
+reapchild(void)
+#else
 reapchild()
+#endif
 {
 	int saved_errno = errno;
 	struct sigaction sigAct;
@@ -296,7 +308,11 @@ syslogd_die(void)
  * rgerhards, 2005-10-24: this is only called during forking of the
  * detached syslogd. I consider this method to be safe.
  */
+#ifdef _AIX
+static void doexit(void)
+#else
 static void doexit()
+#endif
 {
 	exit(0); /* "good" exit, only during child-creation */
 }
@@ -308,7 +324,11 @@ static void doexit()
  * doing this during a signal handler.  Instead this function simply sets
  * a flag variable which will tells the main loop to do "the right thing".
  */
+#ifdef _AIX
+void syslogd_sighup_handler(void)
+#else
 void syslogd_sighup_handler()
+#endif
 {
 	struct sigaction sigAct;
 
@@ -472,7 +492,14 @@ syslogd_doGlblProcessInit(void)
 		{
 			memset(&sigAct, 0, sizeof (sigAct));
 			sigemptyset(&sigAct.sa_mask);
+/* AIXPORT : Typecasting to avoid warnings */
+#if defined (_AIX)
+			sigAct.sa_handler = (void(*)(int))doexit;
+#else
 			sigAct.sa_handler = doexit;
+#endif
+			/* AIXPORT : src support end */
+
 			sigaction(SIGTERM, &sigAct, NULL);
 
 			/* RH contribution */
@@ -481,28 +508,44 @@ syslogd_doGlblProcessInit(void)
 			/* end RH contribution */
 
 			dbgprintf("ready for forking\n");
-			if (fork()) {
-				/* Parent process
-				 */
-				dbgprintf("parent process going to sleep for 60 secs\n");
-				sleep(60);
-				/* Not reached unless something major went wrong.  1
-				 * minute should be a fair amount of time to wait.
-				 * The parent should not exit before rsyslogd is 
-				 * properly initilized (at least almost) or the init
-				 * system may get a wrong impression of our readyness.
-				 * Note that we exit before being completely initialized,
-				 * but at this point it is very, very unlikely that something
-				 * bad can happen. We do this here, because otherwise we would
-				 * need to have much more code to handle priv drop (which we
-				 * don't consider worth for the init system, especially as it
-				 * is going away on the majority of distros).
-				 */
-				exit(1); /* "good" exit - after forking, not diasabling anything */
+			/* AIXPORT : src support start */
+#if defined(_AIX)
+			if(!src_exists)
+			{
+#endif
+			/* AIXPORT : src support end */
+				if (fork()) {
+					/* Parent process
+				 	*/
+					dbgprintf("parent process going to sleep for 60 secs\n");
+					sleep(60);
+					/* Not reached unless something major went wrong.  1
+				 	* minute should be a fair amount of time to wait.
+				 	* The parent should not exit before rsyslogd is 
+				 	* properly initilized (at least almost) or the init
+				 	* system may get a wrong impression of our readyness.
+				 	* Note that we exit before being completely initialized,
+				 	* but at this point it is very, very unlikely that something
+				 	* bad can happen. We do this here, because otherwise we would
+				 	* need to have much more code to handle priv drop (which we
+				 	* don't consider worth for the init system, especially as it
+				 	* is going away on the majority of distros).
+				 	*/
+					exit(1); /* "good" exit - after forking, not diasabling anything */
+				}
+			/* AIXPORT : src support start */
+#if defined(_AIX)
 			}
+#endif
+			/* AIXPORT : src support end */
 
 			num_fds = getdtablesize();
-			close(0);
+			/* AIXPORT : src support start : dont risk closing 0 */
+#if defined(_AIX)
+                        if(!src_exists)
+#endif
+			/* AIXPORT : src support end */
+				close(0);
 			/* we keep stdout and stderr open in case we have to emit something */
 			i = 3;
 			dbgprintf("in child, finalizing initialization\n");
@@ -539,8 +582,19 @@ syslogd_doGlblProcessInit(void)
 					i = SD_LISTEN_FDS_START + sd_fds;
 			}
 			for ( ; i < num_fds; i++)
-				if(i != dbgGetDbglogFd())
-					close(i);
+                        {
+				/* AIXPORT : src support start */
+#if defined(_AIX)
+                                if(src_exists)
+                                {
+					if(i != SRC_FD)
+						(void)close(i);
+                                }
+                                else
+#endif
+				/* AIXPORT : src support end */
+                                  (void)close(i);
+                        }
 
 			untty();
 		} else {
@@ -580,11 +634,26 @@ syslogd_doGlblProcessInit(void)
 	sigAct.sa_handler = Debug ? rsyslogdDoDie : SIG_IGN;
 	sigaction(SIGINT, &sigAct, NULL);
 	sigaction(SIGQUIT, &sigAct, NULL);
+/* AIXPORT : Typecasting to avoid warnings */
+#if defined (_AIX)
+	sigAct.sa_handler = (void(*)(int))reapchild;
+#else
 	sigAct.sa_handler = reapchild;
+#endif
 	sigaction(SIGCHLD, &sigAct, NULL);
+/* AIXPORT : Typecasting to avoid warnings */
+#if defined (_AIX)
+	sigAct.sa_handler = Debug ? (void(*)(int))rsyslogdDebugSwitch : SIG_IGN;
+#else
 	sigAct.sa_handler = Debug ? rsyslogdDebugSwitch : SIG_IGN;
+#endif
 	sigaction(SIGUSR1, &sigAct, NULL);
+/* AIXPORT : Typecasting to avoid warnings */
+#if defined (_AIX)
+	sigAct.sa_handler = (void(*)(int))rsyslogd_sigttin_handler;
+#else
 	sigAct.sa_handler = rsyslogd_sigttin_handler;
+#endif
 	sigaction(SIGTTIN, &sigAct, NULL); /* (ab)used to interrupt input threads */
 	sigAct.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &sigAct, NULL);
