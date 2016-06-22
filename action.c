@@ -1288,9 +1288,6 @@ actionCommit(action_t *__restrict__ const pThis, wti_t *__restrict__ const pWti)
 				bDone = 1;
 			}
 			continue;
-		}
-		if(iRet == RS_RET_FORCE_TERM) {
-			ABORT_FINALIZE(RS_RET_FORCE_TERM);
 		} else if(iRet == RS_RET_OK ||
 		          iRet == RS_RET_SUSPENDED ||
 			  iRet == RS_RET_ACTION_FAILED) {
