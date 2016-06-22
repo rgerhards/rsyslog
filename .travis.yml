@@ -82,7 +82,7 @@ services:
 
 
 before_install:
-  - sudo add-apt-repository ppa:adiscon/v8-stable -y
+  - sudo add-apt-repository ppa:adiscon/v8-stable-testing -y
   - sudo add-apt-repository ppa:qpid/released -y
   - sudo apt-get update -qq
   - mysql -u root -e "CREATE USER 'rsyslog'@'localhost' IDENTIFIED BY 'testbench';"
