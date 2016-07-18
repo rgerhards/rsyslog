@@ -3,8 +3,17 @@ source /etc/lsb-release
 # the following packages are not yet available via travis package
 sudo apt-get install -qq faketime libdbd-mysql libmongo-client-dev autoconf-archive
 if [ "x$GROK" == "xYES" ]; then sudo apt-get install -qq libgrok1 libgrok-dev ; fi
-sudo apt-get install -qq --force-yes libestr-dev librelp-dev libfastjson-dev liblogging-stdlog-dev libksi1 libksi1-dev liblognorm1-dev \
-	libcurl4-gnutls-dev
+sudo apt-get install -qq --force-yes -V librelp-dev 
+sudo apt-get install -qq --force-yes -V libfastjson-dev 
+sudo apt-get install -qq --force-yes -V libestr-dev 
+sudo apt-get install -qq --force-yes -V liblogging-stdlog-dev 
+sudo apt-get install -qq --force-yes -V libksi1
+sudo apt-get install -qq --force-yes -V libksi1-dev
+sudo apt-get update -qq
+sudo apt-get install -q --force-yes -V liblognorm1-dev
+sudo apt-get install -q --force-yes -V libcurl4-gnutls-dev
+#sudo apt-get install -qq --force-yes libestr-dev librelp-dev libfastjson-dev liblogging-stdlog-dev libksi1 libksi1-dev liblognorm1-dev \
+	#libcurl4-gnutls-dev
 sudo apt-get install -qq python-docutils
 
 if [ "x$ESTEST" == "xYES" ]; then sudo apt-get install -qq elasticsearch ; fi
