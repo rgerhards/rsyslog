@@ -560,7 +560,11 @@ TESTS += \
 	imfile-endregex-timeout-polling.sh \
 	imfile-endregex-timeout.sh \
 	imfile-endregex-timeout-none.sh \
-	imfile-persist-state-1.sh
+	imfile-persist-state-1.sh \
+	imfile-wildcards.sh \
+	imfile-wildcards-dirs.sh \
+	imfile-wildcards-dirs2.sh \
+	imfile-wildcards-dirs-multi.sh
 if HAVE_VALGRIND
 TESTS += \
 	imfile-basic-vg.sh \
@@ -1113,6 +1117,12 @@ EXTRA_DIST= \
 	imfile-endregex-timeout-none.sh \
 	imfile-persist-state-1.sh \
 	imfile-truncate.sh \
+	imfile-wildcards.sh \
+	testsuites/imfile-wildcards.conf \
+	imfile-wildcards-dirs.sh \
+	imfile-wildcards-dirs2.sh \
+	imfile-wildcards-dirs-multi.sh \
+	testsuites/imfile-wildcards-dirs.conf \
 	dynfile_invld_async.sh \
 	dynfile_invld_sync.sh \
 	dynfile_cachemiss.sh \
