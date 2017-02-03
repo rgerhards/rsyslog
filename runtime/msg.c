@@ -1401,8 +1401,11 @@ MsgDeserialize(smsg_t * const pMsg, strm_t *pStrm)
 	 * but on the other hand it works decently AND we will probably replace
 	 * the whole persisted format soon in any case. -- rgerhards, 2012-11-06
 	 */
-	if(!isProp("offMSG"))
+	if(!isProp("offMSG")) {
+		DBGPRINTF("msgDeserialize: seen '%s' where 'offMSG' was expected\n",
+			cstrGetSzStrNoNULL(pVar->pcsName));
 		ABORT_FINALIZE(RS_RET_DS_PROP_SEQ_ERR);
+	}
 	MsgSetMSGoffs(pMsg, pVar->val.num);
 finalize_it:
 	if(pVar != NULL)
