@@ -196,7 +196,6 @@ check_obj(FILE *fp)
 		if(strcmp(line, ">End") == 0) {
 			readline();
 			if(strcmp(line, ".") == 0) {
-				printf("endobj set\n");
 				endobj = 1;
 			} else {
 				fprintf(stderr, "end object without dot line!\n");
