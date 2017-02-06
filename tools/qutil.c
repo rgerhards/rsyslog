@@ -28,9 +28,10 @@ static char line[BUFSIZE];
 static int lnnbr = 0;
 static size_t lnlen;
 static int col;
+static FILE *fp;
 
 static void
-readline(FILE *fp)
+readline(void)
 {
 	fgets(line, sizeof(line), fp);
 	lnlen = strlen(line);
@@ -72,9 +73,23 @@ static void
 get_str_with_len(char *buf, const int len)
 {
 	size_t i = 0;
-	while(i < len && (col < lnlen)) {
-		*buf++ = line[col++];
-		++i;
+	int done = 0;
+	while(!done) {
+		while(i < len && (col < lnlen)) {
+			*buf++ = line[col++];
+			++i;
+		}
+		if(i < len) {
+			fprintf(stderr, "line %d has continuation line (LF): %s\n",
+				lnnbr, line);
+			readline();
+			col = 0;
+			/* process LF */
+			*buf++ = '\n';
+			++i;
+		} else {
+			done = 1;
+		}
 	}
 	*buf = '\0';
 	if(line[col] != ':') {
@@ -147,7 +162,7 @@ check_obj(FILE *fp)
 {
 	size_t i;
 	int endobj = 0;
-	readline(fp);
+	readline();
 	if(line[0] != '<') {
 		fprintf(stderr, "invalid object start line, '<' expexted at col 1\n");
 		errout();
@@ -160,9 +175,9 @@ check_obj(FILE *fp)
 		errout();
 	}
 	while(!endobj && !feof(fp)) {
-		readline(fp);
+		readline();
 		if(strcmp(line, ">End") == 0) {
-			readline(fp);
+			readline();
 			if(strcmp(line, ".") == 0) {
 				printf("endobj set\n");
 				endobj = 1;
@@ -190,7 +205,7 @@ check_obj(FILE *fp)
 void
 q_check(const char *fn)
 {
-	FILE *fp = fopen(fn, "r");
+	fp = fopen(fn, "r");
 	int nObjs = 0;
 	int done = 0;
 
