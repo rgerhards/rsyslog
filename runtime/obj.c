@@ -510,13 +510,18 @@ static rsRetVal objDeserializeStr(cstr_t **ppCStr, int iLen, strm_t *pStrm)
 
 	NEXTC;
 	for(i = 0 ; i < iLen ; ++i) {
+dbgprintf("RRRRR: i %d, char: %c[%2.2x]\n", i, c, c);
 		CHKiRet(cstrAppendChar(pCStr, c));
 		NEXTC;
 	}
 	cstrFinalize(pCStr);
 
 	/* check terminator */
-	if(c != ':') ABORT_FINALIZE(RS_RET_INVALID_DELIMITER);
+	if(c != ':') {
+		DBGPRINTF("objDeserializeStr: error, unexpected delimiter: '%c'[%2.2x], str so far: '%s'\n",
+			c, c, cstrGetSzStrNoNULL(pCStr));
+		ABORT_FINALIZE(RS_RET_INVALID_DELIMITER);
+	}
 
 	*ppCStr = pCStr;
 

@@ -64,6 +64,11 @@ rsyslog_diag_hostname_SOURCES = gethostn.c
 msggen_SOURCES = msggen.c
 endif
 
+bin_PROGRAMS += qutil
+qutil_SOURCES = qutil.c
+qutil_CPPFLAGS = 
+qutil_LDADD = 
+
 if ENABLE_USERTOOLS
 if ENABLE_OMMONGODB
 bin_PROGRAMS += logctl
