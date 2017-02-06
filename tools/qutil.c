@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <libfastjson/json.h>
 
 #define BUFSIZE (16*1024)
 static char line[BUFSIZE];
@@ -155,6 +156,20 @@ check_prop(void)
 	if(col < lnlen) {
 		fprintf(stderr, "extra data at end of property line\n");
 		errout();
+	}
+
+	/* if we have the json property, we need to check if it contains valid json */
+	if(strcmp(name, "json") == 0) {
+		struct json_tokener *tokener;
+		struct json_object *json;
+		tokener = json_tokener_new();
+		json = json_tokener_parse_ex(tokener, data, strlen(data));
+		if(json == NULL) {
+			fprintf(stderr, "error parsing 'json' property\n");
+			errout();
+		}
+		json_tokener_free(tokener);
+		json_object_put(json);
 	}
 }
 
