@@ -25,6 +25,7 @@
 
 #define BUFSIZE (16*1024)
 static char line[BUFSIZE];
+static char last_prop_name[BUFSIZE] = "";
 static int lnnbr = 0;
 static size_t lnlen;
 static int col;
@@ -128,6 +129,7 @@ check_prop(void)
 	static char data[BUFSIZE];
 	int type, size;
 	get_str(name);
+	strcpy(last_prop_name, name); /* for offMSG check */
 	type = get_nbr();
 	size = get_nbr();
 	get_str_with_len(data, size);
@@ -197,6 +199,10 @@ check_obj(FILE *fp)
 	}
 	if(!endobj) {
 		fprintf(stderr, "premature end of file\n");
+		errout();
+	}
+	if(strcmp(last_prop_name, "offMSG")) {
+		fprintf(stderr, "last property name in object was not 'offMSG'\n");
 		errout();
 	}
 }
