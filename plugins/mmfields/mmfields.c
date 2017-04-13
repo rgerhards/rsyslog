@@ -267,6 +267,9 @@ ENDparseSelectorAct
 BEGINmodExit
 CODESTARTmodExit
 	objRelease(errmsg, CORE_COMPONENT);
+char *xx;
+if(*xx == 'a')
+	return 0;
 ENDmodExit
 
 
