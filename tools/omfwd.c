@@ -4,7 +4,7 @@
  * NOTE: read comments in module-template.h to understand how this file
  *       works!
  *
- * Copyright 2007-2016 Adiscon GmbH.
+ * Copyright 2007-2017 Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -416,7 +416,7 @@ static rsRetVal UDPSend(wrkrInstanceData_t *__restrict__ const pWrkrData,
 	DEFiRet;
 	struct addrinfo *r;
 	int i;
-	unsigned lsent = 0;
+	ssize_t lsent = 0;
 	sbool bSendSuccess;
 	sbool reInit = RSFALSE;
 	int lasterrno = ENOENT;
@@ -443,8 +443,21 @@ static rsRetVal UDPSend(wrkrInstanceData_t *__restrict__ const pWrkrData,
 		bSendSuccess = RSFALSE;
 		for (r = pWrkrData->f_addr; r; r = r->ai_next) {
 			for (i = 0; i < *pWrkrData->pSockArray; i++) {
-			       lsent = sendto(pWrkrData->pSockArray[i+1], msg, len, 0, r->ai_addr, r->ai_addrlen);
-				if (lsent == len) {
+				int ntries = 0;
+				int do_retry;
+				do {
+					++ntries;
+					lsent = sendto(pWrkrData->pSockArray[i+1], msg, len, 0,
+						r->ai_addr, r->ai_addrlen);
+					if(lsent == -1 && errno == EAGAIN && ntries < 2) {
+						DBGPRINTF("imudp: sendto() failed with EAGAIN, retrying\n");
+						srSleep(0, 100);
+						do_retry = 1;
+					} else {
+						do_retry = 0;
+					}
+				} while(do_retry); /* attention: do ... while() */
+				if (lsent == (ssize_t) len) {
 					bSendSuccess = RSTRUE;
 					break;
 				} else {
@@ -455,7 +468,7 @@ static rsRetVal UDPSend(wrkrInstanceData_t *__restrict__ const pWrkrData,
 						rs_strerror_r(lasterrno, errStr, sizeof(errStr)));
 				}
 			}
-			if (lsent == len && !pWrkrData->pData->bSendToAll)
+			if (lsent == (ssize_t) len && !pWrkrData->pData->bSendToAll)
 			       break;
 		}
 
