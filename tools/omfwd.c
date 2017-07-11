@@ -97,6 +97,7 @@ typedef struct _instanceData {
 	/* following fields for UDP-based delivery */
 	int bSendToAll;
 	int iUDPSendDelay;
+	int UDPSendBuf;
 	/* following fields for TCP-based delivery */
 	TCPFRAMINGMODE tcp_framing;
 	int bResendLastOnRecon; /* should the last message be re-sent on a successful reconnect? */
@@ -176,6 +177,7 @@ static struct cnfparamdescr actpdescr[] = {
 	{ "resendlastmsgonreconnect", eCmdHdlrBinary, 0 },
 	{ "udp.sendtoall", eCmdHdlrBinary, 0 },
 	{ "udp.senddelay", eCmdHdlrInt, 0 },
+	{ "udp.sendbuf", eCmdHdlrSize, 0 },
 	{ "template", eCmdHdlrGetWord, 0 }
 };
 static struct cnfparamblk actpblk =
@@ -449,9 +451,12 @@ static rsRetVal UDPSend(wrkrInstanceData_t *__restrict__ const pWrkrData,
 					++ntries;
 					lsent = sendto(pWrkrData->pSockArray[i+1], msg, len, 0,
 						r->ai_addr, r->ai_addrlen);
-					if(lsent == -1 && errno == EAGAIN && ntries < 2) {
-						DBGPRINTF("imudp: sendto() failed with EAGAIN, retrying\n");
-						srSleep(0, 100);
+					if(lsent == -1 && errno == EMSGSIZE && ntries < 2) {
+					//if(lsent == -1 && errno == EAGAIN && ntries < 2) {
+						//DBGPRINTF("imudp: sendto() failed with EAGAIN, retrying\n");
+						LogError(errno, RS_RET_ERR_UDPSEND,
+							"omfwd/udp: sendto() failed with EAGAIN, retrying");
+						srSleep(0, 250);
 						do_retry = 1;
 					} else {
 						do_retry = 0;
@@ -783,7 +788,8 @@ static rsRetVal doTryResume(wrkrInstanceData_t *pWrkrData)
 		dbgprintf("%s found, resuming.\n", pData->target);
 		pWrkrData->f_addr = res;
 		if(pWrkrData->pSockArray == NULL) {
-			pWrkrData->pSockArray = net.create_udp_socket((uchar*)pData->target, NULL, 0, 0, 0, pData->device);
+			pWrkrData->pSockArray = net.create_udp_socket((uchar*)pData->target,
+				NULL, 0, 0, pData->UDPSendBuf, 0, pData->device);
 		}
 		if(pWrkrData->pSockArray != NULL) {
 			pWrkrData->bIsConnected = 1;
@@ -975,6 +981,7 @@ setInstParamDefaults(instanceData *pData)
 	pData->bResendLastOnRecon = 0; 
 	pData->bSendToAll = -1;  /* unspecified */
 	pData->iUDPSendDelay = 0;
+	pData->UDPSendBuf = 0;
 	pData->pPermPeers = NULL;
 	pData->compressionLevel = 9;
 	pData->strmCompFlushOnTxEnd = 1;
@@ -1111,6 +1118,8 @@ CODESTARTnewActInst
 			pData->bSendToAll = (int) pvals[i].val.d.n;
 		} else if(!strcmp(actpblk.descr[i].name, "udp.senddelay")) {
 			pData->iUDPSendDelay = (int) pvals[i].val.d.n;
+		} else if(!strcmp(actpblk.descr[i].name, "udp.sendbuf")) {
+			pData->UDPSendBuf = (int) pvals[i].val.d.n;
 		} else if(!strcmp(actpblk.descr[i].name, "template")) {
 			pData->tplName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(actpblk.descr[i].name, "compression.stream.flushontxend")) {
