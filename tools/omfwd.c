@@ -451,11 +451,10 @@ static rsRetVal UDPSend(wrkrInstanceData_t *__restrict__ const pWrkrData,
 					++ntries;
 					lsent = sendto(pWrkrData->pSockArray[i+1], msg, len, 0,
 						r->ai_addr, r->ai_addrlen);
-					if(lsent == -1 && errno == EMSGSIZE && ntries < 2) {
-					//if(lsent == -1 && errno == EAGAIN && ntries < 2) {
-						//DBGPRINTF("imudp: sendto() failed with EAGAIN, retrying\n");
+					if(lsent == -1 && errno == EAGAIN && ntries < 5) {
 						LogError(errno, RS_RET_ERR_UDPSEND,
-							"omfwd/udp: sendto() failed with EAGAIN, retrying");
+							"omfwd/udp: sendto() failed with EAGAIN, retrying, "
+							"try %d of 5", ntries);
 						srSleep(0, 250);
 						do_retry = 1;
 					} else {
