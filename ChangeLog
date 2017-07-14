@@ -1,4 +1,35 @@
 ------------------------------------------------------------------------------
+Version 8.25.1 [v8-stable] 2017-07-17
+- core/net bugfix: potential message loss on udp forwarding on busy systems
+  On very busy systems, the operating system could return EAGAIN status
+  (not a real failure) to UDP writes. This was unexpected and treated as
+  a hard failure state. Thus, it caused suspension of the forwarding action.
+  By default (usually used with UPD forwarding), messages are discarded
+  during the suspension period (by default 30 seconds). So each time this
+  condition was triggered, 30 seconds worth of messages were lost.
+  In 8.25.1, this has been changed so that the OS slightly waits for the
+  buffers to drain, which will prevent the action from becoming suspended.
+  see also: https://github.com/rsyslog/rsyslog/issues/1665
+  Due to the message loss potential, it is highly advisable to update to
+  8.25.1 if UDP forwarding is heavily used on busy systems.
+- core bugfix: garbled message content may appear in action output
+  Messages of a certain size (most often 100 bytes) were garbled when queues
+  other than the main queue were used and some other trigger conditions
+  existed (see issue tracker for details). This caused loss of message text
+  and may also render the output unusable. Frequent symptom was that control
+  characters, and especially US-ASCII NUL, was present in output. The issue
+  itself was unlikely to appear, but was very frequent in those configurations
+  that had all the necessary triggering conditions.
+  see also: https://github.com/rsyslog/rsyslog/issues/1658
+- impstats: add "openfiles" statistics counter
+  For troubleshooting, health monitoring and capacity planning purposes it is
+  useful to know the number of open file handles (files, sockets, ...). For
+  example, in "out of socket" situations it is valuable to know how many file
+  descriptiors (files) have been allocated at the time of the problem.
+  The impstats module reports this now via the "openfiles" counter in the
+  "resource-usage" statistic.
+  see also: https://github.com/rsyslog/rsyslog/issues/1661
+------------------------------------------------------------------------------
 Version 8.25.0 [v8-stable] 2017-02-21
 - imfile: add support for wildcards in directory names
   This now permits to monitor newly created directories without altering
