@@ -1727,7 +1727,13 @@ Connect(nsd_t *pNsd, int family, uchar *port, uchar *host, char *device)
 	}
 
 	/* Use default priorities */
-	CHKgnutls(gnutls_set_default_priority(pThis->sess));
+	if(priority string is set) {
+		gnutls_priority_set_direct();
+		be sure to handle errors here, including the 3rd paramater
+		from gnutls_priority_set_direct() call!
+	} else {
+		CHKgnutls(gnutls_set_default_priority(pThis->sess));
+	}
 #	ifdef HAVE_GNUTLS_CERTIFICATE_TYPE_SET_PRIORITY
 	/* The gnutls_certificate_type_set_priority function is deprecated
 	 * and not available in recent GnuTLS versions. However, there is no
