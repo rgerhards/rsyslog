@@ -903,7 +903,8 @@ Run(tcpsrv_t *pThis)
 	}
 	if(localRet != RS_RET_OK) {
 		/* fall back to select */
-		DBGPRINTF("tcpsrv could not use epoll() interface, iRet=%d, using select()\n", localRet);
+		LogError(0, RS_RET_ERR, "tcpsrv could not use epoll() interface, "
+			"iRet=%d, using select()\n", localRet);
 		iRet = RunSelect(pThis, workset, sizeof(workset)/sizeof(nsd_epworkset_t));
 		FINALIZE;
 	}
