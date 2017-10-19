@@ -61,7 +61,7 @@ matrix:
        # need to find out some time why this is).
      - os: linux
        compiler: "gcc"
-       env: KAFKA="YES", CFLAGS="-g -std=c99 -Werror -W -Wall -Wextra -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute"
+       env: KAFKA="YES", GCC="gcc-7", CFLAGS="-g -std=c99 -Werror -W -Wall -Wextra -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute"
        dist: trusty
      - os: linux
        compiler: "clang"
