@@ -38,6 +38,7 @@ addons:
     - openjdk-7-jdk
     - wget
     - libkrb5-dev
+    #- libczmq-dev
     #- libgrok1
     #- libgrok-dev
     #- faketime
