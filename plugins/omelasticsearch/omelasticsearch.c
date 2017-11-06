@@ -189,6 +189,14 @@ CODESTARTcreateWrkrInstance
 	pWrkrData->curlCheckConnHandle = NULL;
 	pWrkrData->serverIndex = 0;
 	pWrkrData->restURL = NULL;
+    /**
+    * `pWrkrData->reply` should always point to real memory
+    * 1) we init it at an application start
+    * 2) we clear it before every curl request (in two places: `checkConn` & `curlPost`)
+    * 3) we just reallocate it in all other places
+    */
+    pWrkrData->reply = NULL;
+    pWrkrData->replyLen = 0;
 	if(pData->bulkmode) {
 		pWrkrData->batch.currTpl1 = NULL;
 		pWrkrData->batch.currTpl2 = NULL;
@@ -386,8 +394,9 @@ checkConn(wrkrInstanceData_t *const pWrkrData)
 	int r;
 	DEFiRet;
 
-	pWrkrData->reply = NULL;
-	pWrkrData->replyLen = 0;
+    pWrkrData->reply = realloc(pWrkrData->reply, 0); /* clear the curl response buffer */
+    pWrkrData->replyLen = 0;
+
 	curl = pWrkrData->curlCheckConnHandle;
 	urlBuf = es_newStr(256);
 	if (urlBuf == NULL) {
@@ -429,8 +438,6 @@ checkConn(wrkrInstanceData_t *const pWrkrData)
 finalize_it:
 	if(urlBuf != NULL)
 		es_deleteStr(urlBuf);
-	free(pWrkrData->reply);
-	pWrkrData->reply = NULL; /* don't leave dangling pointer */
 	RETiRet;
 }
 
@@ -809,7 +816,7 @@ parseRequestAndResponseForContext(wrkrInstanceData_t *pWrkrData,fjson_object **p
 
 		fjson_object_object_get_ex(result, "status", &ok);
 		itemStatus = checkReplyStatus(ok);
-		
+
 		char *request =0;
 		char *response =0;
 		if(ctx->statusCheckOnly)
@@ -1205,17 +1212,14 @@ curlPost(wrkrInstanceData_t *pWrkrData, uchar *message, int msglen, uchar **tpls
 
 	PTR_ASSERT_SET_TYPE(pWrkrData, WRKR_DATA_TYPE_ES);
 
-	pWrkrData->reply = NULL;
-	pWrkrData->replyLen = 0;
-
 	if(pWrkrData->pData->numServers > 1) {
 		/* needs to be called to support ES HA feature */
 		CHKiRet(checkConn(pWrkrData));
 	}
 	CHKiRet(setPostURL(pWrkrData, tpls));
 
-	pWrkrData->reply = NULL;
-	pWrkrData->replyLen = 0;
+    pWrkrData->reply = realloc(pWrkrData->reply, 0);  /* clear the curl response buffer */
+    pWrkrData->replyLen = 0;
 
 	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, (char *)message);
 	curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, msglen);
@@ -1246,8 +1250,6 @@ curlPost(wrkrInstanceData_t *pWrkrData, uchar *message, int msglen, uchar **tpls
 
 finalize_it:
 	incrementServerIndex(pWrkrData);
-	free(pWrkrData->reply);
-	pWrkrData->reply = NULL; /* don't leave dangling pointer */
 	RETiRet;
 }
 
