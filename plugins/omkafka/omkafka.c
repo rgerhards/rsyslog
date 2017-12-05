@@ -788,7 +788,7 @@ do_rd_kafka_destroy(instanceData *const __restrict__ pData)
 		}
 	}
 	if (queuedCount > 0) {
-		DBGPRINTF("omkafka: queue-drain for close timed-out took too long, "
+		LogError(0, RS_RET_ERR, "omkafka: queue-drain for close timed-out took too long, "
 				 "items left in outqueue: %d\n",
 				 rd_kafka_outq_len(pData->rk));
 	}

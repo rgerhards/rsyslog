@@ -361,7 +361,11 @@ endif
 
 if ENABLE_OMKAFKA
 if ENABLE_IMKAFKA
+check_PROGRAMS += kafka_producer
+kafka_producer_SOURCES = kafka_producer.c
+kafka_producer_LDADD = $(SOL_LIBS) $(LIBRDKAFKA_LIBS)
 if ENABLE_KAFKA_TESTS
+
 TESTS += \
 	sndrcv_kafka.sh 
 # Tests below need to be stable first!
