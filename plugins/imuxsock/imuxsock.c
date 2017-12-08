@@ -1021,12 +1021,10 @@ finalize_it:
  * Interface changed so that this function is passed the array index
  * of the socket which is to be processed. This eases access to the
  * growing number of properties. -- rgerhards, 2008-08-01
+ * Note: we cast alignment pointers stemming back from CMSG_DATA() to
+ * void* before the final cast to solve alignment warnings. This is
+ * safe as CMSG_DATA() is guaranteed to provide properly aligned data.
  */
-#if !defined(_AIX)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align" /* TODO: how can we fix these warnings? */
-#endif
-/* Problem with the warnings: they seem to stem back from the way the API is structured */
 static rsRetVal readSocket(lstn_t *pLstn)
 {
 	DEFiRet;
@@ -1088,13 +1086,13 @@ static rsRetVal readSocket(lstn_t *pLstn)
 #				ifdef HAVE_SCM_CREDENTIALS
 				if(   pLstn->bUseCreds
 				   && cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_CREDENTIALS) {
-					cred = (struct ucred*) CMSG_DATA(cm);
+					cred = (struct ucred*) ((void*)CMSG_DATA(cm));
 				}
 #				endif /* HAVE_SCM_CREDENTIALS */
 #				if HAVE_SO_TIMESTAMP
 				if(   pLstn->bUseSysTimeStamp 
 				   && cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SO_TIMESTAMP) {
-					ts = (struct timeval *)CMSG_DATA(cm);
+					ts = (struct timeval *) ((void*)CMSG_DATA(cm));
 				}
 #				endif /* HAVE_SO_TIMESTAMP */
 			}
@@ -1114,9 +1112,6 @@ finalize_it:
 
 	RETiRet;
 }
-#if  !defined(_AIX)
-#pragma GCC diagnostic pop
-#endif
 
 
 /* activate current listeners */

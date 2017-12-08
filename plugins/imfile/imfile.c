@@ -2478,11 +2478,6 @@ in_do_timeout_processing(void)
 
 
 /* Monitor files in inotify mode */
-#if !defined(_AIX)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align" /* TODO: how can we fix these warnings? */
-#endif
-/* Problem with the warnings: they seem to stem back from the way the API is structured */
 static rsRetVal
 do_inotify(void)
 {
@@ -2535,7 +2530,8 @@ do_inotify(void)
 		}
 		currev = 0;
 		while(currev < rd) {
-			ev = (struct inotify_event*) (iobuf+currev);
+			/* we know this object is properly aligned as of API definition! */
+			ev = (struct inotify_event*) ((void*)(iobuf+currev));
 			in_dbg_showEv(ev);
 			in_processEvent(ev);
 			currev += sizeof(struct inotify_event) + ev->len;
@@ -2546,7 +2542,6 @@ finalize_it:
 	close(ino_fd);
 	RETiRet;
 }
-#pragma GCC diagnostic pop
 
 #else /* #if HAVE_INOTIFY_INIT */
 static rsRetVal

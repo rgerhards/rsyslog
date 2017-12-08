@@ -996,11 +996,6 @@ finalize_it:
 }
 
 
-/* the #pragmas can go away when we have disable array-passing mode */
-#if !defined(_AIX)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align"
-#endif
 void
 releaseDoActionParams(action_t *__restrict__ const pAction, wti_t *__restrict__ const pWti, int action_destruct)
 {
@@ -1035,9 +1030,6 @@ releaseDoActionParams(action_t *__restrict__ const pAction, wti_t *__restrict__ 
 
 	return;
 }
-#if !defined(_AIX)
-#pragma GCC diagnostic pop
-#endif
 
 
 /* This is used in resume processing. We only finally know that a resume

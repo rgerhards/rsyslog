@@ -12,7 +12,7 @@
  * long term, but it is good to have it out of syslogd.c. Maybe this here is
  * an interim location ;)
  *
- * Copyright 2007-2016 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2007-2017 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -1609,12 +1609,10 @@ finalize_it:
  * The function re-queries the interface list (at least in theory).
  * However, it caches entries in order to avoid too-frequent requery.
  * rgerhards, 2012-03-06
+ * Note: we cast alignment pointers stemming back from ifaddr manipulation
+ * to void* before the final cast to solve alignment warnings. This is
+ * safe as CMSG_DATA() is guaranteed to provide properly aligned data.
  */
-#if !defined(_AIX)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align" /* TODO: how can we fix these warnings? */
-/* Problem with the warnings: they seem to stem back from the way the API is structured */
-#endif
 static rsRetVal
 getIFIPAddr(uchar *szif, int family, uchar *pszbuf, int lenBuf)
 {
@@ -1637,12 +1635,12 @@ getIFIPAddr(uchar *szif, int family, uchar *pszbuf, int lenBuf)
 			continue;
 		if(   (family == AF_INET6 || family == AF_UNSPEC)
 		   && ifa->ifa_addr->sa_family == AF_INET6) {
-			pAddr = &((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+			pAddr = &((struct sockaddr_in6 *)((void*)ifa->ifa_addr))->sin6_addr;
 			inet_ntop(AF_INET6, pAddr, (char*)pszbuf, lenBuf);
 			break;
 		} else if(/*   (family == AF_INET || family == AF_UNSPEC)
 		         &&*/ ifa->ifa_addr->sa_family == AF_INET) {
-			pAddr = &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+			pAddr = &((struct sockaddr_in *)((void*)ifa->ifa_addr))->sin_addr;
 			inet_ntop(AF_INET, pAddr, (char*)pszbuf, lenBuf);
 			break;
 		} 
@@ -1658,9 +1656,6 @@ finalize_it:
 	RETiRet;
 
 }
-#if !defined(_AIX)
-#pragma GCC diagnostic pop
-#endif
 
 
 /* queryInterface function

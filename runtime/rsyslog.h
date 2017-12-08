@@ -53,6 +53,7 @@ extern int src_exists;
 #define ATTR_NORETURN __attribute__ ((noreturn))
 #define ATTR_UNUSED __attribute__((unused))
 #define ATTR_NONNULL(...) __attribute__((nonnull(__VA_ARGS__)))
+#define ATTR_ALIGN(boundary) __attribute__((aligned(boundary)))
 
 /* ############################################################# *
  * #                 Some constant values                      # *
