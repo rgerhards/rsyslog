@@ -130,7 +130,8 @@ AM_CONDITIONAL(OS_LINUX, test x$os_type == xlinux)
 in_git_src=no
 AS_IF([test -d "$srcdir"/.git && ! test -f  "$srcdir"/.tarball-version], [in_git_src=yes])
 
-
+#AC_SUBST([@runstatedir@])
+AC_DEFINE_UNQUOTED([RUNSTATEDIR], ["$runstatedir"], [runstatedir])
 AC_DEFINE_UNQUOTED([HOSTENV], "$host", [the host environment, can be queried via a system variable])
 
 # Checks for libraries.
