@@ -46,6 +46,21 @@ typedef struct syslogName_s {
 extern syslogName_t syslogPriNames[];
 extern syslogName_t syslogFacNames[];
 
+/* a wrapper for pthread_setcancelstate() that permits us to
+ * fix portability issue and, most importantly, disable TSAN
+ * see https://github.com/rsyslog/rsyslog/issues/2323
+ */
+#if defined(__clang__)
+#pragma GCC diagnostic ignored "-Wunknown-attributes"
+#endif
+static inline int
+#if defined(__clang__)
+__attribute__((no_sanitize("thread")))
+#endif
+rs_pthread_setcancelstate(int state, int *oldstate) {
+	return pthread_setcancelstate(state, oldstate);
+}
+
 /**
  * A reimplementation of itoa(), as this is not available
  * on all platforms. We used the chance to make an interface

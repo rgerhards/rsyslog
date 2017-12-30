@@ -1958,10 +1958,10 @@ batchProcessed(qqueue_t *pThis, wti_t *pWti)
 
 	int iCancelStateSave;
 	/* at this spot, we must not be cancelled */
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &iCancelStateSave);
+	rs_pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &iCancelStateSave);
 	DeleteProcessedBatch(pThis, &pWti->batch);
 	qqueueChkPersist(pThis, pWti->batch.nElemDeq);
-	pthread_setcancelstate(iCancelStateSave, NULL);
+	rs_pthread_setcancelstate(iCancelStateSave, NULL);
 
 	RETiRet;
 }
@@ -2009,7 +2009,7 @@ ConsumerReg(qqueue_t *pThis, wti_t *pWti)
 	}
 
 	/* at this spot, we may be cancelled */
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &iCancelStateSave);
+	rs_pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &iCancelStateSave);
 
 
 	pWti->pbShutdownImmediate = &pThis->bShutdownImmediate;
@@ -2026,7 +2026,7 @@ ConsumerReg(qqueue_t *pThis, wti_t *pWti)
 	}
 
 	/* but now cancellation is no longer permitted */
-	pthread_setcancelstate(iCancelStateSave, NULL);
+	rs_pthread_setcancelstate(iCancelStateSave, NULL);
 
 finalize_it:
 	DBGPRINTF("regular consumer finished, iret=%d, szlog %d sz phys %d\n", iRet,
@@ -2068,7 +2068,7 @@ ConsumerDA(qqueue_t *pThis, wti_t *pWti)
 	bNeedReLock = 1;
 
 	/* at this spot, we may be cancelled */
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &iCancelStateSave);
+	rs_pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &iCancelStateSave);
 
 	/* iterate over returned results and enqueue them in DA queue */
 	for(i = 0 ; i < pWti->batch.nElem && !pThis->bShutdownImmediate ; i++) {
@@ -2088,7 +2088,7 @@ ConsumerDA(qqueue_t *pThis, wti_t *pWti)
 	}
 
 	/* but now cancellation is no longer permitted */
-	pthread_setcancelstate(iCancelStateSave, NULL);
+	rs_pthread_setcancelstate(iCancelStateSave, NULL);
 
 finalize_it:
 	/*	Check the last return state of qqueueEnqMsg. If an error was returned, we acknowledge it only.
@@ -2968,7 +2968,7 @@ qqueueMultiEnqObjNonDirect(qqueue_t *pThis, multi_submit_t *pMultiSub)
 	ISOBJ_TYPE_assert(pThis, qqueue);
 	assert(pMultiSub != NULL);
 
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &iCancelStateSave);
+	rs_pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &iCancelStateSave);
 	d_pthread_mutex_lock(pThis->mut);
 	for(i = 0 ; i < pMultiSub->nElem ; ++i) {
 		localRet = doEnqSingleObj(pThis, pMultiSub->ppMsgs[i]->flowCtlType, (void*)pMultiSub->ppMsgs[i]);
@@ -2982,7 +2982,7 @@ finalize_it:
 	qqueueAdviseMaxWorkers(pThis);
 	/* and release the mutex */
 	d_pthread_mutex_unlock(pThis->mut);
-	pthread_setcancelstate(iCancelStateSave, NULL);
+	rs_pthread_setcancelstate(iCancelStateSave, NULL);
 	DBGOPRINT((obj_t*) pThis, "MultiEnqObj advised worker start\n");
 
 	RETiRet;
@@ -3022,7 +3022,7 @@ qqueueEnqMsg(qqueue_t *pThis, flowControl_t flowCtlType, smsg_t *pMsg)
 	const int isNonDirectQ = pThis->qType != QUEUETYPE_DIRECT;
 
 	if(isNonDirectQ) {
-		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &iCancelStateSave);
+		rs_pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &iCancelStateSave);
 		d_pthread_mutex_lock(pThis->mut);
 	}
 
@@ -3036,7 +3036,7 @@ finalize_it:
 		qqueueAdviseMaxWorkers(pThis);
 		/* and release the mutex */
 		d_pthread_mutex_unlock(pThis->mut);
-		pthread_setcancelstate(iCancelStateSave, NULL);
+		rs_pthread_setcancelstate(iCancelStateSave, NULL);
 		DBGOPRINT((obj_t*) pThis, "EnqueueMsg advised worker start\n");
 	}
 
