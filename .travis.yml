@@ -53,6 +53,8 @@ addons:
     - libnet1-dev
 
 matrix:
+  allow_failures:
+    - env: RUN="docker-alpine.sh"
   exclude:
      - compiler: "gcc"
      - compiler: "clang"
@@ -65,10 +67,10 @@ matrix:
        services: docker
        env: RUN="docker-ubuntu-devel.sh"
 
-     - os: osx
-       compiler: "clang"
-       env: RUN="run-osx.sh", CFLAGS="-g "
-       #env: CFLAGS="-g -std=c99 -W -Wall -Wextra -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute"
+#     - os: osx
+#       compiler: "clang"
+#       env: RUN="run-osx.sh", CFLAGS="-g "
+#       #env: CFLAGS="-g -std=c99 -W -Wall -Wextra -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute"
        # note: -Werror makes ./configure.sh not properly detect functions
        # like strndup() on Ubuntu 12.04. So we enable it on trusty builds
        # only. The first build with gcc actually only has the purpose of
@@ -127,8 +129,6 @@ matrix:
 #       compiler: "gcc"
 #       dist: trusty
 #       env: DO_COVERITY="YES",DO_CRON="YES", KAFKA="YES", GROK="YES"
-allow_failures:
-  - env: RUN="docker-alpine.sh"
 
 before_install:
   - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "${AD_PPA}x" == "x" ] ; then AD_PPA="v8-stable"; fi
