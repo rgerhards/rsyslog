@@ -2,7 +2,7 @@
  *
  * Module begun 2011-07-01 by Rainer Gerhards
  *
- * Copyright 2011-2017 Rainer Gerhards and Others.
+ * Copyright 2011-2018 Rainer Gerhards and Others.
  *
  * This file is part of the rsyslog runtime library.
  *
@@ -68,6 +68,17 @@ struct cnfexpr* cnfexprOptimize(struct cnfexpr *expr);
 static void cnfstmtOptimizePRIFilt(struct cnfstmt *stmt);
 static void cnfarrayPrint(struct cnfarray *ar, int indent);
 struct cnffunc * cnffuncNew_prifilt(int fac);
+
+static struct cnfparamdescr incpdescr[] = {
+	{ "file", eCmdHdlrString, 0 },
+	{ "text", eCmdHdlrString, 0 }
+	{ "mode", eCmdHdlrWord, 0 }
+};
+static struct cnfparamblk incpblk =
+	{ CNFPARAMBLK_VERSION,
+	  sizeof(rspdescr)/sizeof(struct cnfparamdescr),
+	  rspdescr
+	};
 
 struct curl_funcData {
 	const char *reply;
@@ -226,6 +237,9 @@ cnfobjType2str(const enum cnfobjType ot)
 		return "lookup_table";
 	case CNFOBJ_PARSER:
 		return "parser";
+		break;
+	case CNFOBJ_INCLUDE:
+		return "include";
 		break;
 	case CNFOBJ_TIMEZONE:
 		return "timezone";
@@ -5032,6 +5046,73 @@ cnfDoInclude(char *name)
 	globfree(&cfgFiles);
 	return 0;
 }
+
+
+/* Process include() objects */
+rsRetVal
+includeProcessCnf(struct cnfobj *o)
+{
+	struct cnfparamvals *pvals;
+	rsRetVal localRet;
+	uchar *rsName = NULL;
+	uchar *parserName;
+	int nameIdx, parserIdx;
+	include_t *pRuleset;
+	struct cnfarray *ar;
+	int i;
+	uchar *rsname;
+	DEFiRet;
+
+	pvals = nvlstGetParams(o->nvlst, &incpblk, NULL);
+	if(pvals == NULL) {
+		ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
+	}
+	DBGPRINTF("include param blk after includeProcessCnf:\n");
+	cnfparamsPrint(&incpblk, pvals);
+	for(i = 0 ; i < incpblk.nParams ; ++i) {
+		if(!pvals[i].bUsed) {
+			continue;
+		}
+
+		if(!strcmp(incpblk.descr[i].name, "template")) {
+			loadModConf->tplName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+			if(pszFileDfltTplName != NULL) {
+				parser_errmsg("omfile: warning: default template was already "
+					"set via legacy directive - may lead to inconsistent "
+					"results.");
+			}
+		} else if(!strcmp(incpblk.descr[i].name, "dircreatemode")) {
+			loadModConf->fDirCreateMode = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "filecreatemode")) {
+			loadModConf->fCreateMode = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "dirowner")) {
+			loadModConf->dirUID = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "dirownernum")) {
+			loadModConf->dirUID = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "dirgroup")) {
+			loadModConf->dirGID = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "dirgroupnum")) {
+			loadModConf->dirGID = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "fileowner")) {
+			loadModConf->fileUID = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "fileownernum")) {
+			loadModConf->fileUID = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "filegroup")) {
+			loadModConf->fileGID = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "filegroupnum")) {
+			loadModConf->fileGID = (int) pvals[i].val.d.n;
+		} else if(!strcmp(incpblk.descr[i].name, "dynafile.donotsuspend")) {
+			loadModConf->bDynafileDoNotSuspend = (int) pvals[i].val.d.n;
+		} else {
+			dbgprintf("omfile: program error, non-handled "
+			  "param '%s' in beginCnfLoad\n", incpblk.descr[i].name);
+		}
+	}
+
+finalize_it:
+	RETiRet;
+}
+
 
 void
 varDelete(const struct svar *v)

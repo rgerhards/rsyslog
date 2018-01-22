@@ -1,6 +1,6 @@
 /* rsyslog rainerscript definitions
  *
- * Copyright 2011-2016 Rainer Gerhards
+ * Copyright 2011-2018 Rainer Gerhards
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,6 +46,7 @@ enum cnfobjType {
 	CNFOBJ_PARSER,
 	CNFOBJ_TIMEZONE,
 	CNFOBJ_DYN_STATS,
+	CNFOBJ_INCLUDE,
 	CNFOBJ_INVALID = 0
 };
 
@@ -367,6 +368,7 @@ rsRetVal initRainerscript(void);
 void unescapeStr(uchar *s, int len);
 const char * tokenval2str(int tok);
 uchar* var2CString(struct svar *__restrict__ const r, int *__restrict__ const bMustFree);
+rsRetVal includeProcessCnf(struct cnfobj *o);
 
 /* debug helper */
 void cstrPrint(const char *text, es_str_t *estr);

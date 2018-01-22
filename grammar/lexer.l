@@ -221,6 +221,8 @@ int fileno(FILE *stream);
 				  BEGIN INOBJ; return BEGINOBJ; }
 "timezone"[ \n\t]*"("		{ yylval.objType = CNFOBJ_TIMEZONE;
 				  BEGIN INOBJ; return BEGINOBJ; }
+"include"[ \n\t]*"("		{ yylval.objType = CNFOBJ_INCLUDE;
+				  BEGIN INOBJ; return BEGINOBJ; }
 "parser"[ \n\t]*"("		{ yylval.objType = CNFOBJ_PARSER;
 				  BEGIN INOBJ; return BEGINOBJ; }
 "global"[ \n\t]*"("		{ yylval.objType = CNFOBJ_GLOBAL;

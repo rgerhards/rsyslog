@@ -2,7 +2,7 @@
  *
  * Module begun 2011-04-19 by Rainer Gerhards
  *
- * Copyright 2011-2016 Adiscon GmbH.
+ * Copyright 2011-2018 Adiscon GmbH.
  *
  * This file is part of the rsyslog runtime library.
  *
@@ -465,6 +465,9 @@ void cnfDoObj(struct cnfobj *o)
 		break;
 	case CNFOBJ_RULESET:
 		rulesetProcessCnf(o);
+		break;
+	case CNFOBJ_INCLUDE:
+		includeProcessCnf(o);
 		break;
 	case CNFOBJ_PROPERTY:
 	case CNFOBJ_CONSTANT:
