@@ -163,6 +163,11 @@ static struct cnfparamdescr actpdescr[] = {
 	{ "dynbulkid", eCmdHdlrBinary, 0 },
 	{ "dynpipelinename", eCmdHdlrBinary, 0 },
 	{ "bulkid", eCmdHdlrGetWord, 0 },
+	{ "cert.client.file", eCmdHdlrString, 0 },
+	{ "cert.client.type", eCmdHdlrString, 0 },
+	{ "cert.client.key.passwd", eCmdHdlrString, 0 },
+	{ "cert.client.key.type", eCmdHdlrString, 0 },
+	{ "cert.client.key.file", eCmdHdlrString, 0 },
 	{ "allowunsignedcerts", eCmdHdlrBinary, 0 }
 };
 static struct cnfparamblk actpblk =
