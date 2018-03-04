@@ -38,6 +38,11 @@ matrix:
      - os: linux
        language: minimal
        services: docker
+       env: RUN="docker-run-make-check.sh"
+
+     - os: linux
+       language: minimal
+       services: docker
        env: RUN="travis-run-compile-tests.sh"
 
 # right now does not work, so keep commented out
