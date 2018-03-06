@@ -5,7 +5,7 @@
  *
  * Work originally begun on 2008-02-01 by Rainer Gerhards
  *
- * Copyright 2008-2017 Adiscon GmbH.
+ * Copyright 2008-2018 Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -195,6 +195,18 @@ struct instanceConf_s {
 };
 
 
+typedef struct fs_node_chld_s fs_node_chld_t;
+typedef struct fs_node_s fs_node_t;
+struct fs_node_chld_s {
+	uchar *name;
+	fs_node_t *node;
+	fs_node_chld_t *next;
+};
+struct fs_node_s {
+	fs_node_chld_t *children;
+};
+
+
 /* forward definitions */
 static rsRetVal persistStrmState(lstn_t *pInfo);
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
@@ -213,6 +225,7 @@ struct modConfData_s {
 	instanceConf_t *root, *tail;
 	lstn_t *pRootLstn;
 	lstn_t *pTailLstn;
+	fs_node_t *fs_tree;
 	uint8_t opMode;
 	sbool configSetViaV2Method;
 	sbool sortFiles;
@@ -364,6 +377,105 @@ static struct cnfparamblk inppblk =
 
 #ifdef HAVE_INOTIFY_INIT
 /* support for inotify mode */
+
+
+static void
+fs_node_walk(const fs_node_t *const node, const int level)
+{
+	fs_node_chld_t *chld;
+	DBGPRINTF("node walk[%2.2d]: %p children:\n", level, node);
+
+	for(chld = node->children ; chld != NULL ; chld = chld->next) {
+		DBGPRINTF("node walk[%2.2d]:     child %p '%s':\n", level, chld->node, chld->name);
+	}
+	for(chld = node->children ; chld != NULL ; chld = chld->next) {
+		fs_node_walk(chld->node, level+1);
+	}
+}
+
+
+/* search a node subtree for a given path component
+ * returns path component found or NULL if none exists.
+ * Note: currently a simple list search, may be useful to optimize.
+ */
+static fs_node_t *
+fs_node_search(fs_node_t *const node,
+	const uchar *const toFind)
+	//const int addMissing)
+{
+	fs_node_t *n = NULL;
+	int i;
+
+	DBGPRINTF("fs_node_search(%p, '%s') enter\n", node, toFind);
+	assert(toFind[0] != '\0');
+	for(i = 0 ; toFind[i] != '\0' && toFind[i] != '/' ; ++i)
+		/*JUST SKIP*/;
+	const int lastName = (toFind[i] == '\0') ? 1 : 0;
+	const uchar *const nextName = toFind+i+1;
+	uchar name[PATH_MAX];
+	memcpy(name, toFind, i);
+	name[i] = '\0';
+
+	fs_node_chld_t *chld;
+	for(chld = node->children ; chld != NULL ; chld = chld->next) {
+		if(!ustrcmp(chld->name, name)) {
+			DBGPRINTF("fs_node_search(%p, '%s') found '%s'\n", chld->node, toFind, name);
+			n = (lastName) ?   chld->node
+				         : fs_node_search(chld->node, nextName);
+			goto done;
+		}
+	}
+
+	/* could not find node --> add it */
+	DBGPRINTF("fs_node_search(%p, '%s') did not find '%s' - adding it\n",
+		node, toFind, name);
+	chld = calloc(sizeof(fs_node_chld_t), 1);
+	if(chld == NULL) {
+		LogError(errno, RS_RET_OUT_OF_MEMORY, "imfile: could not alloc memory "
+			"for fs_node_chld_t object");
+		goto done;
+	}
+	chld->name = ustrdup(name);
+	if(chld->name == NULL) {
+		LogError(errno, RS_RET_OUT_OF_MEMORY, "imfile: could not alloc memory "
+			"for fs_node_t object name property");
+		free(chld);
+		goto done;
+	}
+	n = calloc(sizeof(fs_node_t), 1);
+	if(n == NULL) {
+		LogError(errno, RS_RET_OUT_OF_MEMORY, "imfile: could not alloc memory "
+			"for fs_node_t object");
+		free(chld->name);
+		free(chld);
+		goto done;
+	}
+	chld->node = n;
+	chld->next = node->children;
+	node->children = chld;
+
+	if(!lastName) {
+		n = fs_node_search(n, nextName);
+	}
+	DBGPRINTF("fs_node_search(%p, '%s') returns %p\n", chld->node, toFind, n);
+done:	return n;
+}
+
+
+#if 0
+/* add a new listener to the fs_node tree.
+ * walks the tree and creates all fs_nodes that are not yet created
+ * once arrived at the final node, the listener is added to the list
+ * of listeners.
+ */
+static rsRetVal ATTR_NONNULL(1)
+fs_node_add_lstn(fs_node_t **node,
+	const uchar *const toFind,
+	lstn_t *const lstn)
+{
+}
+#endif
+
 
 
 #if ULTRA_DEBUG == 1
@@ -934,6 +1046,8 @@ checkInstance(instanceConf_t *inst)
 {
 	char dirn[MAXFNAME];
 	uchar basen[MAXFNAME];
+	uchar curr_wd[MAXFNAME];
+	uchar *full_name;
 	int i;
 	struct stat sb;
 	int r;
@@ -945,6 +1059,36 @@ checkInstance(instanceConf_t *inst)
 	 */
 	if(inst->pszFileName == NULL)
 		ABORT_FINALIZE(RS_RET_INTERNAL_ERROR);
+
+#if 0 // TODO: re-enable at later stage when we moved to fs_node-aware processing
+	if(inst->pszFileName[0] == '.' && inst->pszFileName[1] == '/') {
+		DBGPRINTF("imfile: removing heading './' from name '%s'\n", inst->pszFileName);
+		memmove(inst->pszFileName, inst->pszFileName+2, ustrlen(inst->pszFileName) - 1);
+	}
+#endif
+
+	/* file system tree maintainance */
+	if(inst->pszFileName[0] == '/') {
+		full_name = inst->pszFileName;
+	} else {
+		if(getcwd((char*)curr_wd, MAXFNAME) == NULL || curr_wd[0] != '/') {
+			LogError(errno, RS_RET_ERR, "imfile: error querying current working "
+				"directory - can not continue with %s", inst->pszFileName);
+			ABORT_FINALIZE(RS_RET_ERR);
+		}
+		if(ustrlen(curr_wd) + ustrlen(inst->pszFileName) + 1 >= MAXFNAME) {
+			LogError(0, RS_RET_ERR, "imfile: length of configured file and current "
+				"working directory exceeds permitted size - ignoring %s",
+				inst->pszFileName);
+			ABORT_FINALIZE(RS_RET_ERR);
+		}
+		curr_wd[ustrlen(curr_wd)-1] = '/';
+		strcpy((char*)curr_wd+ustrlen(curr_wd), (char*)inst->pszFileName);
+		full_name = curr_wd;
+	}
+	dbgprintf("imfile: adding file monitor for '%s'\n", full_name);
+	fs_node_search(loadModConf->fs_tree, full_name);
+	/* end fs_node code */
 
 	i = getBasename(basen, inst->pszFileName);
 	if (i == -1) {
@@ -1321,6 +1465,8 @@ CODESTARTbeginCnfLoad
 	loadModConf->timeoutGranularity = 1000; /* default: 1 second */
 	loadModConf->haveReadTimeouts = 0; /* default: no timeout */
 	loadModConf->sortFiles = GLOB_NOSORT;
+	loadModConf->fs_tree = calloc(sizeof(fs_node_t), 1);
+	loadModConf->fs_tree->children = NULL;
 	bLegacyCnfModGlobalsPermitted = 1;
 	/* init legacy config vars */
 	cs.pszFileName = NULL;
@@ -1454,6 +1600,7 @@ CODESTARTactivateCnf
 		addListner(inst);
 	}
 
+fs_node_walk(runModConf->fs_tree, 0);
 	/* if we could not set up any listeners, there is no point in running... */
 	if(runModConf->pRootLstn == 0) {
 		LogError(0, NO_ERRCODE, "imfile: no file monitors could be started, "
@@ -2600,11 +2747,8 @@ do_inotify(void)
 	int currev;
 	DEFiRet;
 
-dbgprintf("pre wdmapinit\n");
 	CHKiRet(wdmapInit());
-dbgprintf("pre dirsinit\n");
 	CHKiRet(dirsInit());
-dbgprintf("pre inotify_init\n");
 	ino_fd = inotify_init();
 	if(ino_fd < 0) {
 		LogError(errno, RS_RET_INOTIFY_INIT_FAILED, "imfile: Init inotify "
@@ -2612,9 +2756,7 @@ dbgprintf("pre inotify_init\n");
 		return RS_RET_INOTIFY_INIT_FAILED;
 	}
 	DBGPRINTF("inotify fd %d\n", ino_fd);
-dbgprintf("pre setuInitialWatches\n");
 	in_setupInitialWatches();
-dbgprintf("post setuInitialWatches\n");
 
 	while(glbl.GetGlobalInputTermState() == 0) {
 		if(runModConf->haveReadTimeouts) {
