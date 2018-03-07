@@ -199,6 +199,7 @@ typedef struct fs_node_chld_s fs_node_chld_t;
 typedef struct fs_node_s fs_node_t;
 struct fs_node_chld_s {
 	uchar *name;
+	sbool hasWildcard;
 	fs_node_t *node;
 	fs_node_chld_t *next;
 };
@@ -386,7 +387,8 @@ fs_node_walk(const fs_node_t *const node, const int level)
 	DBGPRINTF("node walk[%2.2d]: %p children:\n", level, node);
 
 	for(chld = node->children ; chld != NULL ; chld = chld->next) {
-		DBGPRINTF("node walk[%2.2d]:     child %p '%s':\n", level, chld->node, chld->name);
+		DBGPRINTF("node walk[%2.2d]:     child %p '%s' %s\n",
+			level, chld->node, chld->name, chld->hasWildcard ? "[Wildcard]" : "");
 	}
 	for(chld = node->children ; chld != NULL ; chld = chld->next) {
 		fs_node_walk(chld->node, level+1);
@@ -450,6 +452,7 @@ fs_node_search(fs_node_t *const node,
 		free(chld);
 		goto done;
 	}
+	chld->hasWildcard = containsGlobWildcard((char*)chld->name);
 	chld->node = n;
 	chld->next = node->children;
 	node->children = chld;
@@ -2616,8 +2619,8 @@ in_handleDirEventDirDELETE(struct inotify_event *const ev, const int dirIdx)
 static void ATTR_NONNULL(1)
 in_handleDirEvent(struct inotify_event *const ev, const int dirIdx)
 {
-	DBGPRINTF("in_handleDirEvent dir event for (Idx %d)%s (mask %x)\n",
-		dirIdx, dirs[dirIdx].dirName, ev->mask);
+	DBGPRINTF("in_handleDirEvent dir event for (Idx %d)%s (mask %x), name: %s\n",
+		dirIdx, dirs[dirIdx].dirName, ev->mask, ev->name);
 	if((ev->mask & IN_CREATE)) {
 		/* TODO: does IN_MOVED_TO make sense here ? */
 		if((ev->mask & IN_ISDIR) || (ev->mask & IN_MOVED_TO)) {
@@ -3276,7 +3279,8 @@ do_fen(void)
 			if ((pLstn->pfinf->fobj.fo_name = strdup((char*)pLstn->pszFileName)) == NULL) {
 				LogError(errno, RS_RET_FEN_INIT_FAILED, "do_fen: alloc memory "
 					"for strdup failed ");
-				free(pLstn->pfinf);
+				free(pLstn->pfinf);$DO_IN_CONTAINER devtools/run-configure.sh
+
 				pLstn->pfinf = NULL;
 				ABORT_FINALIZE(RS_RET_FEN_INIT_FAILED);
 			}

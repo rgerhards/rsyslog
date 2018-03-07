@@ -13,6 +13,8 @@ for i in `seq 1 $IMFILEINPUTFILES`;
 do
 	echo "Make rsyslog.input.dir$i"
 	mkdir rsyslog.input.dir$i
+		echo created!
+		sleep 60
 done
 
 # Start rsyslog now before adding more files
@@ -30,6 +32,7 @@ do
 		mkdir rsyslog.input.dir$i/dir$j/testdir
 		mkdir rsyslog.input.dir$i/dir$j/testdir/subdir$j
 		./inputfilegen -m 1 > rsyslog.input.dir$i/dir$j/testdir/subdir$j/file.logfile
+		ls -l rsyslog.input.dir$i/dir$j/testdir/subdir$j/file.logfile
 	done
 	ls -d rsyslog.input.*
 
