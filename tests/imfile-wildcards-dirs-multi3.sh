@@ -14,7 +14,6 @@ do
 	echo "Make rsyslog.input.dir$i"
 	mkdir rsyslog.input.dir$i
 		echo created!
-		sleep 60
 done
 
 # Start rsyslog now before adding more files

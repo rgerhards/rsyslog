@@ -126,4 +126,6 @@ if so:
 	check for sub-entries, initiate delete events if any exists
 	(TODO: is MOVE here a problem?)
 	delete "aaa" entry
+	Note: we MUST NOT remove entries that are statically configured
+	(e.g. /dir in our samples, even if it is deleted - it may re-appear)
       
