@@ -276,6 +276,7 @@ struct modConfData_s {
 	uint8_t opMode;
 	sbool configSetViaV2Method;
 	sbool sortFiles;
+	sbool normalizePath;	/* normalize file system pathes (all start with root dir) */
 	sbool haveReadTimeouts;	/* use special processing if read timeouts exist */
 	sbool bHadFileData;	/* actually a global variable:
 				   1 - last call to pollFile() had data
@@ -387,6 +388,7 @@ static struct cnfparamdescr modpdescr[] = {
 	{ "readtimeout", eCmdHdlrPositiveInt, 0 },
 	{ "timeoutgranularity", eCmdHdlrPositiveInt, 0 },
 	{ "sortfiles", eCmdHdlrBinary, 0 },
+	{ "normalizepath", eCmdHdlrBinary, 0 },
 	{ "mode", eCmdHdlrGetWord, 0 }
 };
 static struct cnfparamblk modpblk =
@@ -708,7 +710,6 @@ act_obj_destroy(act_obj_t *const act)
 	free(act->basename);
 	free(act->multiSub.ppMsgs);
 	free(act);
-	DBGPRINTF("deleted %p\n", act);
 }
 
 
@@ -1451,7 +1452,6 @@ getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path)
 static rsRetVal ATTR_NONNULL()
 checkInstance(instanceConf_t *const inst)
 {
-	uchar *full_name;
 	uchar curr_wd[MAXFNAME];
 	DEFiRet;
 
@@ -1461,30 +1461,30 @@ checkInstance(instanceConf_t *const inst)
 	if(inst->pszFileName == NULL)
 		ABORT_FINALIZE(RS_RET_INTERNAL_ERROR);
 
-	if(inst->pszFileName[0] == '.' && inst->pszFileName[1] == '/') {
-		DBGPRINTF("imfile: removing heading './' from name '%s'\n", inst->pszFileName);
-		memmove(inst->pszFileName, inst->pszFileName+2, ustrlen(inst->pszFileName) - 1);
-	}
+	if(loadModConf->normalizePath) {
+		if(inst->pszFileName[0] == '.' && inst->pszFileName[1] == '/') {
+			DBGPRINTF("imfile: removing heading './' from name '%s'\n", inst->pszFileName);
+			memmove(inst->pszFileName, inst->pszFileName+2, ustrlen(inst->pszFileName) - 1);
+		}
 
-	if(inst->pszFileName[0] == '/') {
-		full_name = inst->pszFileName;
-	} else {
-		if(getcwd((char*)curr_wd, MAXFNAME) == NULL || curr_wd[0] != '/') {
-			LogError(errno, RS_RET_ERR, "imfile: error querying current working "
-				"directory - can not continue with %s", inst->pszFileName);
-			ABORT_FINALIZE(RS_RET_ERR);
+		if(inst->pszFileName[0] != '/') {
+			if(getcwd((char*)curr_wd, MAXFNAME) == NULL || curr_wd[0] != '/') {
+				LogError(errno, RS_RET_ERR, "imfile: error querying current working "
+					"directory - can not continue with %s", inst->pszFileName);
+				ABORT_FINALIZE(RS_RET_ERR);
+			}
+			const size_t len_curr_wd = ustrlen(curr_wd);
+			if(len_curr_wd + ustrlen(inst->pszFileName) + 1 >= MAXFNAME) {
+				LogError(0, RS_RET_ERR, "imfile: length of configured file and current "
+					"working directory exceeds permitted size - ignoring %s",
+					inst->pszFileName);
+				ABORT_FINALIZE(RS_RET_ERR);
+			}
+			curr_wd[len_curr_wd] = '/';
+			strcpy((char*)curr_wd+len_curr_wd+1, (char*)inst->pszFileName);
+			free(inst->pszFileName);
+			CHKmalloc(inst->pszFileName = ustrdup(curr_wd));
 		}
-		const size_t len_curr_wd = ustrlen(curr_wd);
-		if(len_curr_wd + ustrlen(inst->pszFileName) + 1 >= MAXFNAME) {
-			LogError(0, RS_RET_ERR, "imfile: length of configured file and current "
-				"working directory exceeds permitted size - ignoring %s",
-				inst->pszFileName);
-			ABORT_FINALIZE(RS_RET_ERR);
-		}
-		curr_wd[len_curr_wd] = '/';
-		strcpy((char*)curr_wd+len_curr_wd+1, (char*)inst->pszFileName);
-		free(inst->pszFileName);
-		CHKmalloc(inst->pszFileName = ustrdup(curr_wd));
 	}
 	dbgprintf("imfile: adding file monitor for '%s'\n", inst->pszFileName);
 
@@ -1821,6 +1821,7 @@ CODESTARTbeginCnfLoad
 	loadModConf->readTimeout = 0; /* default: no timeout */
 	loadModConf->timeoutGranularity = 1000; /* default: 1 second */
 	loadModConf->haveReadTimeouts = 0; /* default: no timeout */
+	loadModConf->normalizePath = 1;
 	loadModConf->sortFiles = GLOB_NOSORT;
 	loadModConf->conf_tree = calloc(sizeof(fs_node_t), 1);
 	loadModConf->conf_tree->edges = NULL;
@@ -1873,6 +1874,8 @@ CODESTARTsetModCnf
 			loadModConf->timeoutGranularity = (int) pvals[i].val.d.n * 1000;
 		} else if(!strcmp(modpblk.descr[i].name, "sortfiles")) {
 			loadModConf->sortFiles = ((sbool) pvals[i].val.d.n) ? 0 : GLOB_NOSORT;
+		} else if(!strcmp(modpblk.descr[i].name, "normalizepath")) {
+			loadModConf->normalizePath = (sbool) pvals[i].val.d.n;
 		} else if(!strcmp(modpblk.descr[i].name, "mode")) {
 			if(!es_strconstcmp(pvals[i].val.d.estr, "polling"))
 				loadModConf->opMode = OPMODE_POLLING;
