@@ -578,6 +578,36 @@ case $1 in
 		    . $srcdir/diag.sh error-exit 1
 		fi
 		;;
+   'wait-file-lines') 
+		# $2 filename, $3 expected nbr of lines, $4 nbr of tries
+		if [ "$4" == "" ]; then
+			timeoutend=1
+		else
+			timeoutend=$4
+		fi
+		timecounter=0
+
+		while [  $timecounter -lt $timeoutend ]; do
+			let timecounter=timecounter+1
+
+			count=$(wc -l < rsyslog.out.log)
+			if [ $count -eq $3 ]; then
+				echo wait-file-lines success, have $3 lines
+				break
+			else
+				if [ "x$timecounter" == "x$timeoutend" ]; then
+					echo wait-file-lines failed, expected $3 got $count
+					. $srcdir/diag.sh shutdown-when-empty
+					. $srcdir/diag.sh wait-shutdown
+					. $srcdir/diag.sh error-exit 1
+				else
+					echo wait-file-lines not yet there, currently $count lines
+					./msleep 200
+				fi
+			fi
+		done
+		unset count
+		;;
    'content-check-with-count') 
 		# content check variables for Timeout
 		if [ "x$4" == "x" ]; then
@@ -606,7 +636,7 @@ case $1 in
 					cat rsyslog.out.log
 					. $srcdir/diag.sh error-exit 1
 				else
-					echo content-check-with-count failed, trying again ...
+					echo content-check-with-count have $count, wait for $2...
 					./msleep 1000
 				fi
 			fi

@@ -17,7 +17,7 @@ global( debug.whitelist="on"
 #	debug.files=["rainerscript.c", "ratelimit.c", "ruleset.c", "main Q",
 #	"msg.c", "../action.c", "imdiag.c"])
 
-module(load="../plugins/imfile/.libs/imfile" mode="polling")
+module(load="../plugins/imfile/.libs/imfile" mode="polling" pollingInterval="1")
 
 input(type="imfile" File="./rsyslog.input.dir?/*/*.logfile"
 	Tag="file:" Severity="error" Facility="local7" addMetadata="on")

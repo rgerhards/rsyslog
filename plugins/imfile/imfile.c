@@ -208,11 +208,13 @@ struct act_obj_s {
 	act_obj_t *next;
 	fs_edge_t *edge;	/* edge which this object belongs to */
 	char *name;		/* full path name of active object */
-	char *basename;		/* only basename (last pathname component) */ //TODO: do we really need it?
+	//char *basename;		/* only basename (last pathname component) */ //TODO: do we really need it?
+	//char *statefile;	/* base name of state file (for move operations) */
 	lstn_t *pLstn;
 	int wd;
 	time_t timeoutBase; /* what time to calculate the timeout against? */
 	/* file dynamic data */
+	ino_t ino;	/* current inode nbr */
 	strm_t *pStrm;	/* its stream (NULL if not assigned) */
 	int nRecords; /**< How many records did we process before persisting the stream? */
 	ratelimit_t *ratelimiter;
@@ -231,6 +233,16 @@ struct fs_edge_s {
 };
 struct fs_node_s {
 	fs_edge_t *edges;
+};
+
+
+/* list to track inotify move events (this is inotify-special functionality) */
+typedef struct move_list_s move_list_t;
+struct move_list_s {
+	move_list_t *next;
+	uint32_t cookie;
+	const char *name;
+	const char *statefile;
 };
 
 #if 0 // TODO: bad idea, delete?
@@ -257,6 +269,9 @@ static rsRetVal ATTR_NONNULL(1) pollFile(act_obj_t *act);
 static rsRetVal wdmapDel(const int wd);
 static int ATTR_NONNULL() getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path);
 static void ATTR_NONNULL() act_obj_unlink(act_obj_t *const act);
+//static int ATTR_NONNULL() getFullStateFileName(const uchar *const, uchar *, const size_t);
+//static uchar * ATTR_NONNULL(1, 2) getStateFileName(const act_obj_t *, uchar *, const size_t);
+//static void ATTR_NONNULL(1, 2) genStateFileName(const char *, uchar *, const size_t);
 
 
 #define OPMODE_POLLING 0
@@ -272,6 +287,7 @@ struct modConfData_s {
 	instanceConf_t *root, *tail;
 	lstn_t *pRootLstn;
 	lstn_t *pTailLstn;
+	move_list_t * pMoveList;
 	fs_node_t *conf_tree;
 	uint8_t opMode;
 	sbool configSetViaV2Method;
@@ -431,7 +447,8 @@ static struct cnfparamblk inppblk =
 
 #include "im-helper.h" /* must be included AFTER the type definitions! */
 
-#ifdef HAVE_INOTIFY_INIT
+//#ifdef HAVE_INOTIFY_INIT
+#if 1
 /* support for inotify mode */
 
 #if 0 // TODO: debug ???
@@ -445,6 +462,135 @@ dbg_wdmapPrint(const char *msg)
 			i, wdmap[i].wd, wdmap[i].act, wdmap[i].act->name);
 }
 #endif
+
+#if 0
+//TODO add a kind of portable asprintf:
+static const char * ATTR_NONNULL()
+gen_full_name(const char *const dirname, const char *const name)
+{
+	const size_t len_full_name = strlen(dirname) + 1 + strlen(name) + 1;
+	char *const full_name = malloc(len_full_name);
+	if(full_name == NULL)
+		return NULL;
+
+	snprintf(full_name, len_full_name, "%s/%s", dirname, name);
+	return full_name;
+}
+#endif
+
+/* destruct a single move_list entry.
+ * precondition: must already be unlinked!
+ */
+static void ATTR_NONNULL()
+move_list_etry_destruct(move_list_t *const etry)
+{
+	DBGPRINTF("move_list_etry_destruct: %p\n", etry);
+	free((void*)etry->name);
+	free(etry);
+}
+
+/* destruct complete move_list (cleanup on config term) */
+static void ATTR_NONNULL()
+move_list_destruct(modConfData_t *const modConf)
+{
+	move_list_t *etry = modConf->pMoveList;
+	move_list_t *toDel;
+
+	DBGPRINTF("move_list_destruct: root %p\n", etry);
+	while(etry != NULL) {
+		toDel = etry;
+		etry = etry->next;
+		move_list_etry_destruct(toDel);
+	}
+	modConf->pMoveList = NULL;
+}
+
+
+#if 0
+/* add an entry to the move_list
+ * Note: an act_obj MUST exists, because we get this from the inotify API
+ */
+static rsRetVal ATTR_NONNULL()
+move_list_add(const uint32_t cookie,
+	const char *const name,
+	const act_obj_t *const act,
+	const char *const statefile)
+//move_list_add(const uint32_t cookie, const char *const name, const act_obj_t *const act)
+{
+	DEFiRet;
+	uchar sf_old[MAXFNAME];
+	const char *sf = NULL;
+
+	CHKmalloc(sf = gen_full_name(act->name, statefile));
+	genStateFileName(sf, sf_old, sizeof(sf_old));
+	move_list_t *etry = malloc(sizeof(move_list_t));
+	CHKmalloc(etry->name = gen_full_name(act->name, name));
+	CHKmalloc(etry->statefile = strdup((char*)sf_old));
+	etry->cookie = cookie;
+	if(runModConf->pMoveList == NULL) {
+		etry->next = NULL;
+	} else {
+		etry->next = runModConf->pMoveList;
+	}
+	runModConf->pMoveList = etry;
+
+finalize_it:
+	free((void*)sf);
+	DBGPRINTF("exit move_list_add: root %p\n", runModConf->pMoveList);
+	if(iRet != RS_RET_OK) {
+		free(etry);
+		LogError(errno, iRet, "imfile: error creating move_list entry, some "
+			"file move operation may not be carried out correctly");
+	}
+	RETiRet;
+}
+
+
+/* find and remove an entry from move_list.
+ * @return: name of found entry or NULL if not found
+ * NOTE: if name is returned, CALLER MUST FREE the name!
+ */
+static move_list_t *
+move_list_find_rm(const uint32_t cookie)
+{
+	move_list_t *prev = NULL;
+	move_list_t *etry = runModConf->pMoveList;
+
+	dbgprintf("pMoveList %p\n", etry);
+	while(etry != NULL) {
+		dbgprintf("pMoveList cookie %u, search %u\n", etry->cookie, cookie);
+		if(etry->cookie == cookie) {
+			if(prev == NULL) {
+				runModConf->pMoveList = etry->next;
+			} else {
+				prev->next = etry->next;
+			}
+			break; /* found and done */
+		}
+
+		prev = etry;
+		etry = etry->next;
+		dbgprintf("pMoveList next %p\n", etry);
+	}
+
+	return etry;
+}
+#endif
+
+
+#ifdef HAVE_INOTIFY_INIT
+static rsRetVal
+wdmapInit(void)
+{
+	DEFiRet;
+	free(wdmap);
+	CHKmalloc(wdmap = malloc(sizeof(wd_map_t) * INIT_WDMAP_TAB_SIZE));
+	allocMaxWdmap = INIT_WDMAP_TAB_SIZE;
+	nWdmap = 0;
+finalize_it:
+	RETiRet;
+}
+
 
 /* note: we search backwards, as inotify tends to return increasing wd's */
 static rsRetVal
@@ -503,6 +649,55 @@ in_setupWatch(act_obj_t *const act, const int is_file)
 done:	return wd;
 }
 
+/* compare function for bsearch() */
+static int
+wdmap_cmp(const void *k, const void *a)
+{
+	int key = *((int*) k);
+	wd_map_t *etry = (wd_map_t*) a;
+	if(key < etry->wd)
+		return -1;
+	else if(key > etry->wd)
+		return 1;
+	else
+		return 0;
+}
+/* looks up a wdmap entry and returns it's index if found
+ * or -1 if not found.
+ */
+static wd_map_t *
+wdmapLookup(int wd)
+{
+	return bsearch(&wd, wdmap, nWdmap, sizeof(wd_map_t), wdmap_cmp);
+}
+
+
+static rsRetVal
+wdmapDel(const int wd)
+{
+	int i;
+	DEFiRet;
+
+	for(i = 0 ; i < nWdmap && wdmap[i].wd < wd ; ++i)
+		; 	/* just scan */
+	if(i == nWdmap ||  wdmap[i].wd != wd) {
+		DBGPRINTF("wd %d shall be deleted but not in wdmap!\n", wd);
+		FINALIZE;
+	}
+
+	if(i < nWdmap-1) {
+		/* we need to shift to delete it (see comment at wdmap definition) */
+		memmove(wdmap + i, wdmap + i + 1, sizeof(wd_map_t) * (nWdmap - i - 1));
+	}
+	--nWdmap;
+	DBGPRINTF("wd %d deleted, was idx %d\n", wd, i);
+
+finalize_it:
+	RETiRet;
+}
+
+#endif // #ifdef HAVE_INOTIFY_INIT
+
 static void
 fs_node_print(const fs_node_t *const node, const int level)
 {
@@ -532,7 +727,8 @@ fs_node_print(const fs_node_t *const node, const int level)
  * if it already does.
  */
 static rsRetVal ATTR_NONNULL()
-act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file)
+act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file,
+	const ino_t ino)
 {
 	act_obj_t *act;
 	char basename[MAXFNAME];
@@ -550,14 +746,12 @@ act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file)
 	CHKmalloc(act = calloc(sizeof(act_obj_t), 1));
 	CHKmalloc(act->name = strdup(name));
 	getBasename((uchar*)basename, (uchar*)name);
-	CHKmalloc(act->basename = strdup(basename));
+	//CHKmalloc(act->basename = strdup(basename));
 	act->edge = edge;
-	if(edge->active != NULL) {
-		edge->active->prev = act;
-	}
-	act->next = edge->active;
-	edge->active = act;
+	act->ino = ino;
+	#ifdef HAVE_INOTIFY_INIT
 	act->wd = in_setupWatch(act, is_file);
+	#endif
 	if(is_file) {
 		const instanceConf_t *const inst = edge->instarr[0];// TODO: same file, multiple instances?
 		CHKiRet(ratelimitNew(&act->ratelimiter, "imfile", name));
@@ -566,10 +760,23 @@ act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file)
 		act->multiSub.nElem = 0;
 		pollFile(act);
 	}
+
+	/* all well, add to active list */
+	if(edge->active != NULL) {
+		edge->active->prev = act;
+	}
+	act->next = edge->active;
+	edge->active = act;
 //dbgprintf("printout of fs tree after act_obj_add for '%s'\n", name);
 //fs_node_print(runModConf->conf_tree, 0);
 //dbg_wdmapPrint("wdmap after act_obj_add");
 finalize_it:
+	if(iRet != RS_RET_OK) {
+		if(act != NULL) {
+			free(act->name);
+			free(act);
+		}
+	}
 	RETiRet;
 }
 
@@ -627,6 +834,7 @@ poll_active_files(fs_edge_t *const edge)
 }
 
 
+static void ATTR_NONNULL() poll_tree(fs_edge_t *const chld);
 static void ATTR_NONNULL()
 poll_tree(fs_edge_t *const chld)
 {
@@ -663,7 +871,7 @@ poll_tree(fs_edge_t *const chld)
 					(chld->is_file) ? "FILE" : "DIRECTORY");
 				continue;
 			}
-			act_obj_add(chld, file, is_file);
+			act_obj_add(chld, file, is_file, fileInfo.st_ino);
 		}
 		globfree(&files);
 	}
@@ -701,13 +909,15 @@ act_obj_destroy(act_obj_t *const act)
 	}
 	if(act->pStrm != NULL) {
 		pollFile(act); /* get any left-over data */
+		persistStrmState(act);
 		strm.Destruct(&act->pStrm);
 	}
 	if(act->wd != -1) {
 		wdmapDel(act->wd);
 	}
 	free(act->name);
-	free(act->basename);
+	//free(act->basename);
+	//free(act->statefile);
 	free(act->multiSub.ppMsgs);
 	free(act);
 }
@@ -866,6 +1076,8 @@ fs_node_add(fs_node_t *const node,
 	chld->ninst = 1;
 	chld->node = n;
 	chld->parent = node;
+
+	/* link to list */
 	chld->next = node->edges;
 	node->edges = chld;
 
@@ -877,21 +1089,6 @@ finalize_it:
 	// TODO: fix memory leaks when chkmalloc fails!
 	RETiRet;
 }
-
-
-
-static rsRetVal
-wdmapInit(void)
-{
-	DEFiRet;
-	free(wdmap);
-	CHKmalloc(wdmap = malloc(sizeof(wd_map_t) * INIT_WDMAP_TAB_SIZE));
-	allocMaxWdmap = INIT_WDMAP_TAB_SIZE;
-	nWdmap = 0;
-finalize_it:
-	RETiRet;
-}
-
 
 #if 0 //TODO: check if we need (specialised?) versions of this?
 /* we receive a notification that a new object is found *beneath*
@@ -924,14 +1121,6 @@ fs_node_notify_file_del(act_obj_t *const act, const char *const name)
 	return RS_RET_OK;
 }
 #endif
-
-static rsRetVal ATTR_NONNULL(1)
-fs_node_notify_file_update(act_obj_t *const act)
-{
-	DBGPRINTF("fs_node_notify_file_update: act->name '%s'\n", act->name);
-	pollFile(act);
-	return RS_RET_OK;
-}
 
 #if 0
 /* looks up a wdmap entry by filename and returns it's index if found
@@ -988,62 +1177,15 @@ wdmapLookupListnerIdx(const int dirIdx)
 	return wd;
 }
 #endif
-
-/* compare function for bsearch() */
-static int
-wdmap_cmp(const void *k, const void *a)
-{
-	int key = *((int*) k);
-	wd_map_t *etry = (wd_map_t*) a;
-	if(key < etry->wd)
-		return -1;
-	else if(key > etry->wd)
-		return 1;
-	else
-		return 0;
-}
-/* looks up a wdmap entry and returns it's index if found
- * or -1 if not found.
- */
-static wd_map_t *
-wdmapLookup(int wd)
-{
-	return bsearch(&wd, wdmap, nWdmap, sizeof(wd_map_t), wdmap_cmp);
-}
-
-
-static rsRetVal
-wdmapDel(const int wd)
-{
-	int i;
-	DEFiRet;
-
-	for(i = 0 ; i < nWdmap && wdmap[i].wd < wd ; ++i)
-		; 	/* just scan */
-	if(i == nWdmap ||  wdmap[i].wd != wd) {
-		DBGPRINTF("wd %d shall be deleted but not in wdmap!\n", wd);
-		FINALIZE;
-	}
-
-	if(i < nWdmap-1) {
-		/* we need to shift to delete it (see comment at wdmap definition) */
-		memmove(wdmap + i, wdmap + i + 1, sizeof(wd_map_t) * (nWdmap - i - 1));
-	}
-	--nWdmap;
-	DBGPRINTF("wd %d deleted, was idx %d\n", wd, i);
-
-finalize_it:
-	RETiRet;
-}
-
 #endif /* #if HAVE_INOTIFY_INIT */
 
 
-/*
-*	Helper function to combine statefile and workdir
-*/
-static int
-getFullStateFileName(uchar* pszstatefile, uchar* pszout, int ilenout)
+/* Helper function to combine statefile and workdir
+ * This function is guranteed to work only on config data and DOES NOT
+ * open or otherwise modify disk file state.
+ */
+static int ATTR_NONNULL()
+getFullStateFileName(const uchar *const pszstatefile, uchar *const pszout, const size_t ilenout)
 {
 	int lenout;
 	const uchar* pszworkdir;
@@ -1060,38 +1202,64 @@ getFullStateFileName(uchar* pszstatefile, uchar* pszout, int ilenout)
 }
 
 
-/* this generates a state file name suitable for the current file. To avoid
+#if 0
+/* generate a state file name for the given file name
+ * the file is stored in given buf, which must be of MAXFNAME length.
+ */
+static void ATTR_NONNULL(1, 2)
+genStateFileName(const char *const name,
+	 	 uchar *const __restrict__ buf,
+		 const size_t lenbuf)
+{
+	DBGPRINTF("genStateFileName for '%s'\n", name);
+	snprintf((char*)buf, lenbuf - 1, "imfile-state:%s", name);
+	buf[lenbuf-1] = '\0'; /* be on the safe side... */
+	uchar *p = buf;
+	for( ; *p ; ++p) {
+		if(*p == '/')
+			*p = '-';
+	}
+}
+#endif
+
+
+/* this generates a state file name suitable for the given file. To avoid
  * malloc calls, it must be passed a buffer which should be MAXFNAME large.
  * Note: the buffer is not necessarily populated ... always ONLY use the
  * RETURN VALUE!
+ * This function is guranteed to work only on config data and DOES NOT
+ * open or otherwise modify disk file state.
  */
 static uchar * ATTR_NONNULL(1, 2)
-getStateFileName(act_obj_t *const act,
+getStateFileName(const act_obj_t *const act,
 	 	 uchar *const __restrict__ buf,
-		 const size_t lenbuf,
-		 const uchar *pszFileName)
+		 const size_t lenbuf)
 {
-	uchar *ret;
-	const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
+	//uchar *ret;
+	//struct stat stat_buf;
+	//const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
 
-	/* Use pszFileName parameter if set */
-	pszFileName = pszFileName == NULL ? (uchar*)act->name : pszFileName;
-
-	DBGPRINTF("getStateFileName for '%s'\n", pszFileName);
-	//if(pLstn == NULL || pLstn->pszStateFile == NULL) {
-	if(inst->pszStateFile == NULL) {
-		snprintf((char*)buf, lenbuf - 1, "imfile-state:%s", pszFileName);
-		buf[lenbuf-1] = '\0'; /* be on the safe side... */
-		uchar *p = buf;
-		for( ; *p ; ++p) {
-			if(*p == '/')
-				*p = '-';
-		}
-		ret = buf;
-	} else {
-		ret = inst->pszStateFile;
+	DBGPRINTF("getStateFileName for '%s'\n", act->name);
+#if 0
+	if(stat(act->name, &stat_buf) != 0) {
+		DBGPRINTF("getStateFileName: could not stat file %s\n", act->name);
+		LogError(errno, RS_RET_ERR, "getStateFileName: could not stat file %s\n", act->name);
+		return (uchar*) "NO-STAT";
 	}
+	snprintf((char*)buf, lenbuf - 1, "imfile-state:%lld", (long long) stat_buf.st_ino);
+#endif
+	snprintf((char*)buf, lenbuf - 1, "imfile-state:%lld", (long long) act->ino);
+	DBGPRINTF("getStateFileName:  stat file name now is %s\n", buf);
+	return buf;
+#if 0
+	//if(inst->pszStateFile == NULL) {
+		genStateFileName(act->name, buf, lenbuf);
+		ret = buf;
+	//} else {
+		//ret = inst->pszStateFile;
+	//}
 	return ret;
+#endif
 }
 
 
@@ -1156,7 +1324,6 @@ static rsRetVal ATTR_NONNULL(1)
 openFileWithStateFile(act_obj_t *const act)
 {
 	DEFiRet;
-	iRet = RS_RET_NOT_IMPLEMENTED;
 	strm_t *psSF = NULL;
 	uchar pszSFNam[MAXFNAME];
 	size_t lenSFNam;
@@ -1164,8 +1331,12 @@ openFileWithStateFile(act_obj_t *const act)
 	uchar statefile[MAXFNAME];
 	const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
 
-	uchar *const statefn = getStateFileName(act, statefile, sizeof(statefile), NULL);
+	uchar *const statefn = getStateFileName(act, statefile, sizeof(statefile));
 	DBGPRINTF("trying to open state for '%s', state file '%s'\n", act->name, statefn);
+
+	/* persist state file base name in act, as this may be used for MOVE operations */
+	//free(act->statefile);
+	//CHKmalloc(act->statefile = strdup((char*) statefile));
 
 	/* Get full path and file name */
 	lenSFNam = getFullStateFileName(statefn, pszSFNam, sizeof(pszSFNam));
@@ -1198,8 +1369,11 @@ openFileWithStateFile(act_obj_t *const act)
 	DBGPRINTF("deserialized state file, state file base name '%s', "
 		  "configured base name '%s'\n", act->pStrm->pszFName,
 		  act->name);
+	/* correct file name (if renamed) TODO: refactor state file! */
+	free(act->pStrm->pszFName);
+	CHKmalloc(act->pStrm->pszFName = ustrdup(act->name));
+#if 0 // TODO: look in depth, refactor -- looks strange!
 	if(ustrcmp(act->pStrm->pszFName, act->name)) {
-		#if 0 // TODO: look in depth, refactor -- looks strange!
 		if (pLstn->masterLstn != NULL) {
 			// TODO: this looks like an inotify-only feature
 			/* StateFile was migrated from a filemove.
@@ -1207,7 +1381,6 @@ openFileWithStateFile(act_obj_t *const act)
 			CHKmalloc(act->pStrm->pszFName = ustrdup(act->name));
 			DBGPRINTF("statefile was migrated from a file rename for '%s'\n", act->name);
 		} else {
-		#endif
 			LogError(0, RS_RET_STATEFILE_WRONG_FNAME, "imfile: state file '%s' "
 					"contains file name '%s', but is used for file '%s'. State "
 					"file deleted, starting from begin of file.",
@@ -1217,6 +1390,7 @@ openFileWithStateFile(act_obj_t *const act)
 			ABORT_FINALIZE(RS_RET_STATEFILE_WRONG_FNAME);
 		//}
 	}
+#endif
 
 	strm.CheckFileChange(act->pStrm);
 	CHKiRet(strm.SeekCurrOffs(act->pStrm));
@@ -1226,6 +1400,7 @@ openFileWithStateFile(act_obj_t *const act)
 	 */
 
 finalize_it:
+	dbgprintf("state file out %p\n", psSF);
 	if(psSF != NULL)
 		strm.Destruct(&psSF);
 
@@ -1276,8 +1451,7 @@ static rsRetVal
 openFile(act_obj_t *const act)
 {
 	DEFiRet;
-	// TODO: same file, multiple instances?
-	const instanceConf_t *const inst = act->edge->instarr[0];
+	const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
 
 	CHKiRet_Hdlr(openFileWithStateFile(act)) {
 		CHKiRet(openFileWithoutStateFile(act));
@@ -1625,84 +1799,6 @@ lstnDel(lstn_t *pLstn)
 		pLstn->prev->next = pLstn->next;
 	free(pLstn);
 }
-
-/* This function is called when a new listener shall be added.
- * It also does some late stage error checking on the config
- * and reports issues it finds.
- */
-static rsRetVal ATTR_NONNULL(1)
-addListner(instanceConf_t *const inst)
-{
-	DEFiRet;
-	lstn_t *pThis;
-
-#if 0
-	CHKiRet(lstnAdd(&pThis));
-	pThis->hasWildcard = hasWildcard;
-	pThis->pszDirName = inst->pszDirName;
-	CHKmalloc(pThis->pszBaseName = ustrdup(inst->pszFileBaseName)); /* be consistent with expanded wildcards! */
-#endif
-	CHKmalloc(pThis->pszFileName = ustrdup(inst->pszFileName));
-	CHKmalloc(pThis->pszTag = ustrdup(inst->pszTag));
-	pThis->lenTag = ustrlen(pThis->pszTag);
-	if(inst->pszStateFile == NULL) {
-		pThis->pszStateFile = NULL;
-	} else {
-		pThis->pszStateFile = ustrdup(inst->pszStateFile);
-	}
-
-	CHKiRet(ratelimitNew(&pThis->ratelimiter, "imfile", (char*)inst->pszFileName));
-	//CHKmalloc(pThis->multiSub.ppMsgs = MALLOC(inst->nMultiSub * sizeof(smsg_t *)));
-	//pThis->multiSub.maxElem = inst->nMultiSub;
-	//pThis->multiSub.nElem = 0;
-	pThis->iSeverity = inst->iSeverity;
-	pThis->iFacility = inst->iFacility;
-	pThis->maxLinesAtOnce = inst->maxLinesAtOnce;
-	pThis->trimLineOverBytes = inst->trimLineOverBytes;
-	pThis->iPersistStateInterval = inst->iPersistStateInterval;
-	pThis->readMode = inst->readMode;
-	pThis->startRegex = inst->startRegex; /* no strdup, as it is read-only */
-	if(pThis->startRegex != NULL) {
-		const int errcode = regcomp(&pThis->end_preg, (char*)pThis->startRegex, REG_EXTENDED);
-		if(errcode != 0) {
-			char errbuff[512];
-			regerror(errcode, &pThis->end_preg, errbuff, sizeof(errbuff));
-			LogError(0, NO_ERRCODE, "imfile: %s\n", errbuff);
-			ABORT_FINALIZE(RS_RET_ERR);
-		}
-	}
-	pThis->discardTruncatedMsg = inst->discardTruncatedMsg;
-	pThis->msgDiscardingError = inst->msgDiscardingError;
-	pThis->bRMStateOnDel = inst->bRMStateOnDel;
-	pThis->escapeLF = inst->escapeLF;
-	pThis->reopenOnTruncate = inst->reopenOnTruncate;
-#if 0 // TODO: check what this exactly does!
-	pThis->addMetadata = (inst->addMetadata == ADD_METADATA_UNSPECIFIED) ?
-			       hasWildcard : inst->addMetadata;
-#endif
-	pThis->addCeeTag = inst->addCeeTag;
-	pThis->readTimeout = inst->readTimeout;
-	pThis->freshStartTail = inst->freshStartTail;
-	pThis->fileNotFoundError = inst->fileNotFoundError;
-	pThis->pRuleset = inst->pBindRuleset;
-	pThis->nRecords = 0;
-	pThis->pStrm = NULL;
-	pThis->prevLineSegment = NULL;
-	pThis->masterLstn = NULL; /* we *are* a master! */
-	#ifdef HAVE_INOTIFY_INIT
-		/* Init Moved Files variables (Used for MOVED_TO/MOVED_FROM)*/
-		pThis->movedfrom_statefile = NULL;
-		pThis->movedfrom_cookie = 0;
-	#endif
-	#if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
-		pThis->pfinf = NULL;
-		pThis->bPortAssociated = 0;
-	#endif
-		fs_node_add(runModConf->conf_tree, inst->pszFileName, 0, inst);
-
-finalize_it:
-	RETiRet;
-}
 #endif
 
 
@@ -1733,7 +1829,7 @@ CODESTARTnewInpInst
 		} else if(!strcmp(inppblk.descr[i].name, "statefile")) {
 			inst->pszStateFile = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(inppblk.descr[i].name, "removestateondelete")) {
-			inst->bRMStateOnDel = (uint8_t) pvals[i].val.d.n;
+			inst->bRMStateOnDel = (uint8_t) pvals[i].val.d.n; // TODO: duplicate!
 		} else if(!strcmp(inppblk.descr[i].name, "tag")) {
 			inst->pszTag = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(inppblk.descr[i].name, "ruleset")) {
@@ -1751,7 +1847,7 @@ CODESTARTnewInpInst
 		} else if(!strcmp(inppblk.descr[i].name, "msgdiscardingerror")) {
 			inst->msgDiscardingError = (sbool) pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "deletestateonfiledelete")) {
-			inst->bRMStateOnDel = (sbool) pvals[i].val.d.n;
+			inst->bRMStateOnDel = (sbool) pvals[i].val.d.n; // TODO: duplicate!
 		} else if(!strcmp(inppblk.descr[i].name, "addmetadata")) {
 			inst->addMetadata = (sbool) pvals[i].val.d.n;
 		} else if (!strcmp(inppblk.descr[i].name, "addceetag")) {
@@ -1956,27 +2052,40 @@ CODESTARTactivateCnf
 	runModConf->pRootLstn = NULL,
 	runModConf->pTailLstn = NULL;
 
-	for(inst = runModConf->root ; inst != NULL ; inst = inst->next) {
-		fs_node_add(runModConf->conf_tree, inst->pszFileName, 0, inst);
-		//addListner(inst);
-	}
-
-fs_node_print(runModConf->conf_tree, 0);
-#if 0
-	/* if we could not set up any listeners, there is no point in running... */
-	if(runModConf->pRootLstn == 0) {
-		LogError(0, NO_ERRCODE, "imfile: no file monitors could be started, "
+	if(runModConf->root == NULL) {
+		LogError(0, NO_ERRCODE, "imfile: no file monitors configured, "
 				"input not activated.\n");
 		ABORT_FINALIZE(RS_RET_NO_RUN);
 	}
+
+	for(inst = runModConf->root ; inst != NULL ; inst = inst->next) {
+		// TODO: provide switch to turn off this warning?
+		if(!containsGlobWildcard((char*)inst->pszFileName)) {
+			if(access((char*)inst->pszFileName, R_OK) != 0) {
+				LogError(errno, RS_RET_ERR,
+					"imfile: on startup file '%s' does not exist "
+					"but is configured in static file monitor - this "
+					"may indicate a misconfiguration. If the file "
+					"appears at a later time, it will automatically "
+					"be processed. Reason", inst->pszFileName);
+			}
+		}
+		fs_node_add(runModConf->conf_tree, inst->pszFileName, 0, inst);
+	}
+
+	if(Debug) {
+		fs_node_print(runModConf->conf_tree, 0);
+	}
+
 finalize_it:
-#endif
 ENDactivateCnf
 
 
 BEGINfreeCnf
 	instanceConf_t *inst, *del;
 CODESTARTfreeCnf
+	fs_node_destroy(pModConf->conf_tree);
+	move_list_destruct(pModConf);
 	for(inst = pModConf->root ; inst != NULL ; ) {
 		if(inst->startRegex != NULL)
 			regfree(&inst->end_preg);
@@ -1992,27 +2101,10 @@ CODESTARTfreeCnf
 		inst = inst->next;
 		free(del);
 	}
-	fs_node_destroy(pModConf->conf_tree);
 ENDfreeCnf
 
 
-/* Monitor files in traditional polling mode.
- *
- * We go through all files and remember if at least one had data. If so, we do
- * another run (until no data was present in any file). Then we sleep for
- * PollInterval seconds and restart the whole process. This ensures that as
- * long as there is some data present, it will be processed at the fastest
- * possible pace - probably important for busy systmes. If we monitor just a
- * single file, the algorithm is slightly modified. In that case, the sleep
- * hapens immediately. The idea here is that if we have just one file, we
- * returned from the file processer because that file had no additional data.
- * So even if we found some lines, it is highly unlikely to find a new one
- * just now. Trying it would result in a performance-costly additional try
- * which in the very, very vast majority of cases will never find any new
- * lines.
- * On spamming the main queue: keep in mind that it will automatically rate-limit
- * ourselfes if we begin to overrun it. So we really do not need to care here.
- */
+/* Monitor files in polling mode. */
 static rsRetVal
 doPolling(void)
 {
@@ -2024,8 +2116,6 @@ doPolling(void)
 			fs_node_walk(runModConf->conf_tree, poll_tree);
 			DBGPRINTF("doPolling: end poll walk, hadData %d\n", runModConf->bHadFileData);
 		} while(runModConf->bHadFileData); /* warning: do...while()! */
-
-		// TODO: do we need to apply the "poll (run) wait period"?
 
 		/* Note: the additional 10ns wait is vitally important. It guards rsyslog
 		 * against totally hogging the CPU if the users selects a polling interval
@@ -2098,6 +2188,7 @@ fileTableDisplay(fileTable_t *tab)
 	}
 }
 #endif
+
 
 #if 0
 static int ATTR_NONNULL()
@@ -2687,41 +2778,52 @@ in_dbg_showEv(const struct inotify_event *ev)
 		return;
 	if(ev->mask & IN_IGNORED) {
 		dbgprintf("INOTIFY event: watch was REMOVED\n");
-	} else if(ev->mask & IN_MODIFY) {
+	}
+	if(ev->mask & IN_MODIFY) {
 		dbgprintf("INOTIFY event: watch was MODIFID\n");
-	} else if(ev->mask & IN_ACCESS) {
+	}
+	if(ev->mask & IN_ACCESS) {
 		dbgprintf("INOTIFY event: watch IN_ACCESS\n");
-	} else if(ev->mask & IN_ATTRIB) {
+	}
+	if(ev->mask & IN_ATTRIB) {
 		dbgprintf("INOTIFY event: watch IN_ATTRIB\n");
-	} else if(ev->mask & IN_CLOSE_WRITE) {
+	}
+	if(ev->mask & IN_CLOSE_WRITE) {
 		dbgprintf("INOTIFY event: watch IN_CLOSE_WRITE\n");
-	} else if(ev->mask & IN_CLOSE_NOWRITE) {
+	}
+	if(ev->mask & IN_CLOSE_NOWRITE) {
 		dbgprintf("INOTIFY event: watch IN_CLOSE_NOWRITE\n");
-	} else if(ev->mask & IN_CREATE) {
+	}
+	if(ev->mask & IN_CREATE) {
 		dbgprintf("INOTIFY event: file was CREATED: %s\n", ev->name);
-	} else if(ev->mask & IN_DELETE) {
+	}
+	if(ev->mask & IN_DELETE) {
 		dbgprintf("INOTIFY event: watch IN_DELETE\n");
-	} else if(ev->mask & IN_DELETE_SELF) {
+	}
+	if(ev->mask & IN_DELETE_SELF) {
 		dbgprintf("INOTIFY event: watch IN_DELETE_SELF\n");
-	} else if(ev->mask & IN_MOVE_SELF) {
+	}
+	if(ev->mask & IN_MOVE_SELF) {
 		dbgprintf("INOTIFY event: watch IN_MOVE_SELF\n");
-	} else if(ev->mask & IN_MOVED_FROM) {
-		dbgprintf("INOTIFY event: watch IN_MOVED_FROM\n");
-	} else if(ev->mask & IN_MOVED_TO) {
-		dbgprintf("INOTIFY event: watch IN_MOVED_TO\n");
-	} else if(ev->mask & IN_OPEN) {
+	}
+	if(ev->mask & IN_MOVED_FROM) {
+		dbgprintf("INOTIFY event: watch IN_MOVED_FROM, cookie %u, name '%s'\n", ev->cookie, ev->name);
+	}
+	if(ev->mask & IN_MOVED_TO) {
+		dbgprintf("INOTIFY event: watch IN_MOVED_TO, cookie %u, name '%s'\n", ev->cookie, ev->name);
+	}
+	if(ev->mask & IN_OPEN) {
 		dbgprintf("INOTIFY event: watch IN_OPEN\n");
-	} else if(ev->mask & IN_ISDIR) {
+	}
+	if(ev->mask & IN_ISDIR) {
 		dbgprintf("INOTIFY event: watch IN_ISDIR\n");
-	} else {
-		dbgprintf("INOTIFY event: unknown mask code %8.8x\n", ev->mask);
-	 }
+	}
 }
 
 #if 0
 /* Helper function to get fullpath when handling inotify dir events */
 static void ATTR_NONNULL()
-in_handleDirGetFullDir(char *const pszoutput, const int dirIdx, const char *const pszsubdir)
+tn_handleDirGetFullDir(char *const pszoutput, const int dirIdx, const char *const pszsubdir)
 {
 	assert(dirIdx >= 0);
 	DBGPRINTF("in_handleDirGetFullDir root='%s' sub='%s' \n", dirs[dirIdx].dirName, pszsubdir);
@@ -2946,7 +3048,6 @@ in_handleDirEventDirDELETE(struct inotify_event *const ev, const int dirIdx)
 		DBGPRINTF("in_handleDirEventDirDELETE ERROR could not found '%s' in dirs table!\n", fulldn);
 	}
 }
-#endif
 
 static void ATTR_NONNULL(1, 2)
 in_handleDirEvent(const struct inotify_event *const ev, act_obj_t *const act)
@@ -2954,9 +3055,8 @@ in_handleDirEvent(const struct inotify_event *const ev, act_obj_t *const act)
 	DBGPRINTF("in_handleDirEvent dir event for %s, mask %x, name: %s\n",
 		act->name, ev->mask, ev->name);
 
-	fs_node_walk(act->edge->parent, poll_tree);
+	fs_node_walk(act->edge->parent, poll_tree); // MOVED!
 
-#if 0
 	if((ev->mask & IN_CREATE)) {
 		if((ev->mask & IN_ISDIR) || (ev->mask & IN_MOVED_TO)) {
 			fs_node_notify_new_obj(act, ev->name);
@@ -2983,25 +3083,115 @@ in_handleDirEvent(const struct inotify_event *const ev, act_obj_t *const act)
 		DBGPRINTF("got non-expected inotify event:\n");
 		in_dbg_showEv(ev);
 	}
-#endif
 }
+#endif
 
 
 static void ATTR_NONNULL(1, 2)
 in_handleFileEvent(struct inotify_event *ev, const wd_map_t *const etry)
 {
 	if(ev->mask & IN_MODIFY) {
-		fs_node_notify_file_update(etry->act);
+		DBGPRINTF("fs_node_notify_file_update: act->name '%s'\n", etry->act->name);
+		pollFile(etry->act);
 	} else {
 		DBGPRINTF("got non-expected inotify event:\n");
 		in_dbg_showEv(ev);
 	}
 }
 
+#if 0
+/* only used in inotify case (rest does not support it) */
+static void ATTR_NONNULL()
+handle_event_moved_to(act_obj_t *const act, const uint32_t cookie, const char *const name)
+{
+	const char *sf = NULL;
+	DBGPRINTF("IN_MOVED_TO received, name: %s, cookie %u, act->name '%s'\n",
+		name, cookie, act->name);
+	move_list_t *const etry = move_list_find_rm(cookie);
+	if(etry == NULL) {
+		DBGPRINTF("IN_MOVE_TO entry not found\n");
+		goto done;
+	} else {
+		DBGPRINTF("IN_MOVE_TO old name '%s', statefile '%s'\n", etry->name, etry->statefile);
+	}
+	
+	uchar sf_new[MAXFNAME];
+	if((sf = gen_full_name(act->name, name)) == NULL) {
+		LogError(errno, RS_RET_OUT_OF_MEMORY,
+			"imfile: out of memory error during state file move - some "
+			"data may be duplicated. Affected object: %s/%s",
+			act->name, name);
+		goto done;
+	}
+	genStateFileName(sf, sf_new, sizeof(sf_new));
+	DBGPRINTF("sf: '%s', sf_new: '%s'\n", sf, sf_new);
+
+	const char *const work_dir = (char*) glblGetWorkDirRaw();
+	char path_old[MAXFNAME];
+	char path_new[MAXFNAME];
+	snprintf(path_old, sizeof(path_old), "%s/%s", work_dir, etry->statefile);
+	snprintf(path_new, sizeof(path_new), "%s/%s", work_dir, sf_new);
+
+#if 0
+	if(rename(path_old, path_new) != 0) {
+		LogError(errno, RS_RET_ERR, "imfile: could not rename statefile "
+			"'%s' to '%s' - file data may be duplicated", path_old, path_new);
+	} else {
+		DBGPRINTF("statefile '%s' renamed to '%s'\n", path_old, path_new);
+	}
+#endif
+
+
+	move_list_etry_destruct(etry);
+	free((void*)sf);
+done:	return;
+}
+
+/* only used in inotify case (rest does not support it) */
+static void ATTR_NONNULL()
+handle_event_moved_from(act_obj_t *act, const uint32_t cookie, const char *name)
+{
+	DBGPRINTF("IN_MOVED_FROM received, name: %s, cookie %u, act->name '%s'\n",
+		name, cookie, act->name);
+	move_list_add(cookie, name, act, name);
+	/*  TODO: do NOT remove statefile in this case!*/
+}
+#endif
+
 static void ATTR_NONNULL(1)
 in_processEvent(struct inotify_event *ev)
 {
-	wd_map_t *etry;
+	if(ev->mask & IN_IGNORED) {
+		DBGPRINTF("imfile: got IN_IGNORED event\n");
+		goto done;
+	}
+
+	DBGPRINTF("in_processEvent process Event %x for %s\n", ev->mask, (uchar*)ev->name);
+	const wd_map_t *const etry =  wdmapLookup(ev->wd);
+	if(etry == NULL) {
+		LogMsg(0, RS_RET_INTERNAL_ERROR, LOG_WARNING, "imfile: internal error? "
+			"inotify provided watch descriptor %d which we coud could not find "
+			"in our tables - ignored", ev->wd);
+		goto done;
+	}
+
+#if 0
+	if(ev->mask & IN_MOVED_FROM) {
+//		handle_event_moved_from(etry->act, ev->cookie, ev->name);
+		fs_node_walk(etry->act->edge->parent, poll_tree);
+	} else if(ev->mask & IN_MOVED_TO) {
+//		handle_event_moved_to(etry->act, ev->cookie, ev->name);
+		fs_node_walk(etry->act->edge->parent, poll_tree);
+	}
+#endif
+
+	if(etry->act->edge->is_file) {
+		in_handleFileEvent(ev, etry); // esentially poll_file()!
+	} else {
+		fs_node_walk(etry->act->edge->parent, poll_tree);
+		//in_handleDirEvent(ev, etry->act);
+	}
+#if 0 // TODO: refactor!
 #if 0
 	lstn_t *pLstn;
 	int iRet;
@@ -3009,11 +3199,6 @@ in_processEvent(struct inotify_event *ev)
 	int wd;
 	uchar statefile[MAXFNAME];
 #endif
-
-	if(ev->mask & IN_IGNORED) {
-		goto done;
-	} else if(ev->mask & IN_MOVED_FROM) {
-#if 0 // TODO: refactor!
 		/* Find wd entry and remove it */
 		etry =  wdmapLookup(ev->wd);
 		if(etry != NULL) {
@@ -3046,19 +3231,6 @@ in_processEvent(struct inotify_event *ev)
 		}
 		goto done;
 #endif
-	}
-	DBGPRINTF("in_processEvent process Event %x for %s\n", ev->mask, (uchar*)ev->name);
-
-	etry =  wdmapLookup(ev->wd);
-	if(etry == NULL) {
-		DBGPRINTF("could not lookup wd %d\n", ev->wd);
-		goto done;
-	}
-	if(etry->act->edge->is_file) {
-		in_handleFileEvent(ev, etry);
-	} else {
-		in_handleDirEvent(ev, etry->act);
-	}
 done:	return;
 }
 
@@ -3207,7 +3379,7 @@ fen_removeFile(lstn_t *pLstn)
 	}
 
 	if(pLstn->bRMStateOnDel) {
-		statefn = getStateFileName(pLstn, statefile, sizeof(statefile), NULL);
+		statefn = getStateFileName(pLstn, statefile, sizeof(statefile));
 		/* Get full path and file name */
 		getFullStateFileName(statefn, toDel, sizeof(toDel));
 		bDoRMState = 1;
@@ -3749,7 +3921,7 @@ persistStrmState(act_obj_t *const act)
 
 	const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
 
-	uchar *const statefn = getStateFileName(act, statefile, sizeof(statefile), NULL);
+	uchar *const statefn = getStateFileName(act, statefile, sizeof(statefile));
 	DBGPRINTF("persisting state for '%s' to file '%s'\n", act->name, statefn);
 	CHKiRet(strm.Construct(&psSF));
 	lenDir = ustrlen(glbl.GetWorkDir());
