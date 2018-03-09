@@ -634,7 +634,7 @@ poll_tree(fs_edge_t *const chld)
 	glob_t files;
 	DBGPRINTF("poll_tree: chld %p, name '%s', path: %s\n", chld, chld->name, chld->path);
 	detect_updates(chld);
-	const int ret = glob((char*)chld->path, GLOB_NOSORT|GLOB_BRACE, NULL, &files);
+	const int ret = glob((char*)chld->path, runModConf->sortFiles|GLOB_BRACE, NULL, &files);
 	if(ret == 0) {
 		for(unsigned i = 0 ; i < files.gl_pathc ; i++) {
 			if(glbl.GetGlobalInputTermState() != 0) {
