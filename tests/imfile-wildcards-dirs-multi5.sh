@@ -14,8 +14,6 @@ export IMFILECHECKTIMEOUT="20"
 . $srcdir/diag.sh add-conf '
 global( debug.whitelist="on"
 	debug.files=["imfile.c"])
-#	debug.files=["rainerscript.c", "ratelimit.c", "ruleset.c", "main Q",
-#	"msg.c", "../action.c", "imdiag.c"])
 
 module(load="../plugins/imfile/.libs/imfile" mode="inotify")
 
@@ -34,6 +32,8 @@ template(name="outfmt" type="list") {
 
 if $msg contains "msgnum:" then
 	action( type="omfile" file="rsyslog.out.log" template="outfmt")
+
+#*.* action(type="omfile" file="rsyslog.debug")
 '
 
 # create first directory and file before startup, so ensure we will NOT
@@ -74,4 +74,6 @@ done
 
 . $srcdir/diag.sh shutdown-when-empty # shut down rsyslogd when done processing messages
 . $srcdir/diag.sh wait-shutdown	# we need to wait until rsyslogd is finished!
+#echo rsyslog.debug:
+#cat rsyslog.debug
 . $srcdir/diag.sh exit

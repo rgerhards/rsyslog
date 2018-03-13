@@ -1532,8 +1532,9 @@ initAll(int argc, char **argv)
 	if(doFork) {
 		tellChildReady(parentPipeFD, "OK");
 		stddbg = -1; /* turn off writing to fd 1 */
-		close(1);
-		close(2);
+		// TODO: make conditional turn off!
+		//close(1);
+		//close(2);
 		ourConf->globals.bErrMsgToStderr = 0;
 	}
 

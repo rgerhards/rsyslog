@@ -1286,7 +1286,7 @@ getFullStateFileName(const uchar *const pszstatefile, uchar *const pszout, const
 }
 
 
-#if 0
+#if 1
 /* generate a state file name for the given file name
  * the file is stored in given buf, which must be of MAXFNAME length.
  */
@@ -1319,8 +1319,8 @@ getStateFileName(const act_obj_t *const act,
 	 	 uchar *const __restrict__ buf,
 		 const size_t lenbuf)
 {
-	//uchar *ret;
-	//struct stat stat_buf;
+	uchar *ret;
+//	struct stat stat_buf;
 	//const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
 
 	DBGPRINTF("getStateFileName for '%s'\n", act->name);
@@ -1331,11 +1331,12 @@ getStateFileName(const act_obj_t *const act,
 		return (uchar*) "NO-STAT";
 	}
 	snprintf((char*)buf, lenbuf - 1, "imfile-state:%lld", (long long) stat_buf.st_ino);
-#endif
+#else
 	snprintf((char*)buf, lenbuf - 1, "imfile-state:%lld", (long long) act->ino);
+#endif
 	DBGPRINTF("getStateFileName:  stat file name now is %s\n", buf);
 	return buf;
-#if 0
+#if 1
 	//if(inst->pszStateFile == NULL) {
 		genStateFileName(act->name, buf, lenbuf);
 		ret = buf;
@@ -3994,13 +3995,6 @@ finalize_it:
  */
 BEGINafterRun
 CODESTARTafterRun
-#if 0
-	while(runModConf->pRootLstn != NULL) {
-		/* Note: lstnDel() reasociates root! */
-		lstnDel(runModConf->pRootLstn);
-	}
-#endif
-
 	if(pInputName != NULL)
 		prop.Destruct(&pInputName);
 ENDafterRun
