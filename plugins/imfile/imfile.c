@@ -266,12 +266,8 @@ struct act_node_s {
 static rsRetVal persistStrmState(act_obj_t *);
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
 static rsRetVal ATTR_NONNULL(1) pollFile(act_obj_t *act);
-static rsRetVal wdmapDel(const int wd);
-static int ATTR_NONNULL() getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path);
+//static int ATTR_NONNULL() getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path);
 static void ATTR_NONNULL() act_obj_unlink(act_obj_t *const act);
-//static int ATTR_NONNULL() getFullStateFileName(const uchar *const, uchar *, const size_t);
-//static uchar * ATTR_NONNULL(1, 2) getStateFileName(const act_obj_t *, uchar *, const size_t);
-//static void ATTR_NONNULL(1, 2) genStateFileName(const char *, uchar *, const size_t);
 
 
 #define OPMODE_POLLING 0
@@ -325,6 +321,7 @@ struct fileTable_s {
 };
 typedef struct fileTable_s fileTable_t;
 
+#if 0 // DELETE
 /* The dirs table (defined below) contains one entry for each directory that
  * is to be monitored. For each directory, it contains array which point to
  * the associated *active* files as well as *configured* files. Note that
@@ -337,26 +334,27 @@ struct dirInfo_s {
 	sbool hasWildcard;
 /* TODO: check if following property are inotify only?*/
 	int bDirType;		/* Configured or dynamic */
-	fileTable_t active;	/* associated active files */
-	fileTable_t configured; /* associated configured files */
+	//fileTable_t active;	/* associated active files */
+	//fileTable_t configured; /* associated configured files */
 	int rdiridx;		/* Root diridx helper property */
 #if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
 	struct fileinfo *pfinf;
 	sbool bPortAssociated;
 #endif
 };
+#endif
 
 #if defined(HAVE_INOTIFY_INIT) || (defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE))
 /* needed for inotify / fen mode */
-typedef struct dirInfo_s dirInfo_t;
-static dirInfo_t *dirs = NULL;
+//typedef struct dirInfo_s dirInfo_t;
+//static dirInfo_t *dirs = NULL;
 //static int allocMaxDirs;
-static int currMaxDirs;
+//static int currMaxDirs;
 #endif /* #if defined(HAVE_INOTIFY_INIT) || (defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)) --- */
 
 /* the following two macros are used to select the correct file table */
-#define ACTIVE_FILE 1
-#define CONFIGURED_FILE 0
+//#define ACTIVE_FILE 1
+//#define CONFIGURED_FILE 0
 
 #ifdef HAVE_INOTIFY_INIT
 /* We need to map watch descriptors to our actual objects. Unfortunately, the
@@ -731,7 +729,7 @@ act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file,
 	const ino_t ino)
 {
 	act_obj_t *act;
-	char basename[MAXFNAME];
+	//char basename[MAXFNAME];
 	DEFiRet;
 	
 	DBGPRINTF("act_obj_add: edge %p, name '%s'\n", edge, name);
@@ -745,7 +743,7 @@ act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file,
 	DBGPRINTF("add new active object '%s' in '%s'\n", name, edge->path);
 	CHKmalloc(act = calloc(sizeof(act_obj_t), 1));
 	CHKmalloc(act->name = strdup(name));
-	getBasename((uchar*)basename, (uchar*)name);
+	//getBasename((uchar*)basename, (uchar*)name);
 	//CHKmalloc(act->basename = strdup(basename));
 	act->edge = edge;
 	act->ino = ino;
@@ -881,6 +879,7 @@ poll_tree(fs_edge_t *const chld)
 done:	return;
 }
 
+#ifdef HAVE_INOTIFY_INIT // TODO: shouldn't we use that in polling as well?
 static void ATTR_NONNULL()
 poll_timeouts(fs_edge_t *const edge)
 {
@@ -894,6 +893,7 @@ poll_timeouts(fs_edge_t *const edge)
 		}
 	}
 }
+#endif
 
 
 /* destruct a single act_obj object */
@@ -912,9 +912,11 @@ act_obj_destroy(act_obj_t *const act)
 		persistStrmState(act);
 		strm.Destruct(&act->pStrm);
 	}
+	#ifdef HAVE_INOTIFY_INIT
 	if(act->wd != -1) {
 		wdmapDel(act->wd);
 	}
+	#endif
 	free(act->name);
 	//free(act->basename);
 	//free(act->statefile);
@@ -1593,6 +1595,7 @@ finalize_it:
 }
 
 
+#if 0
 /* the basen(ame) buffer must be of size MAXFNAME
  * returns the index of the slash in front of basename
  */
@@ -1620,6 +1623,7 @@ getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path)
 		return -1;
 	}
 }
+#endif
 
 /* this function checks instance parameters and does some required pre-processing
  */
@@ -3170,7 +3174,7 @@ in_processEvent(struct inotify_event *ev)
 	const wd_map_t *const etry =  wdmapLookup(ev->wd);
 	if(etry == NULL) {
 		LogMsg(0, RS_RET_INTERNAL_ERROR, LOG_WARNING, "imfile: internal error? "
-			"inotify provided watch descriptor %d which we coud could not find "
+			"inotify provided watch descriptor %d which we could not find "
 			"in our tables - ignored", ev->wd);
 		goto done;
 	}
@@ -3191,46 +3195,6 @@ in_processEvent(struct inotify_event *ev)
 		fs_node_walk(etry->act->edge->parent, poll_tree);
 		//in_handleDirEvent(ev, etry->act);
 	}
-#if 0 // TODO: refactor!
-#if 0
-	lstn_t *pLstn;
-	int iRet;
-	int ftIdx;
-	int wd;
-	uchar statefile[MAXFNAME];
-#endif
-		/* Find wd entry and remove it */
-		etry =  wdmapLookup(ev->wd);
-		if(etry != NULL) {
-			ftIdx = fileTableSearchNoWildcard(&dirs[etry->dirIdx].active, (uchar*)ev->name);
-			DBGPRINTF("IN_MOVED_FROM Event (ftIdx=%d, name=%s)\n", ftIdx, ev->name);
-			if(ftIdx >= 0) {
-				/* Find listener and wd table index*/
-				pLstn = dirs[etry->dirIdx].active.listeners[ftIdx].pLstn;
-				wd = wdmapLookupListner(pLstn);
-
-				/* Remove file from inotify watch */
-				iRet = inotify_rm_watch(ino_fd, wd); /* Note this will TRIGGER IN_IGNORED Event! */
-				if (iRet != 0) {
-					DBGPRINTF("inotify_rm_watch error %d (ftIdx=%d, wd=%d, name=%s)\n",
-						errno, ftIdx, wd, ev->name);
-				} else {
-					DBGPRINTF("inotify_rm_watch successfully removed file from watch "
-						"(ftIdx=%d, wd=%d, name=%s)\n", ftIdx, wd, ev->name);
-				}
-
-				/* Store statefile name for later MOVED_TO event along with COOKIE */
-				pLstn->masterLstn->movedfrom_statefile = ustrdup(getStateFileName(pLstn,
-					statefile, sizeof(statefile), NULL) );
-				pLstn->masterLstn->movedfrom_cookie = ev->cookie;
-
-				/* do NOT remove statefile in this case!*/
-				in_removeFile(etry->dirIdx, pLstn, FALSE);
-				DBGPRINTF("IN_MOVED_FROM Event file removed file (wd=%d, name=%s)\n", wd, ev->name);
-			}
-		}
-		goto done;
-#endif
 done:	return;
 }
 
@@ -3274,7 +3238,6 @@ do_inotify(void)
 			if(r == 0) {
 				DBGPRINTF("readTimeouts are configured, checking if some apply\n");
 				fs_node_walk(runModConf->conf_tree, poll_timeouts);
-				//in_do_timeout_processing();
 				continue;
 			} else if (r == -1) {
 				LogError(errno, RS_RET_INTERNAL_ERROR,
@@ -3988,6 +3951,7 @@ CODESTARTmodExit
 	objRelease(prop, CORE_COMPONENT);
 	objRelease(ruleset, CORE_COMPONENT);
 
+#if 0
 #	if defined(HAVE_INOTIFY_INIT) || (defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE))
 	int i;
 	/* we use these vars only in inotify mode */
@@ -4006,6 +3970,7 @@ CODESTARTmodExit
 		free(dirs);
 	}
 #	endif /* #if defined(HAVE_INOTIFY_INIT) || (defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)) --- */
+#endif
 
 #ifdef HAVE_INOTIFY_INIT
 	free(wdmap);

@@ -631,7 +631,7 @@ case $1 in
 					. $srcdir/diag.sh shutdown-when-empty # shut down rsyslogd
 					. $srcdir/diag.sh wait-shutdown	# Shutdown rsyslog instance on error 
 
-					echo content-check-with-count failed, expected \"$2\" to occure $3 times, but found it $count times
+					echo content-check-with-count failed, expected \"$2\" to occur $3 times, but found it $count times
 					echo file rsyslog.out.log content is:
 					cat rsyslog.out.log
 					. $srcdir/diag.sh error-exit 1
