@@ -203,7 +203,6 @@ typedef struct fs_edge_s fs_edge_t;
 typedef struct fs_node_s fs_node_t;
 typedef struct act_obj_s act_obj_t;
 struct act_obj_s {
-	int dbg_deleted;	/* debugging: entry deleted? */
 	act_obj_t *prev;
 	act_obj_t *next;
 	fs_edge_t *edge;	/* edge which this object belongs to */
@@ -212,6 +211,11 @@ struct act_obj_s {
 	//char *statefile;	/* base name of state file (for move operations) */
 	lstn_t *pLstn;
 	int wd;
+#if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
+	struct fileinfo *pfinf;
+	sbool bPortAssociated;
+	int is_deleted;	/* debugging: entry deleted? */
+#endif
 	time_t timeoutBase; /* what time to calculate the timeout against? */
 	/* file dynamic data */
 	ino_t ino;	/* current inode nbr */
@@ -301,6 +305,7 @@ static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current l
 static modConfData_t *runModConf = NULL;/* modConf ptr to use for the current load process */
 
 
+#if 0
 /* Dynamic File support for inotify / fen mode */
 /* we need to track directories */
 struct dirInfoFiles_s { /* associated files */
@@ -320,6 +325,7 @@ struct fileTable_s {
 	int allocMax;
 };
 typedef struct fileTable_s fileTable_t;
+#endif
 
 #if 0 // DELETE
 /* The dirs table (defined below) contains one entry for each directory that
@@ -389,8 +395,8 @@ struct fileinfo {
 static int glport; /* Static port handle for FEN api*/
 
 /* Need these function to be declared on top */
-static rsRetVal fen_DirSearchFiles(lstn_t *pLstn, int dirIdx);
-static rsRetVal fen_processEventDir(struct file_obj* fobjp, int dirIdx, int revents);
+//static rsRetVal fen_DirSearchFiles(lstn_t *pLstn, int dirIdx);
+//static rsRetVal fen_processEventDir(struct file_obj* fobjp, int dirIdx, int revents);
 #endif /* #if OS_SOLARIS -------------------------------------------------- */
 
 static prop_t *pInputName = NULL;
@@ -474,7 +480,6 @@ gen_full_name(const char *const dirname, const char *const name)
 	snprintf(full_name, len_full_name, "%s/%s", dirname, name);
 	return full_name;
 }
-#endif
 
 /* destruct a single move_list entry.
  * precondition: must already be unlinked!
@@ -504,7 +509,6 @@ move_list_destruct(modConfData_t *const modConf)
 }
 
 
-#if 0
 /* add an entry to the move_list
  * Note: an act_obj MUST exists, because we get this from the inotify API
  */
@@ -696,6 +700,71 @@ finalize_it:
 
 #endif // #ifdef HAVE_INOTIFY_INIT
 
+/* return wd or -1 on error */
+#if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
+static void ATTR_NONNULL()
+fen_setupWatch(act_obj_t *const act)
+{
+	if(runModConf->opMode != OPMODE_FEN)
+		goto done;
+
+	if(act->pfinf == NULL) {
+		act->pfinf = malloc(sizeof(struct fileinfo));
+		if (act->pfinf == NULL) {
+			LogError(errno, RS_RET_OUT_OF_MEMORY, "imfile: fen_setupWatch alloc memory "
+				"for fileinfo failed ");
+			goto done;
+		}
+		if ((act->pfinf->fobj.fo_name = strdup(act->name)) == NULL) {
+			LogError(errno, RS_RET_OUT_OF_MEMORY, "imfile: fen_setupWatch alloc memory "
+				"for strdup failed ");
+			free(act->pfinf);
+			act->pfinf = NULL;
+			goto done;
+		}
+		act->pfinf->events = FILE_MODIFIED;
+		act->pfinf->port = glport;
+		act->bPortAssociated = 0;
+	}
+
+	if(act->bPortAssociated) {
+		goto done;
+	}
+
+	struct stat fileInfo;
+	const int r = stat(act->name, &fileInfo);
+	if(r == -1) { /* object gone away? */
+		DBGPRINTF("fen_setupWatch: file gone away, no watch: '%s'\n", act->name);
+		goto done;
+	}
+
+	/* note: FEN watch must be re-registered each time - this is what we do now */
+	act->pfinf->fobj.fo_atime = fileInfo.st_atim;
+	act->pfinf->fobj.fo_mtime = fileInfo.st_mtim;
+	act->pfinf->fobj.fo_ctime = fileInfo.st_ctim;
+	if(port_associate(glport, PORT_SOURCE_FILE, (uintptr_t)act->pfinf,
+				act->pfinf->events, (void *)act) == -1) {
+		LogError(errno, RS_RET_SYS_ERR, "fen_processEventFile: Failed to associate port for file "
+			": %s\n", act->name);
+		goto done;
+	} else {
+		/* Port successfull listening now*/
+		DBGPRINTF("fen_processEventFile: associated port for file %s\n", act->name);
+		act->bPortAssociated = 1;
+	}
+
+	LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: in_setupWatch: fen association added for %s",
+		act->name);
+	DBGPRINTF("in_setupWatch: fen association added for %s\n", act->name);
+done:	return;
+}
+#else
+static void ATTR_NONNULL()
+fen_setupWatch(act_obj_t *const __attribute__((unused)) act)
+{
+}
+#endif /* FEN */
+
 static void
 fs_node_print(const fs_node_t *const node, const int level)
 {
@@ -828,6 +897,7 @@ poll_active_files(fs_edge_t *const edge)
 	for(act = edge->active ; act != NULL ; act = act->next) {
 		DBGPRINTF("poll_active_files: polling '%s'\n", act->name);
 		pollFile(act);
+		fen_setupWatch(act);
 	}
 }
 
@@ -838,6 +908,8 @@ poll_tree(fs_edge_t *const chld)
 {
 	struct stat fileInfo;
 	glob_t files;
+	LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: poll_tree: chld %p, name '%s', path: %s",
+		chld, chld->name, chld->path);
 	DBGPRINTF("poll_tree: chld %p, name '%s', path: %s\n", chld, chld->name, chld->path);
 	detect_updates(chld);
 	const int ret = glob((char*)chld->path, runModConf->sortFiles|GLOB_BRACE, NULL, &files);
@@ -917,11 +989,21 @@ act_obj_destroy(act_obj_t *const act)
 		wdmapDel(act->wd);
 	}
 	#endif
-	free(act->name);
+	#if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
+	if(act->pfinf != NULL) {
+		free(act->pfinf->fobj.fo_name);
+		free(act->pfinf);
+	}
+	#endif
 	//free(act->basename);
 	//free(act->statefile);
 	free(act->multiSub.ppMsgs);
-	free(act);
+	#if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
+		act->is_deleted = 1;
+	#else
+		free(act->name);
+		free(act);
+	#endif
 }
 
 
@@ -2089,7 +2171,7 @@ BEGINfreeCnf
 	instanceConf_t *inst, *del;
 CODESTARTfreeCnf
 	fs_node_destroy(pModConf->conf_tree);
-	move_list_destruct(pModConf);
+	//move_list_destruct(pModConf);
 	for(inst = pModConf->root ; inst != NULL ; ) {
 		if(inst->startRegex != NULL)
 			regfree(&inst->end_preg);
@@ -3170,7 +3252,9 @@ in_processEvent(struct inotify_event *ev)
 		goto done;
 	}
 
-	DBGPRINTF("in_processEvent process Event %x for %s\n", ev->mask, (uchar*)ev->name);
+	LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: in_processEvent process Event %x for %s",
+		ev->mask, ev->name);
+	DBGPRINTF("in_processEvent process Event %x for %s\n", ev->mask, ev->name);
 	const wd_map_t *const etry =  wdmapLookup(ev->wd);
 	if(etry == NULL) {
 		LogMsg(0, RS_RET_INTERNAL_ERROR, LOG_WARNING, "imfile: internal error? "
@@ -3179,21 +3263,12 @@ in_processEvent(struct inotify_event *ev)
 		goto done;
 	}
 
-#if 0
-	if(ev->mask & IN_MOVED_FROM) {
-//		handle_event_moved_from(etry->act, ev->cookie, ev->name);
+	if(ev->mask & (IN_MOVED_FROM | IN_MOVED_TO))  {
 		fs_node_walk(etry->act->edge->parent, poll_tree);
-	} else if(ev->mask & IN_MOVED_TO) {
-//		handle_event_moved_to(etry->act, ev->cookie, ev->name);
-		fs_node_walk(etry->act->edge->parent, poll_tree);
-	}
-#endif
-
-	if(etry->act->edge->is_file) {
+	}  else if(etry->act->edge->is_file) {
 		in_handleFileEvent(ev, etry); // esentially poll_file()!
 	} else {
 		fs_node_walk(etry->act->edge->parent, poll_tree);
-		//in_handleDirEvent(ev, etry->act);
 	}
 done:	return;
 }
@@ -3291,6 +3366,7 @@ do_inotify(void)
 
 /* --- Monitor files in FEN mode (OS_SOLARIS)*/
 #if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE) /* use FEN on Solaris! */
+#if 0
 static void
 fen_printevent(int event)
 {
@@ -3462,10 +3538,10 @@ fen_processEventFile(struct file_obj* fobjp, lstn_t *pLstn, int revents, int dir
 		ABORT_FINALIZE(RS_RET_SYS_ERR);
 	}
 
-	/* Register file event */
+	/* Register file event */ /* FEN WATCH! */ // MUST BE DONE **EACH** TIME!
 	fobjp->fo_atime = statFile.st_atim;
 	fobjp->fo_mtime = statFile.st_mtim;
-	fobjp->fo_ctime = statFile.st_ctim;
+	fobjp->fo_ctime = statFile.st_ctim;  // events: FILE_MODIFIED
 	if (port_associate(glport, PORT_SOURCE_FILE, (uintptr_t)fobjp,
 				pLstn->pfinf->events, (void *)pLstn) == -1) {
 		/* Add error processing as required, file may have been deleted/moved. */
@@ -3705,7 +3781,9 @@ fen_setupFileWatches(void)
 		}
 	}
 }
+#endif
 
+/* https://docs.oracle.com/cd/E19253-01/816-5168/port-get-3c/index.html */
 static rsRetVal
 do_fen(void)
 {
@@ -3717,18 +3795,22 @@ do_fen(void)
 	DEFiRet;
 	rsRetVal iRetTmp = RS_RET_OK;
 
-	/* Set port timeout to 1 second. We need to checkfor unmonitored files during meantime */
+	/* Set port timeout to 1 second. We need to check for unmonitored files during meantime */
 	timeout.tv_sec = 1;
 	timeout.tv_nsec = 0;
 
 	/* create port instance */
-	if ((glport = port_create()) == -1) {
+	if((glport = port_create()) == -1) {
 		LogError(errno, RS_RET_FEN_INIT_FAILED, "do_fen INIT Port failed ");
 		return RS_RET_FEN_INIT_FAILED;
 	}
 
-	/* create port instance */
-	CHKiRet(dirsInit());
+	/* do watch initialization */
+	fs_node_walk(runModConf->conf_tree, poll_tree);
+
+#if 0
+	///* create port instance */
+	//CHKiRet(dirsInit());
 
 	/* Loop through all configured listeners */
 	for(pLstn = runModConf->pRootLstn ; pLstn != NULL ; pLstn = pLstn->next) {
@@ -3744,7 +3826,7 @@ do_fen(void)
 			if ((pLstn->pfinf->fobj.fo_name = strdup((char*)pLstn->pszFileName)) == NULL) {
 				LogError(errno, RS_RET_FEN_INIT_FAILED, "do_fen: alloc memory "
 					"for strdup failed ");
-				free(pLstn->pfinf);$DO_IN_CONTAINER devtools/run-configure.sh
+				free(pLstn->pfinf);
 
 				pLstn->pfinf = NULL;
 				ABORT_FINALIZE(RS_RET_FEN_INIT_FAILED);
@@ -3762,57 +3844,49 @@ do_fen(void)
 
 	/* Init File watches ONCE */
 	fen_setupFileWatches();
+#endif
 
 	DBGPRINTF("do_fen ENTER monitoring loop \n");
 	while(glbl.GetGlobalInputTermState() == 0) {
 		DBGPRINTF("do_fen loop begin... \n");
 
-		/* Check for not associated directories and add dir watches */
-		fen_setupDirWatches();
+//		/* Check for not associated directories and add dir watches */
+		//fen_setupDirWatches();
 
 		/* Loop through events, if there are any */
-		while (!port_get(glport, &portEvent, &timeout)) {
-			switch (portEvent.portev_source) {
-				case PORT_SOURCE_FILE:
-					/* check if file obj is DIR or FILE */
-					fobjp = (struct file_obj*) portEvent.portev_object;
-					DBGPRINTF("do_fen event received for '%s', processing ... \n",
-						fobjp->fo_name);
+			/* object is no longer watched --> flag variable, re-watch in tree_walk 
+			 * if not watched. Must be top-level object.
+			 */
+		while (!port_get(glport, &portEvent, &timeout)) { // wie inotify-wait
+			if(portEvent.portev_source != PORT_SOURCE_FILE) {
+				LogError(errno, RS_RET_SYS_ERR, "do_fen: Event from unexpected source "
+					": %d\n", portEvent.portev_source);
+				continue;
+			}
+			act_obj_t *const act = (act_obj_t*) portEvent.portev_user;
+			LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: do_fen event received for "
+				"'%s' (deleted %d)", act->name, act->is_deleted);
+			DBGPRINTF("do_fen event received for '%s' (deleted %d)\n", act->name, act->is_deleted);
+			if(act->is_deleted) {
+				free(act->name);
+				free(act);
+				continue;
+			}
 
-					/* Check if we habe a DIR or FILE */
-					if (stat(fobjp->fo_name, &statFile) == 0 && S_ISDIR(statFile.st_mode)) {
-						fen_processEventDir(fobjp, (int)portEvent.portev_user,
-							portEvent.portev_events);
-					} else {
-						/* Call file events event handler */
-						fen_processEventFile(fobjp, (lstn_t*)portEvent.portev_user,
-							portEvent.portev_events, -1 /* Unknown diridx */);
-					}
-					break;
-				default:
-					LogError(errno, RS_RET_SYS_ERR, "do_fen: Event from unexpected source "
-						": %d\n", portEvent.portev_source);
+			act->bPortAssociated = 0;
+			if(act->edge->is_file) {
+				pollFile(act);
+			} else {
+				fs_node_walk(act->edge->parent, poll_tree);
 			}
 		}
-
-		DBGPRINTF("do_fen loop end... \n");
 	}
-	DBGPRINTF("do_fen EXIT monitoring loop \n");
 
 finalize_it:
-	/*
-	* close port, will de-activate all file events watches associated
-	* with the port.
-	*/
+	/* close port, will de-activate all file events watches associated
+	 * with the port.
+	 */
 	close(glport);
-
-	/* Free memory now */
-	for(pLstn = runModConf->pRootLstn ; pLstn != NULL ; pLstn = pLstn->next) {
-		free(pLstn->pfinf->fobj.fo_name);
-		free(pLstn->pfinf);
-		pLstn->pfinf = NULL;
-	}
-
 	RETiRet;
 }
 #else /* #if OS_SOLARIS */
