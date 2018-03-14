@@ -272,6 +272,8 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __a
 static rsRetVal ATTR_NONNULL(1) pollFile(act_obj_t *act);
 //static int ATTR_NONNULL() getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path);
 static void ATTR_NONNULL() act_obj_unlink(act_obj_t *const act);
+static uchar * ATTR_NONNULL(1, 2) getStateFileName(const act_obj_t *, uchar *, const size_t);
+static int ATTR_NONNULL() getFullStateFileName(const uchar *const, uchar *const pszout, const size_t ilenout);
 
 
 #define OPMODE_POLLING 0
@@ -970,8 +972,12 @@ poll_timeouts(fs_edge_t *const edge)
 
 /* destruct a single act_obj object */
 static void
-act_obj_destroy(act_obj_t *const act)
+act_obj_destroy(act_obj_t *const act, const int is_deleted)
 {
+	uchar *statefn;
+	uchar statefile[MAXFNAME];
+	uchar toDel[MAXFNAME];
+
 	if(act == NULL)
 		return;
 
@@ -980,9 +986,20 @@ act_obj_destroy(act_obj_t *const act)
 		ratelimitDestruct(act->ratelimiter);
 	}
 	if(act->pStrm != NULL) {
+		const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
 		pollFile(act); /* get any left-over data */
+		if(inst->bRMStateOnDel) {
+			statefn = getStateFileName(act, statefile, sizeof(statefile));
+			getFullStateFileName(statefn, toDel, sizeof(toDel));
+			statefn = toDel;
+		}
 		persistStrmState(act);
 		strm.Destruct(&act->pStrm);
+		/* we delete state file after destruct in case strm obj initiated a write */
+		if(is_deleted && inst->bRMStateOnDel) {
+			DBGPRINTF("act_obj_destroy: deleting state file %s\n", statefn);
+			unlink((char*)statefn);
+		}
 	}
 	#ifdef HAVE_INOTIFY_INIT
 	if(act->wd != -1) {
@@ -1018,7 +1035,7 @@ act_obj_destroy_all(act_obj_t *act)
 	while(act != NULL) {
 		act_obj_t *const toDel = act;
 		act = act->next;
-		act_obj_destroy(toDel);
+		act_obj_destroy(toDel, 0);
 	}
 }
 
@@ -1057,7 +1074,7 @@ act_obj_unlink(act_obj_t *const act)
 	if(act->next != NULL) {
 		act->next->prev = act->prev;
 	}
-	act_obj_destroy(act);
+	act_obj_destroy(act, 1);
 //dbgprintf("printout of fs tree post unlink\n");
 //fs_node_print(runModConf->conf_tree, 0);
 //dbg_wdmapPrint("wdmap after");
