@@ -209,7 +209,7 @@ struct act_obj_s {
 	char *name;		/* full path name of active object */
 	//char *basename;		/* only basename (last pathname component) */ //TODO: do we really need it?
 	//char *statefile;	/* base name of state file (for move operations) */
-	lstn_t *pLstn;
+	//lstn_t *pLstn;
 	int wd;
 #if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
 	struct fileinfo *pfinf;
@@ -3265,11 +3265,13 @@ in_processEvent(struct inotify_event *ev)
 	}
 
 	if(ev->mask & (IN_MOVED_FROM | IN_MOVED_TO))  {
-		fs_node_walk(etry->act->edge->parent, poll_tree);
+		//fs_node_walk(etry->act->edge->parent, poll_tree);
+		fs_node_walk(etry->act->edge->node, poll_tree);
 	}  else if(etry->act->edge->is_file) {
 		in_handleFileEvent(ev, etry); // esentially poll_file()!
 	} else {
-		fs_node_walk(etry->act->edge->parent, poll_tree);
+		//fs_node_walk(etry->act->edge->parent, poll_tree);
+		fs_node_walk(etry->act->edge->node, poll_tree);
 	}
 done:	return;
 }
@@ -3878,7 +3880,8 @@ do_fen(void)
 			if(act->edge->is_file) {
 				pollFile(act);
 			} else {
-				fs_node_walk(act->edge->parent, poll_tree);
+				// curr: fs_node_walk(act->edge->parent, poll_tree);
+				fs_node_walk(act->edge->node, poll_tree);
 			}
 		}
 	}
