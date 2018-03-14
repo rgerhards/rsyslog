@@ -753,8 +753,8 @@ fen_setupWatch(act_obj_t *const act)
 		act->bPortAssociated = 1;
 	}
 
-	LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: in_setupWatch: fen association added for %s",
-		act->name);
+	//LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: in_setupWatch: fen association added for %s",
+		//act->name);
 	DBGPRINTF("in_setupWatch: fen association added for %s\n", act->name);
 done:	return;
 }
@@ -908,8 +908,8 @@ poll_tree(fs_edge_t *const chld)
 {
 	struct stat fileInfo;
 	glob_t files;
-	LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: poll_tree: chld %p, name '%s', path: %s",
-		chld, chld->name, chld->path);
+	//LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: poll_tree: chld %p, name '%s', path: %s",
+		//chld, chld->name, chld->path);
 	DBGPRINTF("poll_tree: chld %p, name '%s', path: %s\n", chld, chld->name, chld->path);
 	detect_updates(chld);
 	const int ret = glob((char*)chld->path, runModConf->sortFiles|GLOB_BRACE, NULL, &files);
@@ -3253,8 +3253,8 @@ in_processEvent(struct inotify_event *ev)
 		goto done;
 	}
 
-	LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: in_processEvent process Event %x for %s",
-		ev->mask, ev->name);
+	//LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: in_processEvent process Event %x for %s",
+	//	ev->mask, ev->name);
 	DBGPRINTF("in_processEvent process Event %x for %s\n", ev->mask, ev->name);
 	const wd_map_t *const etry =  wdmapLookup(ev->wd);
 	if(etry == NULL) {
@@ -3867,8 +3867,8 @@ do_fen(void)
 				continue;
 			}
 			act_obj_t *const act = (act_obj_t*) portEvent.portev_user;
-			LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: do_fen event received for "
-				"'%s' (deleted %d)", act->name, act->is_deleted);
+			//LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: do_fen event received for "
+				//"'%s' (deleted %d)", act->name, act->is_deleted);
 			DBGPRINTF("do_fen event received for '%s' (deleted %d)\n", act->name, act->is_deleted);
 			if(act->is_deleted) {
 				free(act->name);
