@@ -618,7 +618,6 @@ case $1 in
 		timecounter=0
 
 		while [  $timecounter -lt $timeoutend ]; do
-#			echo content-check-with-count loop $timecounter
 			let timecounter=timecounter+1
 
 			count=$(cat rsyslog.out.log | grep -F "$2" | wc -l)
@@ -633,10 +632,10 @@ case $1 in
 
 					echo content-check-with-count failed, expected \"$2\" to occur $3 times, but found it $count times
 					echo file rsyslog.out.log content is:
-					cat rsyslog.out.log
+					sort < rsyslog.out.log
 					. $srcdir/diag.sh error-exit 1
 				else
-					echo content-check-with-count have $count, wait for $2...
+					echo content-check-with-count have $count, wait for $3 times $2...
 					./msleep 1000
 				fi
 			fi
