@@ -56,5 +56,6 @@ for i in {1..4}; do
 done
 
 ## if we got here, all is good :)
+cat log
 
 . $srcdir/diag.sh exit
