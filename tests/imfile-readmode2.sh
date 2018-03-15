@@ -1,7 +1,8 @@
 #!/bin/bash
 # This is part of the rsyslog testbench, licensed under ASL 2.0
-echo ======================================================================
-echo [imfile-readmode2.sh]
+export RSYSLOG_DEBUG="debug nologfuncflow noprintmutexaction nostdout"
+export RSYSLOG_DEBUGLOG="log"
+
 . $srcdir/diag.sh check-inotify
 . $srcdir/diag.sh init
 . $srcdir/diag.sh startup imfile-readmode2.conf
@@ -26,7 +27,9 @@ sleep 1
 . $srcdir/diag.sh wait-shutdown    # we need to wait until rsyslogd is finished!
 
 # give it time to write the output file
+
 sleep 1
+cat log
 
 ## check if we have the correct number of messages
 
@@ -56,6 +59,5 @@ for i in {1..4}; do
 done
 
 ## if we got here, all is good :)
-cat log
 
 . $srcdir/diag.sh exit

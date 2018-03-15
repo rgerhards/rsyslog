@@ -702,14 +702,15 @@ finalize_it:
 
 #endif // #ifdef HAVE_INOTIFY_INIT
 
-/* return wd or -1 on error */
 #if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
 static void ATTR_NONNULL()
 fen_setupWatch(act_obj_t *const act)
 {
+	DBGPRINTF("fen_setupWatch: enter, opMode %d\n", runModConf->opMode);
 	if(runModConf->opMode != OPMODE_FEN)
 		goto done;
 
+	DBGPRINTF("fen_setupWatch: %s\n", act->name);
 	if(act->pfinf == NULL) {
 		act->pfinf = malloc(sizeof(struct fileinfo));
 		if (act->pfinf == NULL) {
@@ -729,6 +730,7 @@ fen_setupWatch(act_obj_t *const act)
 		act->bPortAssociated = 0;
 	}
 
+	DBGPRINTF("fen_setupWatch: associated %d\n", act->bPortAssociated);
 	if(act->bPortAssociated) {
 		goto done;
 	}
@@ -746,12 +748,12 @@ fen_setupWatch(act_obj_t *const act)
 	act->pfinf->fobj.fo_ctime = fileInfo.st_ctim;
 	if(port_associate(glport, PORT_SOURCE_FILE, (uintptr_t)act->pfinf,
 				act->pfinf->events, (void *)act) == -1) {
-		LogError(errno, RS_RET_SYS_ERR, "fen_processEventFile: Failed to associate port for file "
+		LogError(errno, RS_RET_SYS_ERR, "fen_setupWatch: Failed to associate port for file "
 			": %s\n", act->name);
 		goto done;
 	} else {
 		/* Port successfull listening now*/
-		DBGPRINTF("fen_processEventFile: associated port for file %s\n", act->name);
+		DBGPRINTF("fen_setupWatch: associated port for file %s\n", act->name);
 		act->bPortAssociated = 1;
 	}
 
@@ -764,6 +766,7 @@ done:	return;
 static void ATTR_NONNULL()
 fen_setupWatch(act_obj_t *const __attribute__((unused)) act)
 {
+	DBGPRINTF("fen_setupWatch: DUMMY CALLED - not on Solaris?");
 }
 #endif /* FEN */
 
@@ -821,6 +824,7 @@ act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file,
 	#ifdef HAVE_INOTIFY_INIT
 	act->wd = in_setupWatch(act, is_file);
 	#endif
+	fen_setupWatch(act);
 	if(is_file) {
 		const instanceConf_t *const inst = edge->instarr[0];// TODO: same file, multiple instances?
 		CHKiRet(ratelimitNew(&act->ratelimiter, "imfile", name));
@@ -910,12 +914,12 @@ poll_tree(fs_edge_t *const chld)
 {
 	struct stat fileInfo;
 	glob_t files;
-	//LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: poll_tree: chld %p, name '%s', path: %s",
-		//chld, chld->name, chld->path);
 	DBGPRINTF("poll_tree: chld %p, name '%s', path: %s\n", chld, chld->name, chld->path);
 	detect_updates(chld);
 	const int ret = glob((char*)chld->path, runModConf->sortFiles|GLOB_BRACE, NULL, &files);
+	DBGPRINTF("poll_tree: glob returned %d\n", ret);
 	if(ret == 0) {
+		DBGPRINTF("poll_tree: processing %d files\n", (int) files.gl_pathc);
 		for(unsigned i = 0 ; i < files.gl_pathc ; i++) {
 			if(glbl.GetGlobalInputTermState() != 0) {
 				goto done;
@@ -946,6 +950,8 @@ poll_tree(fs_edge_t *const chld)
 			act_obj_add(chld, file, is_file, fileInfo.st_ino);
 		}
 		globfree(&files);
+	} else {
+		LogError(errno, RS_RET_ERR, "poll_tree: glob returned error for %s", chld->path);
 	}
 
 	poll_active_files(chld);
@@ -3878,15 +3884,16 @@ do_fen(void)
 			 * if not watched. Must be top-level object.
 			 */
 		while (!port_get(glport, &portEvent, &timeout)) { // wie inotify-wait
+			DBGPRINTF("do_fen: received port event\n");
 			if(portEvent.portev_source != PORT_SOURCE_FILE) {
 				LogError(errno, RS_RET_SYS_ERR, "do_fen: Event from unexpected source "
 					": %d\n", portEvent.portev_source);
 				continue;
 			}
 			act_obj_t *const act = (act_obj_t*) portEvent.portev_user;
-			//LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: do_fen event received for "
-				//"'%s' (deleted %d)", act->name, act->is_deleted);
-			DBGPRINTF("do_fen event received for '%s' (deleted %d)\n", act->name, act->is_deleted);
+			DBGPRINTF("do_fen event received: deleted %d, is_file %d, name '%s' foname '%s'\n",
+				act->is_deleted, act->edge->is_file, act->name,
+				((struct file_obj*)portEvent.portev_object)->fo_name);
 			if(act->is_deleted) {
 				free(act->name);
 				free(act);
