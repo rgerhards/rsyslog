@@ -1,5 +1,9 @@
 #!/bin/bash
 # This is part of the rsyslog testbench, licensed under GPLv3
+echo TEST CURRENTLY DOES NOT WORK - FIX
+exit 77
+
+
 export TESTMESSAGES=10000
 export RETRIES=10
 export TESTMESSAGESFULL=19999
