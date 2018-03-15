@@ -950,8 +950,8 @@ poll_tree(fs_edge_t *const chld)
 			act_obj_add(chld, file, is_file, fileInfo.st_ino);
 		}
 		globfree(&files);
-	} else {
-		LogError(errno, RS_RET_ERR, "poll_tree: glob returned error for %s", chld->path);
+	//} else {
+		//LogError(errno, RS_RET_ERR, "poll_tree: glob returned error for %s", chld->path);
 	}
 
 	poll_active_files(chld);
@@ -1130,7 +1130,7 @@ fs_node_add(fs_node_t *const node,
 	instanceConf_t *const inst)
 {
 	DEFiRet;
-	fs_node_t *n = NULL;
+	fs_edge_t *newchld = NULL;
 	int i;
 
 	DBGPRINTF("fs_node_add(%p, '%s') enter, idx %zd\n",
@@ -1173,27 +1173,35 @@ fs_node_add(fs_node_t *const node,
 	/* could not find node --> add it */
 	DBGPRINTF("fs_node_add(%p, '%s') did not find '%s' - adding it\n",
 		node, toFind, name);
-	CHKmalloc(chld = calloc(sizeof(fs_edge_t), 1));
-	CHKmalloc(chld->name = ustrdup(name));
-	CHKmalloc(n = calloc(sizeof(fs_node_t), 1));
-	CHKmalloc(chld->path = ustrdup(ourPath));
-	CHKmalloc(chld->instarr = calloc(sizeof(instanceConf_t*), 1));
-	chld->instarr[0] = inst;
-	chld->is_file = isFile;
-	chld->ninst = 1;
-	chld->node = n;
-	chld->parent = node;
+	CHKmalloc(newchld = calloc(sizeof(fs_edge_t), 1));
+	CHKmalloc(newchld->name = ustrdup(name));
+	CHKmalloc(newchld->node = calloc(sizeof(fs_node_t), 1));
+	CHKmalloc(newchld->path = ustrdup(ourPath));
+	CHKmalloc(newchld->instarr = calloc(sizeof(instanceConf_t*), 1));
+	newchld->instarr[0] = inst;
+	newchld->is_file = isFile;
+	newchld->ninst = 1;
+	newchld->parent = node;
 
-	/* link to list */
-	chld->next = node->edges;
-	node->edges = chld;
+	DBGPRINTF("fs_node_add(%p, '%s') returns %p\n", node, toFind, newchld->node);
 
 	if(!isFile) {
-		CHKiRet(fs_node_add(n, toFind, nextPathIdx, inst));
+		CHKiRet(fs_node_add(newchld->node, toFind, nextPathIdx, inst));
 	}
-	DBGPRINTF("fs_node_add(%p, '%s') returns %p\n", chld->node, toFind, n);
+
+	/* link to list */
+	newchld->next = node->edges;
+	node->edges = newchld;
 finalize_it:
-	// TODO: fix memory leaks when chkmalloc fails!
+	if(iRet != RS_RET_OK) {
+		if(newchld != NULL) {
+		free(newchld->name);
+		free(newchld->node);
+		free(newchld->path);
+		free(newchld->instarr);
+		free(newchld);
+		}
+	}
 	RETiRet;
 }
 
