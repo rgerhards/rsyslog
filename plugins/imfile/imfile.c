@@ -901,9 +901,9 @@ poll_active_files(fs_edge_t *const edge)
 
 	act_obj_t *act;
 	for(act = edge->active ; act != NULL ; act = act->next) {
+		fen_setupWatch(act);
 		DBGPRINTF("poll_active_files: polling '%s'\n", act->name);
 		pollFile(act);
-		fen_setupWatch(act);
 	}
 }
 
@@ -3899,6 +3899,7 @@ do_fen(void)
 				continue;
 			}
 			act_obj_t *const act = (act_obj_t*) portEvent.portev_user;
+			fen_setupWatch(act);
 			DBGPRINTF("do_fen event received: deleted %d, is_file %d, name '%s' foname '%s'\n",
 				act->is_deleted, act->edge->is_file, act->name,
 				((struct file_obj*)portEvent.portev_object)->fo_name);
