@@ -5,7 +5,6 @@ export IMFILEINPUTFILESSTEPS="5" #"5"
 #export IMFILEINPUTFILESALL=$(($IMFILEINPUTFILES * $IMFILEINPUTFILESSTEPS))
 export IMFILECHECKTIMEOUT="20"
 . $srcdir/diag.sh init
-. $srcdir/diag.sh check-inotify
 # generate input files first. Note that rsyslog processes it as
 # soon as it start up (so the file should exist at that point).
 
@@ -15,7 +14,7 @@ export IMFILECHECKTIMEOUT="20"
 global( debug.whitelist="on"
 	debug.files=["imfile.c"])
 
-module(load="../plugins/imfile/.libs/imfile" mode="inotify")
+module(load="../plugins/imfile/.libs/imfile" mode="inotify" pollingInterval="1")
 
 input(type="imfile" File="./rsyslog.input.dir?/*/*.logfile"
 	Tag="file:" Severity="error" Facility="local7" addMetadata="on")
@@ -66,8 +65,12 @@ do
 	# Delete all but first!
 	for i in `seq 1 $IMFILEINPUTFILES`;
 	do
+		# slow systems (NFS) do not reliably do rm -r (unfortunately...)
 		rm -rf rsyslog.input.dir$i/dir$i/file.logfile
-		rm -rf rsyslog.input.dir$i
+		./msleep 100
+		rm -rf rsyslog.input.dir$i/dir$i
+		./msleep 100
+		rm -vrf rsyslog.input.dir$i
 	done
 
 done
