@@ -3823,11 +3823,11 @@ do_fen(void)
 {
 	port_event_t portEvent;
 	struct timespec timeout;
-	lstn_t *pLstn;			/* Listener helper*/
-	struct file_obj *fobjp = NULL;	/* Helper object */
-	struct stat statFile;
+	//lstn_t *pLstn;			/* Listener helper*/
+	//struct file_obj *fobjp = NULL;	/* Helper object */
+	//struct stat statFile;
 	DEFiRet;
-	rsRetVal iRetTmp = RS_RET_OK;
+	//rsRetVal iRetTmp = RS_RET_OK;
 
 	/* Set port timeout to 1 second. We need to check for unmonitored files during meantime */
 	timeout.tv_sec = 1;
@@ -3919,7 +3919,7 @@ do_fen(void)
 		}
 	}
 
-finalize_it:
+//finalize_it:
 	/* close port, will de-activate all file events watches associated
 	 * with the port.
 	 */
