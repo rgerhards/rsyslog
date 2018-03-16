@@ -2,7 +2,7 @@
 # This is part of the rsyslog testbench, licensed under ASL 2.0
 echo ======================================================================
 echo [imfile-endregex-timeout-none.sh]
-. $srcdir/diag.sh check-inotify-only
+#. $srcdir/diag.sh check-inotify-only
 . $srcdir/diag.sh init
 . $srcdir/diag.sh generate-conf
 . $srcdir/diag.sh add-conf '
