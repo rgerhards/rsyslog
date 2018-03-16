@@ -1,7 +1,7 @@
 #!/bin/bash
 # This is part of the rsyslog testbench, licensed under ASL 2.0
-export RSYSLOG_DEBUG="debug nologfuncflow noprintmutexaction nostdout"
-export RSYSLOG_DEBUGLOG="log"
+#export RSYSLOG_DEBUG="debug nologfuncflow noprintmutexaction stdout"
+#export RSYSLOG_DEBUGLOG="log"
 
 . $srcdir/diag.sh init
 . $srcdir/diag.sh check-inotify
@@ -13,6 +13,7 @@ global( debug.whitelist="on"
 module(load="../plugins/imfile/.libs/imfile")
 
 input(type="imfile" File="./rsyslog.input" Tag="file:" ReadMode="2")
+#input(type="imfile" File="./rsyslog.input.*" Tag="file:" ReadMode="2")
 
 template(name="outfmt" type="list") {
   constant(value="HEADER ")
@@ -23,7 +24,7 @@ template(name="outfmt" type="list") {
 if $msg contains "msgnum:" then
 	action(type="omfile" file="rsyslog.out.log" template="outfmt"
  ) '
-. $srcdir/diag.sh startup imfile-readmode2.conf
+. $srcdir/diag.sh startup
 
 # write the beginning of the file
 echo 'msgnum:0
@@ -39,7 +40,8 @@ echo 'msgnum:3
 echo 'msgnum:5' >> rsyslog.input # this one shouldn't be written to the output file because of ReadMode 2
 
 # give it time to finish
-sleep 1
+#echo you are in bash! ctl-d to exit
+#bash
 
 . $srcdir/diag.sh shutdown-when-empty # shut down rsyslogd when done processing messages
 . $srcdir/diag.sh wait-shutdown    # we need to wait until rsyslogd is finished!
@@ -47,7 +49,7 @@ sleep 1
 # give it time to write the output file
 
 sleep 1
-cat log
+#cat log
 
 ## check if we have the correct number of messages
 

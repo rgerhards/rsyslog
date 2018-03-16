@@ -730,7 +730,7 @@ fen_setupWatch(act_obj_t *const act)
 		act->bPortAssociated = 0;
 	}
 
-	DBGPRINTF("fen_setupWatch: associated %d\n", act->bPortAssociated);
+	DBGPRINTF("fen_setupWatch: bPortAssociated %d\n", act->bPortAssociated);
 	if(act->bPortAssociated) {
 		goto done;
 	}
@@ -746,10 +746,10 @@ fen_setupWatch(act_obj_t *const act)
 	act->pfinf->fobj.fo_atime = fileInfo.st_atim;
 	act->pfinf->fobj.fo_mtime = fileInfo.st_mtim;
 	act->pfinf->fobj.fo_ctime = fileInfo.st_ctim;
-	if(port_associate(glport, PORT_SOURCE_FILE, (uintptr_t)act->pfinf,
+	if(port_associate(glport, PORT_SOURCE_FILE, (uintptr_t)&(act->pfinf->fobj),
 				act->pfinf->events, (void *)act) == -1) {
 		LogError(errno, RS_RET_SYS_ERR, "fen_setupWatch: Failed to associate port for file "
-			": %s\n", act->name);
+			": %s\n", act->pfinf->fobj.fo_name);
 		goto done;
 	} else {
 		/* Port successfull listening now*/
@@ -950,8 +950,6 @@ poll_tree(fs_edge_t *const chld)
 			act_obj_add(chld, file, is_file, fileInfo.st_ino);
 		}
 		globfree(&files);
-	//} else {
-		//LogError(errno, RS_RET_ERR, "poll_tree: glob returned error for %s", chld->path);
 	}
 
 	poll_active_files(chld);
@@ -3400,7 +3398,6 @@ do_inotify(void)
 
 /* --- Monitor files in FEN mode (OS_SOLARIS)*/
 #if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE) /* use FEN on Solaris! */
-#if 0
 static void
 fen_printevent(int event)
 {
@@ -3430,6 +3427,7 @@ fen_printevent(int event)
 	}
 }
 
+#if 0
 static rsRetVal ATTR_NONNULL(1)
 fen_removeFile(lstn_t *pLstn)
 {
@@ -3830,7 +3828,7 @@ do_fen(void)
 	//rsRetVal iRetTmp = RS_RET_OK;
 
 	/* Set port timeout to 1 second. We need to check for unmonitored files during meantime */
-	timeout.tv_sec = 1;
+	timeout.tv_sec = 300;
 	timeout.tv_nsec = 0;
 
 	/* create port instance */
@@ -3884,22 +3882,20 @@ do_fen(void)
 	while(glbl.GetGlobalInputTermState() == 0) {
 		DBGPRINTF("do_fen loop begin... \n");
 
-//		/* Check for not associated directories and add dir watches */
-		//fen_setupDirWatches();
-
 		/* Loop through events, if there are any */
 			/* object is no longer watched --> flag variable, re-watch in tree_walk 
 			 * if not watched. Must be top-level object.
 			 */
 		while (!port_get(glport, &portEvent, &timeout)) { // wie inotify-wait
-			DBGPRINTF("do_fen: received port event\n");
+			DBGPRINTF("do_fen: received port event with ");
+			fen_printevent((int) portEvent.portev_events);
+			DBGPRINTF("\n");
 			if(portEvent.portev_source != PORT_SOURCE_FILE) {
 				LogError(errno, RS_RET_SYS_ERR, "do_fen: Event from unexpected source "
 					": %d\n", portEvent.portev_source);
 				continue;
 			}
 			act_obj_t *const act = (act_obj_t*) portEvent.portev_user;
-			fen_setupWatch(act);
 			DBGPRINTF("do_fen event received: deleted %d, is_file %d, name '%s' foname '%s'\n",
 				act->is_deleted, act->edge->is_file, act->name,
 				((struct file_obj*)portEvent.portev_object)->fo_name);
@@ -3909,13 +3905,18 @@ do_fen(void)
 				continue;
 			}
 
+			/* we need to re-associate the object */
 			act->bPortAssociated = 0;
+			fen_setupWatch(act);
+
 			if(act->edge->is_file) {
 				pollFile(act);
 			} else {
 				// curr: fs_node_walk(act->edge->parent, poll_tree);
 				fs_node_walk(act->edge->node, poll_tree);
 			}
+			//DBGPRINTF("EXTRA SETUP WATCH!\n");
+			//fen_setupWatch(act);
 		}
 	}
 
