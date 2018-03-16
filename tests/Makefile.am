@@ -32,12 +32,13 @@ check_PROGRAMS += journal_print
 endif
 TESTS = $(TESTRUNS)
 #TESTS = $(TESTRUNS) cfg.sh
+TESTSx =
 
 TESTS +=  \
 	empty-hostname.sh
 
 if ENABLE_TESTBENCH1
-TESTS +=  \
+TESTSx +=  \
 	hostname-getaddrinfo-fail.sh \
 	prop-programname.sh \
 	prop-programname-with-slashes.sh \
@@ -199,7 +200,7 @@ TESTS +=  \
 	failover-no-basic.sh \
 	rcvr_fail_restore.sh
 if ENABLE_LIBFAKETIME
-TESTS +=  \
+TESTSx +=  \
 	now_family_utc.sh \
 	now-utc.sh \
 	now-utc-ymd.sh \
@@ -214,7 +215,7 @@ TESTS +=  \
 	timereported-utc.sh \
 	timereported-utc-legacy.sh
 if ENABLE_MMNORMALIZE
-TESTS += \
+TESTSx += \
 	mmnormalize_processing_test1.sh \
 	mmnormalize_processing_test2.sh \
 	mmnormalize_processing_test3.sh \
@@ -224,7 +225,7 @@ endif
 
 if ENABLE_PGSQL
 if ENABLE_PGSQL_TESTS
-TESTS += \
+TESTSx += \
 	pgsql-basic.sh \
 	pgsql-basic-cnf6.sh \
 	pgsql-basic-threads-cnf6.sh \
@@ -233,7 +234,7 @@ TESTS += \
 	pgsql-actq-mt-withpause.sh \
 	pgsql-template-threads-cnf6.sh
 if HAVE_VALGRIND
-TESTS += \
+TESTSx += \
 	pgsql-basic-vg.sh \
 	pgsql-template-vg.sh \
 	pgsql-basic-cnf6-vg.sh \
@@ -244,7 +245,7 @@ endif
 endif
 
 if ENABLE_MYSQL_TESTS
-TESTS +=  \
+TESTSx +=  \
 	mysql-basic.sh \
 	mysql-basic-cnf6.sh \
 	mysql-asyn.sh \
@@ -253,17 +254,17 @@ TESTS +=  \
 	action-tx-single-processing.sh \
 	action-tx-errfile.sh
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	mysql-basic-vg.sh \
 	mysql-asyn-vg.sh \
 	mysql-actq-mt-withpause-vg.sh
 endif
 if ENABLE_OMLIBDBI
-TESTS +=  \
+TESTSx +=  \
 	libdbi-basic.sh \
 	libdbi-asyn.sh
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	libdbi-basic-vg.sh
 endif
 endif
@@ -272,7 +273,7 @@ endif
 endif #  ENABLE_TESTBENCH2
 
 if ENABLE_TESTBENCH2
-TESTS +=  \
+TESTSx +=  \
 	rscript_contains.sh \
 	rscript_bare_var_root.sh \
 	rscript_bare_var_root-empty.sh \
@@ -357,11 +358,11 @@ TESTS +=  \
 	include-obj-text-from-file.sh \
 	multiple_lookup_tables.sh
 if ENABLE_LIBCURL
-TESTS +=  \
+TESTSx +=  \
 	rscript_http_request.sh
 endif # ENABLE_LIBCURL
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	include-obj-outside-control-flow-vg.sh \
 	include-obj-in-if-vg.sh \
 	include-obj-text-vg.sh \
@@ -374,7 +375,7 @@ endif # HAVE_VALGRIND
 endif # ENABLE_TESTBENCH2
 
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	mmexternal-SegFault-vg.sh \
 	mmexternal-InvldProg-vg.sh \
 	internal-errmsg-memleak-vg.sh \
@@ -404,41 +405,41 @@ TESTS +=  \
 	fac_local0-vg.sh \
 	rscript_trim-vg.sh
 if ENABLE_LIBCURL
-TESTS +=  \
+TESTSx +=  \
 	rscript_http_request-vg.sh
 endif # ENABLE_LIBCURL
 endif # HAVE_VALGRIND
 
 if ENABLE_ROOT_TESTS
-TESTS +=  \
+TESTSx +=  \
 	sndrcv_udp.sh \
 	imuxsock_logger_root.sh \
 	imuxsock_traillf_root.sh \
 	imuxsock_ccmiddle_root.sh \
 	imklog_permitnonkernelfacility_root.sh
 if ENABLE_IP
-TESTS += tcp_forwarding_ns_tpl.sh
+TESTSx += tcp_forwarding_ns_tpl.sh
 endif
 if ENABLE_RELP
-TESTS += sndrcv_relp_dflt_pt.sh
+TESTSx += sndrcv_relp_dflt_pt.sh
 endif
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	mmexternal-SegFault-empty-jroot-vg.sh
 endif
 endif
 
 if ENABLE_IMJOURNAL
-TESTS +=  \
+TESTSx +=  \
 	imjournal-basic.sh
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	imjournal-basic-vg.sh
 endif
 endif
 
 if ENABLE_OMJOURNAL
-TESTS +=  \
+TESTSx +=  \
 	omjournal-abort-template.sh \
 	omjournal-abort-no-template.sh \
 	omjournal-basic-template.sh \
@@ -449,23 +450,23 @@ if ENABLE_OMPROG
 # see https://github.com/rsyslog/rsyslog/issues/2403
 # TODO: re-enable!
 #	omprog-cleanup.sh
-TESTS +=  \
+TESTSx +=  \
 	omprog-cleanup-with-outfile.sh \
 	omprog-noterm-cleanup.sh \
 	omprog-noterm-default.sh \
 	omprog-feedback.sh
 if OS_LINUX
-TESTS += \
+TESTSx += \
 	omprog-cleanup-when-unresponsive.sh \
 	omprog-noterm-unresponsive.sh
 endif
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	omprog-cleanup-vg.sh \
 	omprog-multiparam-vg.sh \
 	omprog-noterm-cleanup-vg.sh
 if OS_LINUX
-TESTS += \
+TESTSx += \
 	omprog-cleanup-when-unresponsive-vg.sh
 endif
 endif
@@ -474,14 +475,14 @@ endif
 if ENABLE_OMKAFKA
 if ENABLE_IMKAFKA
 if ENABLE_KAFKA_TESTS
-TESTS += \
+TESTSx += \
 	sndrcv_kafka.sh
 # Tests below need to be stable first!
 #	sndrcv_kafka_multi.sh
 #	sndrcv_kafka_fail.sh
 #	sndrcv_kafka_failresume.sh
 if HAVE_VALGRIND
-TESTS += \
+TESTSx += \
 	sndrcv_kafka-vg-rcvr.sh
 # re-enable: (see https://github.com/rsyslog/rsyslog/issues/2434)
 # sndrcv_kafka-vg-sender.sh
@@ -490,7 +491,7 @@ endif
 endif
 endif
 if ENABLE_IMPSTATS
-TESTS +=  \
+TESTSx +=  \
 	impstats-hup.sh \
 	dynstats.sh \
 	dynstats_overflow.sh \
@@ -506,7 +507,7 @@ TESTS +=  \
 	dynstats_reset_without_pstats_reset.sh \
 	dynstats_prevent_premature_eviction.sh
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	dynstats-vg.sh \
 	dynstats_reset-vg.sh \
 	dynstats_overflow-vg.sh \
@@ -520,7 +521,7 @@ endif
 if ENABLE_IMPTCP
 # note that some tests simply USE imptcp, but they also
 # need to be disabled if we do not have this module
-TESTS +=  \
+TESTSx +=  \
 	manyptcp.sh \
 	imptcp_large.sh \
 	imptcp-connection-msg-disabled.sh \
@@ -538,13 +539,13 @@ TESTS +=  \
 	rscript_random.sh \
 	rscript_replace.sh
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	imptcp_conndrop-vg.sh
 endif
 endif
 
 if ENABLE_ELASTICSEARCH_TESTS
-TESTS +=  \
+TESTSx +=  \
 	es-basic.sh \
 	es-basic-es6.0.sh \
 	es-basic-server.sh \
@@ -556,18 +557,18 @@ TESTS +=  \
 	es-bulk-errfile-empty.sh \
 	es-bulk-errfile-popul.sh
 if HAVE_VALGRIND
-TESTS += \
+TESTSx += \
 	es-basic-vgthread.sh
 endif
 if ENABLE_IMFILE
-TESTS +=  \
+TESTSx +=  \
 	es-bulk-errfile-popul-def-format.sh \
 	es-bulk-errfile-popul-erronly.sh \
 	es-bulk-errfile-popul-erronly-interleaved.sh \
 	es-bulk-errfile-popul-def-interleaved.sh
 endif
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	es-basic-vg.sh \
 	es-basic-bulk-vg.sh \
 	es-basic-ha-vg.sh
@@ -575,50 +576,50 @@ endif
 endif
 
 if ENABLE_MMPSTRUCDATA
-TESTS +=  \
+TESTSx +=  \
 	mmpstrucdata.sh \
 	mmpstrucdata-case.sh
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	mmpstrucdata-vg.sh \
 	mmpstrucdata-invalid-vg.sh
 endif
 endif
 
 if ENABLE_MMRM1STSPACE
-TESTS +=  \
+TESTSx +=  \
 	mmrm1stspace-basic.sh
 endif
 
 if ENABLE_PMNULL
-TESTS +=  \
+TESTSx +=  \
 	pmnull-basic.sh \
 	pmnull-withparams.sh
 endif
 
 if ENABLE_OMSTDOUT
-TESTS +=  \
+TESTSx +=  \
 	omstdout-basic.sh
 endif
 
 if ENABLE_PMNORMALIZE
-TESTS +=  \
+TESTSx +=  \
 	pmnormalize-basic.sh \
 	pmnormalize-rule.sh
 if HAVE_VALGRIND
-TESTS += \
+TESTSx += \
 	pmnormalize-rule-vg.sh
 endif
 endif
 
 if ENABLE_MMNORMALIZE
-TESTS += msgvar-concurrency-array.sh \
+TESTSx += msgvar-concurrency-array.sh \
 	msgvar-concurrency-array-event.tags.sh \
 	mmnormalize_rule_from_string.sh \
 	mmnormalize_rule_from_array.sh
 
 if ENABLE_IMPTCP
-TESTS +=  \
+TESTSx +=  \
 	mmnormalize_regex_defaulted.sh \
 	mmnormalize_regex_disabled.sh \
 	mmnormalize_variable.sh \
@@ -626,17 +627,17 @@ TESTS +=  \
 endif
 
 if LOGNORM_REGEX_SUPPORTED
-TESTS += \
+TESTSx += \
 	mmnormalize_regex.sh
 endif
 endif
 
 if ENABLE_MMJSONPARSE
-TESTS += \
+TESTSx += \
 	mmjsonparse-w-o-cookie.sh \
 	mmjsonparse-w-o-cookie-multi-spaces.sh
 if ENABLE_IMPTCP
-TESTS +=  \
+TESTSx +=  \
 	mmjsonparse_simple.sh \
 	imptcp-oversize-message-display.sh \
 	imptcp-msg-truncation-on-number.sh \
@@ -649,14 +650,14 @@ TESTS +=  \
 	json_nonarray_looping.sh
 endif
 if HAVE_VALGRIND
-TESTS +=  \
+TESTSx +=  \
 	json_null_array-vg.sh \
 	json_object_looping-vg.sh \
 	json_array_looping-vg.sh \
 	json_object_suicide_in_loop-vg.sh \
 	json_null-vg.sh
 endif
-TESTS +=  \
+TESTSx +=  \
 	stop_when_array_has_element.sh \
 	json_null_array.sh \
 	json_null.sh \
@@ -665,19 +666,19 @@ TESTS +=  \
 endif
 
 if ENABLE_MMDBLOOKUP
-TESTS += \
+TESTSx += \
     mmdb.sh \
     mmdb-container.sh \
     mmdb-container-empty.sh
 if HAVE_VALGRIND
-TESTS += \
+TESTSx += \
     mmdb-vg.sh \
     mmdb-multilevel-vg.sh
 endif
 endif
 
 if ENABLE_GNUTLS
-TESTS +=  \
+TESTSx +=  \
 	imtcp_conndrop_tls.sh \
 	sndrcv_tls_anon_hostname.sh \
 	sndrcv_tls_anon_ipv4.sh \
@@ -685,46 +686,46 @@ TESTS +=  \
 	imtcp-tls-basic.sh \
 	sndrcv_tls_anon_rebind.sh
 if HAVE_VALGRIND
-TESTS += \
+TESTSx += \
 	imtcp-tls-basic-vg.sh \
 	imtcp_conndrop_tls-vg.sh
 if !ENABLE_DISTCHECK_WORKAROUND
-TESTS += \
+TESTSx += \
 	manytcp-too-few-tls-vg.sh
 endif
 endif
 endif
 
 if ENABLE_OMUXSOCK
-TESTS += uxsock_simple.sh
+TESTSx += uxsock_simple.sh
 endif
 
 if ENABLE_RELP
-TESTS += sndrcv_relp.sh \
+TESTSx += sndrcv_relp.sh \
 	 sndrcv_relp_rebind.sh \
 	 imrelp-basic.sh \
 	 imrelp-manyconn.sh
 if ENABLE_GNUTLS
-TESTS += \
+TESTSx += \
          sndrcv_relp_tls.sh \
          relp_tls_certificate_not_found.sh
 endif
 endif
 
 if ENABLE_OMUDPSPOOF
-TESTS += \
+TESTSx += \
 	sndrcv_omudpspoof.sh \
 	sndrcv_omudpspoof_nonstdpt.sh
 endif
 
 if ENABLE_OMSTDOUT
-TESTS += \
+TESTSx += \
 	omod-if-array.sh \
 	threadingmq.sh \
 	threadingmqaq.sh \
 	badqi.sh
 if ENABLE_IMPTCP
-TESTS += \
+TESTSx += \
 	tabescape_dflt.sh \
 	tabescape_off.sh \
 	timestamp.sh \
@@ -736,20 +737,20 @@ endif
 endif
 
 if ENABLE_OMRULESET
-TESTS += \
+TESTSx += \
 	omruleset.sh \
 	omruleset-queue.sh
 endif
 
 if ENABLE_PMSNARE
-TESTS += \
+TESTSx += \
 	pmsnare.sh
 endif
 
 if ENABLE_EXTENDED_TESTS
 # random.sh is temporarily disabled as it needs some work
 # to rsyslog core to complete in reasonable time
-#TESTS += random.sh
+#TESTSx += random.sh
 endif
 
 if ENABLE_IMFILE
@@ -788,7 +789,7 @@ TESTS += \
 	imfile-rename.sh
 
 if HAVE_VALGRIND
-TESTS += \
+TESTSx += \
 	imfile-basic-vg.sh \
 	imfile-endregex-vg.sh \
 	imfile-readmode0-vg.sh \
@@ -798,7 +799,7 @@ endif
 endif
 
 if ENABLE_OMTCL
-TESTS += \
+TESTSx += \
 	 omtcl.sh
 endif
 
