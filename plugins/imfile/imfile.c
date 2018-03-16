@@ -2097,7 +2097,11 @@ CODESTARTsetModCnf
 				DBGPRINTF("inotify mode configured, but only FEN "
 				"is available on OS SOLARIS. Switching to FEN Mode automatically\n");
 #else
-				loadModConf->opMode = OPMODE_INOTIFY;
+				#if defined(HAVE_INOTIFY_INIT)
+					loadModConf->opMode = OPMODE_INOTIFY;
+				#else
+					loadModConf->opMode = OPMODE_POLLING;
+				#endif
 #endif
 			} else if(!es_strconstcmp(pvals[i].val.d.estr, "fen"))
 				loadModConf->opMode = OPMODE_FEN;
