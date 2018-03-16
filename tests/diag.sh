@@ -622,7 +622,7 @@ case $1 in
 
 			count=$(cat rsyslog.out.log | grep -F "$2" | wc -l)
 
-			if [ "x$count" == "x$3" ]; then
+			if [ $count -eq $3 ]; then
 				echo content-check-with-count success, \"$2\" occured $3 times
 				break
 			else
