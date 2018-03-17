@@ -66,7 +66,7 @@ HEADER msgnum:00000000:, filename: ./rsyslog.input.9.log, fileoffset: 0
 HEADER msgnum:00000000:, filename: ./rsyslog.input.10.log, fileoffset: 0
 HEADER msgnum:00000000:, filename: ./rsyslog.input.11.log, fileoffset: 0
 HEADER msgnum:00000001:, filename: ./rsyslog.input.11.log, fileoffset: 17
-HEADER msgnum:00000002:, filename: ./rsyslog.input.11.log, fileoffset: 34\n' | cmp -b rsyslog.out.log
+HEADER msgnum:00000002:, filename: ./rsyslog.input.11.log, fileoffset: 34\n' | cmp - rsyslog.out.log
 if [ ! $? -eq 0 ]; then
   echo "invalid output generated, rsyslog.out.log is:"
   cat rsyslog.out.log
