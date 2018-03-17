@@ -1443,7 +1443,7 @@ EXTRA_DIST= \
 	testsuites/random.conf \
 	imfile-readmode0-vg.sh \
 	imfile-readmode2.sh \
-	imfile-readmode2.sh \
+	imfile-readmode2-polling.sh \
 	imfile-readmode2-vg.sh \
 	imfile-readmode2-with-persists-data-during-stop.sh \
 	imfile-readmode2-with-persists.sh \
