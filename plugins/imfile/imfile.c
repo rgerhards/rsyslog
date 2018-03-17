@@ -207,7 +207,7 @@ struct act_obj_s {
 	act_obj_t *next;
 	fs_edge_t *edge;	/* edge which this object belongs to */
 	char *name;		/* full path name of active object */
-	//char *basename;		/* only basename (last pathname component) */ //TODO: do we really need it?
+	char *basename;		/* only basename */ //TODO: remove when refactoring rename support
 	//char *statefile;	/* base name of state file (for move operations) */
 	//lstn_t *pLstn;
 	int wd;
@@ -218,6 +218,7 @@ struct act_obj_s {
 #endif
 	time_t timeoutBase; /* what time to calculate the timeout against? */
 	/* file dynamic data */
+	int in_move;	/* workaround for inotify move: if set, state file must not be deleted */
 	ino_t ino;	/* current inode nbr */
 	strm_t *pStrm;	/* its stream (NULL if not assigned) */
 	int nRecords; /**< How many records did we process before persisting the stream? */
@@ -270,7 +271,7 @@ struct act_node_s {
 static rsRetVal persistStrmState(act_obj_t *);
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
 static rsRetVal ATTR_NONNULL(1) pollFile(act_obj_t *act);
-//static int ATTR_NONNULL() getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path);
+static int ATTR_NONNULL() getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path);
 static void ATTR_NONNULL() act_obj_unlink(act_obj_t *const act);
 static uchar * ATTR_NONNULL(1, 2) getStateFileName(const act_obj_t *, uchar *, const size_t);
 static int ATTR_NONNULL() getFullStateFileName(const uchar *const, uchar *const pszout, const size_t ilenout);
@@ -803,7 +804,7 @@ act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file,
 	const ino_t ino)
 {
 	act_obj_t *act;
-	//char basename[MAXFNAME];
+	char basename[MAXFNAME];
 	DEFiRet;
 	
 	DBGPRINTF("act_obj_add: edge %p, name '%s'\n", edge, name);
@@ -817,8 +818,8 @@ act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file,
 	DBGPRINTF("add new active object '%s' in '%s'\n", name, edge->path);
 	CHKmalloc(act = calloc(sizeof(act_obj_t), 1));
 	CHKmalloc(act->name = strdup(name));
-	//getBasename((uchar*)basename, (uchar*)name);
-	//CHKmalloc(act->basename = strdup(basename));
+	getBasename((uchar*)basename, (uchar*)name);
+	CHKmalloc(act->basename = strdup(basename));
 	act->edge = edge;
 	act->ino = ino;
 	#ifdef HAVE_INOTIFY_INIT
@@ -985,7 +986,8 @@ act_obj_destroy(act_obj_t *const act, const int is_deleted)
 	if(act == NULL)
 		return;
 
-	DBGPRINTF("act_obj_destroy: act %p '%s', wd %d, pStrm %p\n", act, act->name, act->wd, act->pStrm);
+	DBGPRINTF("act_obj_destroy: act %p '%s', wd %d, pStrm %p, is_deleted %d, in_move %d\n",
+		act, act->name, act->wd, act->pStrm, is_deleted, act->in_move);
 	if(act->ratelimiter != NULL) {
 		ratelimitDestruct(act->ratelimiter);
 	}
@@ -1000,7 +1002,7 @@ act_obj_destroy(act_obj_t *const act, const int is_deleted)
 		persistStrmState(act);
 		strm.Destruct(&act->pStrm);
 		/* we delete state file after destruct in case strm obj initiated a write */
-		if(is_deleted && inst->bRMStateOnDel) {
+		if(is_deleted && !act->in_move && inst->bRMStateOnDel) {
 			DBGPRINTF("act_obj_destroy: deleting state file %s\n", statefn);
 			unlink((char*)statefn);
 		}
@@ -1016,7 +1018,7 @@ act_obj_destroy(act_obj_t *const act, const int is_deleted)
 		free(act->pfinf);
 	}
 	#endif
-	//free(act->basename);
+	free(act->basename);
 	//free(act->statefile);
 	free(act->multiSub.ppMsgs);
 	#if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
@@ -1315,7 +1317,7 @@ getFullStateFileName(const uchar *const pszstatefile, uchar *const pszout, const
 }
 
 
-#if 1
+#if 0
 /* generate a state file name for the given file name
  * the file is stored in given buf, which must be of MAXFNAME length.
  */
@@ -1348,24 +1350,12 @@ getStateFileName(const act_obj_t *const act,
 	 	 uchar *const __restrict__ buf,
 		 const size_t lenbuf)
 {
-	uchar *ret;
-//	struct stat stat_buf;
-	//const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
-
 	DBGPRINTF("getStateFileName for '%s'\n", act->name);
-#if 0
-	if(stat(act->name, &stat_buf) != 0) {
-		DBGPRINTF("getStateFileName: could not stat file %s\n", act->name);
-		LogError(errno, RS_RET_ERR, "getStateFileName: could not stat file %s\n", act->name);
-		return (uchar*) "NO-STAT";
-	}
-	snprintf((char*)buf, lenbuf - 1, "imfile-state:%lld", (long long) stat_buf.st_ino);
-#else
 	snprintf((char*)buf, lenbuf - 1, "imfile-state:%lld", (long long) act->ino);
-#endif
 	DBGPRINTF("getStateFileName:  stat file name now is %s\n", buf);
 	return buf;
-#if 1
+#if 0
+	uchar *ret;
 	//if(inst->pszStateFile == NULL) {
 		genStateFileName(act->name, buf, lenbuf);
 		ret = buf;
@@ -1707,7 +1697,7 @@ finalize_it:
 }
 
 
-#if 0
+#if 1
 /* the basen(ame) buffer must be of size MAXFNAME
  * returns the index of the slash in front of basename
  */
@@ -3278,6 +3268,28 @@ handle_event_moved_from(act_obj_t *act, const uint32_t cookie, const char *name)
 }
 #endif
 
+
+/* workaround for IN_MOVED: walk active list and prevent state file deletion of
+ * IN_MOVED_IN active object
+ * TODO: replace by a more generic solution.
+ */
+static void
+flag_in_move(fs_edge_t *const edge, const char *name_moved)
+{
+	act_obj_t *act;
+
+	for(act = edge->active ; act != NULL ; act = act->next) {
+		DBGPRINTF("checking active object %s\n", act->basename);
+		if(!strcmp(act->basename, name_moved)){
+			DBGPRINTF("found file\n");
+			act->in_move = 1;
+			break;
+		} else {
+			DBGPRINTF("name check fails, '%s' != '%s'\n", act->basename, name_moved);
+		}
+	}
+}
+
 static void ATTR_NONNULL(1)
 in_processEvent(struct inotify_event *ev)
 {
@@ -3286,8 +3298,6 @@ in_processEvent(struct inotify_event *ev)
 		goto done;
 	}
 
-	//LogMsg(0, RS_RET_NO_ERRCODE, LOG_DEBUG, "imfile: in_processEvent process Event %x for %s",
-	//	ev->mask, ev->name);
 	DBGPRINTF("in_processEvent process Event %x for %s\n", ev->mask, ev->name);
 	const wd_map_t *const etry =  wdmapLookup(ev->wd);
 	if(etry == NULL) {
@@ -3296,11 +3306,16 @@ in_processEvent(struct inotify_event *ev)
 			"in our tables - ignored", ev->wd);
 		goto done;
 	}
+	DBGPRINTF("in_processEvent process Event %x is_file %d, act->name '%s'\n",
+		ev->mask, etry->act->edge->is_file, etry->act->name);
 
+	if((ev->mask & IN_MOVED_FROM)) {
+		flag_in_move(etry->act->edge->node->edges, ev->name);
+	}
 	if(ev->mask & (IN_MOVED_FROM | IN_MOVED_TO))  {
 		//fs_node_walk(etry->act->edge->parent, poll_tree);
 		fs_node_walk(etry->act->edge->node, poll_tree);
-	}  else if(etry->act->edge->is_file) {
+	} else if(etry->act->edge->is_file) {
 		in_handleFileEvent(ev, etry); // esentially poll_file()!
 	} else {
 		//fs_node_walk(etry->act->edge->parent, poll_tree);
