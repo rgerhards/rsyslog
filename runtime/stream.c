@@ -295,7 +295,6 @@ strmSetCurrFName(strm_t *pThis)
 {
 	DEFiRet;
 
-DBGPRINTF("strmSetCurrFName: in %p\n", pThis->pszCurrFName);
 	if(pThis->sType == STREAMTYPE_FILE_CIRCULAR) {
 		CHKiRet(genFileName(&pThis->pszCurrFName, pThis->pszDir, pThis->lenDir,
 				    pThis->pszFName, pThis->lenFName, pThis->iCurrFNum, pThis->iFileNumDigits));
@@ -309,7 +308,6 @@ DBGPRINTF("strmSetCurrFName: in %p\n", pThis->pszCurrFName);
 		}
 	}
 finalize_it:
-DBGPRINTF("strmSetCurrFName: out %p, iRet %di, %s\n", pThis->pszCurrFName, iRet, pThis->pszCurrFName);
 	RETiRet;
 }
 	
@@ -495,7 +493,6 @@ static rsRetVal strmCloseFile(strm_t *pThis)
 	pThis->iCurrOffs = 0;	/* we are back at begin of file */
 
 finalize_it:
-dbgprintf("strmCloseFile: %p\n", pThis->pszCurrFName);
 	free(pThis->pszCurrFName);
 	pThis->pszCurrFName = NULL;
 	RETiRet;
@@ -1193,7 +1190,6 @@ CODESTARTobjDestruct(strm)
 		cstrDestruct(&pThis->prevMsgSegment);
 	free(pThis->pszDir);
 	free(pThis->pZipBuf);
-dbgprintf("strm obj destruct: %p\n", pThis->pszCurrFName);
 	free(pThis->pszCurrFName);
 	free(pThis->pszFName);
 	free(pThis->pszSizeLimitCmd);
@@ -1771,15 +1767,12 @@ static rsRetVal strmSeek(strm_t *pThis, off64_t offs)
 	DEFiRet;
 
 	ISOBJ_TYPE_assert(pThis, strm);
-dbgprintf("strmSeek 1: %p\n", pThis->pszCurrFName);
 
 	if(pThis->fd == -1) {
 		CHKiRet(strmOpenFile(pThis));
-dbgprintf("strmSeek 2: %p\n", pThis->pszCurrFName);
 	} else {
 		CHKiRet(strmFlushInternal(pThis, 0));
 	}
-dbgprintf("strmSeek 4: %p\n", pThis->pszCurrFName);
 	long long i;
 	DBGOPRINT((obj_t*) pThis, "file %d seek, pos %llu\n", pThis->fd, (long long unsigned) offs);
 	i = lseek64(pThis->fd, offs, SEEK_SET);
@@ -1791,7 +1784,6 @@ dbgprintf("strmSeek 4: %p\n", pThis->pszCurrFName);
 	pThis->iBufPtr = 0; /* buffer invalidated */
 
 finalize_it:
-dbgprintf("strmSeek 5: %p\n", pThis->pszCurrFName);
 	RETiRet;
 }
 
@@ -1861,14 +1853,12 @@ static rsRetVal strmSeekCurrOffs(strm_t *pThis)
 	uchar c;
 	DEFiRet;
 
-dbgprintf("SeekCurrOffs 1: %p\n", pThis->pszCurrFName);
 	ISOBJ_TYPE_assert(pThis, strm);
 
 	if(pThis->cryprov == NULL || pThis->tOperationsMode != STREAMMODE_READ) {
 		iRet = strmSeek(pThis, pThis->iCurrOffs);
 		FINALIZE;
 	}
-dbgprintf("SeekCurrOffs 2: %p\n", pThis->pszCurrFName);
 
 	/* As the cryprov may use CBC or similiar things, we need to read skip data */
 	targetOffs = pThis->iCurrOffs;
@@ -1879,7 +1869,6 @@ dbgprintf("SeekCurrOffs 2: %p\n", pThis->pszCurrFName);
 		CHKiRet(strmReadChar(pThis, &c));
 	}
 finalize_it:
-dbgprintf("SeekCurrOffs 5: %p, iRet %d\n", pThis->pszCurrFName, iRet);
 	RETiRet;
 }
 
