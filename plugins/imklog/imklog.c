@@ -122,8 +122,6 @@ initConfigSettings(void)
 	cs.console_log_level = -1;
 	cs.pszPath = NULL;
 	cs.iFacilIntMsg = klogFacilIntMsg();
-	cs.ratelimitInterval = 0;
-	cs.ratelimitBurst = 10000;
 }
 
 
@@ -379,8 +377,6 @@ CODESTARTendCnfLoad
 		loadModConf->bKeepKernelStamp = cs.bKeepKernelStamp;
 		loadModConf->iFacilIntMsg = cs.iFacilIntMsg;
 		loadModConf->console_log_level = cs.console_log_level;
-		loadModConf->ratelimitBurst = cs.ratelimitBurst;
-		loadModConf->ratelimitInterval = cs.ratelimitInterval;
 		if((cs.pszPath == NULL) || (cs.pszPath[0] == '\0')) {
 			loadModConf->pszPath = NULL;
 			if(cs.pszPath != NULL)
@@ -509,10 +505,6 @@ CODEmodInit_QueryRegCFSLineHdlr
 			NULL, &cs.bParseKernelStamp, STD_LOADABLE_MODULE_ID, &bLegacyCnfModGlobalsPermitted));
 	CHKiRet(regCfSysLineHdlr2((uchar *)"klogkeepkerneltimestamp", 0, eCmdHdlrBinary,
 			NULL, &cs.bKeepKernelStamp, STD_LOADABLE_MODULE_ID, &bLegacyCnfModGlobalsPermitted));
-	CHKiRet(regCfSysLineHdlr2((uchar *)"klogratelimitinterval", 0, eCmdHdlrInt,
-			NULL, &cs.ratelimitInterval, STD_LOADABLE_MODULE_ID, &bLegacyCnfModGlobalsPermitted));
-	CHKiRet(regCfSysLineHdlr2((uchar *)"klogratelimitburst", 0, eCmdHdlrInt,
-			NULL, &cs.ratelimitBurst, STD_LOADABLE_MODULE_ID, &bLegacyCnfModGlobalsPermitted));
 	CHKiRet(omsdRegCFSLineHdlr((uchar *)"resetconfigvariables", 1, eCmdHdlrCustomHandler,
 			resetConfigVariables, NULL, STD_LOADABLE_MODULE_ID));
 ENDmodInit
