@@ -100,8 +100,6 @@ static struct cnfparamdescr modpdescr[] = {
 	{ "parsekerneltimestamp", eCmdHdlrBinary, 0 },
 	{ "keepkerneltimestamp", eCmdHdlrBinary, 0 },
 	{ "internalmsgfacility", eCmdHdlrFacility, 0 },
-	{ "ratelimitinterval", eCmdHdlrInt, 0 },
-	{ "ratelimitburst", eCmdHdlrInt, 0 }
 };
 static struct cnfparamblk modpblk =
 	{ CNFPARAMBLK_VERSION,
