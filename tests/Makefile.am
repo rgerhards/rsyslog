@@ -724,7 +724,8 @@ TESTS += sndrcv_relp.sh \
 	 imrelp-maxDataSize-error.sh \
 	 imrelp-long-msg.sh \
 	 imrelp-oversizeMode-truncate.sh \
-	 imrelp-oversizeMode-accept.sh
+	 imrelp-oversizeMode-accept.sh \
+	 general-oversize-msg.sh
 if ENABLE_GNUTLS
 TESTS += \
          sndrcv_relp_tls.sh \
@@ -1375,6 +1376,7 @@ EXTRA_DIST= \
 	imrelp-long-msg.sh \
 	imrelp-oversizeMode-truncate.sh \
 	imrelp-oversizeMode-accept.sh \
+	general-oversize-msg.sh \
 	sndrcv_relp.sh \
 	testsuites/sndrcv_relp_sender.conf \
 	testsuites/sndrcv_relp_rcvr.conf \
