@@ -720,7 +720,8 @@ TESTS += sndrcv_relp.sh \
 	 sndrcv_relp_rebind.sh \
 	 imrelp-basic.sh \
 	 imrelp-manyconn.sh \
-	 imrelp-maxDataSize-error.sh
+	 imrelp-maxDataSize-error.sh \
+	 general-oversize-msg.sh
 if ENABLE_GNUTLS
 TESTS += \
          sndrcv_relp_tls.sh \
@@ -1368,6 +1369,7 @@ EXTRA_DIST= \
 	imrelp-basic.sh \
 	imrelp-manyconn.sh \
 	imrelp-maxDataSize-error.sh \
+	general-oversize-msg.sh \
 	sndrcv_relp.sh \
 	testsuites/sndrcv_relp_sender.conf \
 	testsuites/sndrcv_relp_rcvr.conf \
