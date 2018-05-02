@@ -3,7 +3,7 @@
  *
  * File begun on 2007-07-13 by RGerhards (extracted from syslogd.c)
  *
- * Copyright 2007-2016 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2007-2018 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of the rsyslog runtime library.
  *
@@ -204,7 +204,9 @@ void getTAG(smsg_t *pM, uchar **ppBuf, int *piLen);
 const char *getTimeReported(smsg_t *pM, enum tplFormatTypes eFmt);
 const char *getPRI(smsg_t *pMsg);
 int getPRIi(const smsg_t * const pM);
+int ATTR_NONNULL() getRawMsgLen(const smsg_t *const pMsg);
 void getRawMsg(smsg_t *pM, uchar **pBuf, int *piLen);
+void ATTR_NONNULL() MsgTruncateToMaxSize(smsg_t *const pThis);
 rsRetVal msgAddJSON(smsg_t *pM, uchar *name, struct json_object *json, int force_reset, int sharedReference);
 rsRetVal msgAddMetadata(smsg_t *msg, uchar *metaname, uchar *metaval);
 rsRetVal msgAddMultiMetadata(smsg_t *msg, const uchar **metaname, const uchar **metaval, const int count);

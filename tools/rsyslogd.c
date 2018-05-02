@@ -991,9 +991,21 @@ submitMsg2(smsg_t *pMsg)
 {
 	qqueue_t *pQueue;
 	ruleset_t *pRuleset;
+	static int fdErrFile = -1;
 	DEFiRet;
 
 	ISOBJ_TYPE_assert(pMsg, msg);
+
+	if(getRawMsgLen(pMsg) > glblGetMaxLine()){
+		uchar *rawmsg;
+		int dummy;
+		getRawMsg(pMsg, &rawmsg, &dummy);
+		LogMsg(0, RS_RET_OVERSIZE_MSG, LOG_WARNING,
+			"message too long (%d) with configured size %d, begin of "
+			"message is: %.80s",
+			getRawMsgLen(pMsg), glblGetMaxLine(), rawmsg);
+		MsgTruncateToMaxSize(pMsg);
+	}
 
 	pRuleset = MsgGetRuleset(pMsg);
 	pQueue = (pRuleset == NULL) ? pMsgQueue : ruleset.GetRulesetQueue(pRuleset);
