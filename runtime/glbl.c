@@ -85,6 +85,8 @@ static uchar *stdlog_chanspec = NULL;
 static int bParseHOSTNAMEandTAG = 1;	/* parser modification (based on startup params!) */
 static int bPreserveFQDN = 0;		/* should FQDNs always be preserved? */
 static int iMaxLine = 8096;		/* maximum length of a syslog message */
+static uchar * oversizeMsgErrorFile = NULL;		/* File where oversize messages are written to */
+static int oversizeMsgInputMode = 0;		/* Mode which oversize messages will be forwarded */
 static int iGnuTLSLoglevel = 0;
 static int iDefPFFamily = PF_UNSPEC;     /* protocol family (IPv4, IPv6 or both) */
 static int bDropMalPTRMsgs = 0;/* Drop messages which have malicious PTR records during DNS lookup */
@@ -157,6 +159,8 @@ static struct cnfparamdescr cnfparamdescr[] = {
         { "defaultnetstreamdrivercertfile", eCmdHdlrString, 0 },
 	{ "defaultnetstreamdriver", eCmdHdlrString, 0 },
 	{ "maxmessagesize", eCmdHdlrSize, 0 },
+	{ "oversizemsg.errorfile", eCmdHdlrGetWord, 0 },
+	{ "oversizemsg.input.mode", eCmdHdlrGetWord, 0 },
 	{ "action.reportsuspension", eCmdHdlrBinary, 0 },
 	{ "action.reportsuspensioncontinuation", eCmdHdlrBinary, 0 },
 	{ "parser.controlcharacterescapeprefix", eCmdHdlrGetChar, 0 },
@@ -219,6 +223,7 @@ glblGetMaxLine(void)
 {
 	return(iMaxLine);
 }
+
 
 int
 GetGnuTLSLoglevel(void)
@@ -418,6 +423,8 @@ setMaxLine(const int64_t iNew)
 	}
 }
 
+
+
 static rsRetVal
 legacySetMaxMessageSize(void __attribute__((unused)) *pVal, int64_t iNew)
 {
@@ -441,6 +448,20 @@ setDebugLevel(void __attribute__((unused)) *pVal, int level)
 	dbgSetDebugLevel(level);
 	dbgprintf("debug level %d set via config file\n", level);
 	dbgprintf("This is rsyslog version " VERSION "\n");
+	RETiRet;
+}
+
+static rsRetVal
+setOversizeMsgInputMode(uchar *mode)
+{
+	DEFiRet;
+	if(!strcmp((char*)mode, "truncate")) {
+		oversizeMsgInputMode = glblOversizeMsgInputMode_Truncate;
+	} else if(!strcmp((char*)mode, "split")) {
+		oversizeMsgInputMode = glblOversizeMsgInputMode_Split;
+	} else {
+		oversizeMsgInputMode = glblOversizeMsgInputMode_Truncate;
+	}
 	RETiRet;
 }
 
@@ -548,6 +569,24 @@ GetLocalHostName(void)
 	}
 done:
 	return(pszRet);
+}
+
+
+/* return the name of the file where oversize messages are written to
+ */
+uchar*
+glblGetOversizeMsgErrorFile(void)
+{
+	return oversizeMsgErrorFile;
+}
+
+
+/* return the mode with which oversize messages will be put forward
+ */
+int
+glblGetOversizeMsgInputMode(void)
+{
+	return oversizeMsgInputMode;
 }
 
 
@@ -799,6 +838,9 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __a
 	pszDfltNetstrmDrvrCertFile = NULL;
 	free(LocalHostNameOverride);
 	LocalHostNameOverride = NULL;
+	free(oversizeMsgErrorFile);
+	oversizeMsgErrorFile = NULL;
+	oversizeMsgInputMode = glblOversizeMsgInputMode_Truncate;
 	free(pszWorkDir);
 	pszWorkDir = NULL;
 	bDropMalPTRMsgs = 0;
@@ -1197,6 +1239,11 @@ glblDoneLoadCnf(void)
 			bActionReportSuspensionCont = (int) cnfparamvals[i].val.d.n;
 		} else if(!strcmp(paramblk.descr[i].name, "maxmessagesize")) {
 			setMaxLine(cnfparamvals[i].val.d.n);
+		} else if(!strcmp(paramblk.descr[i].name, "oversizemsg.errorfile")) {
+			free(oversizeMsgErrorFile);
+			oversizeMsgErrorFile = (uchar*)es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
+		} else if(!strcmp(paramblk.descr[i].name, "oversizemsg.input.mode")) {
+			setOversizeMsgInputMode((uchar*)es_str2cstr(cnfparamvals[i].val.d.estr, NULL));
 		} else if(!strcmp(paramblk.descr[i].name, "debug.onshutdown")) {
 			glblDebugOnShutdown = (int) cnfparamvals[i].val.d.n;
 			LogError(0, RS_RET_OK, "debug: onShutdown set to %d", glblDebugOnShutdown);
@@ -1375,6 +1422,7 @@ BEGINObjClassExit(glbl, OBJ_IS_CORE_MODULE) /* class, version */
 	free(LocalDomain);
 	free(LocalHostName);
 	free(LocalHostNameOverride);
+	free(oversizeMsgErrorFile);
 	free(LocalFQDNName);
 	freeTimezoneInfo();
 	objRelease(prop, CORE_COMPONENT);
