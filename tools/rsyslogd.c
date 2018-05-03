@@ -1044,7 +1044,7 @@ submitMsg2(smsg_t *pMsg)
 			getRawMsgLen(pMsg), glblGetMaxLine(), rawmsg);
 		writeOversizeMessageLog(pMsg);
 		// TODO: add config param
-		if(1) {
+		if(glblGetOversizeMsgInputMode()) {
 			splitOversizeMessage(pMsg);
 			/* we have submitted the message segments recursively, so we
 			 * can just deleted the original msg object and terminate.
