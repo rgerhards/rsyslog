@@ -147,5 +147,6 @@ tzinfo_t* glblFindTimezoneInfo(char *id);
 int GetGnuTLSLoglevel(void);
 int glblGetMaxLine(void);
 int bs_arrcmp_glblDbgFiles(const void *s1, const void *s2);
+uchar* glblGetOversizeMsgErrorFile(void);
 
 #endif /* #ifndef GLBL_H_INCLUDED */
