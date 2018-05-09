@@ -1043,16 +1043,20 @@ submitMsg2(smsg_t *pMsg)
 			"message is: %.80s",
 			getRawMsgLen(pMsg), glblGetMaxLine(), rawmsg);
 		writeOversizeMessageLog(pMsg);
-		// TODO: add config param
-		if(glblGetOversizeMsgInputMode()) {
+		if(glblGetOversizeMsgInputMode() == glblOversizeMsgInputMode_Split) {
 			splitOversizeMessage(pMsg);
 			/* we have submitted the message segments recursively, so we
 			 * can just deleted the original msg object and terminate.
 			 */
 			msgDestruct(&pMsg);
 			FINALIZE;
-		} else {
+		} else if(glblGetOversizeMsgInputMode() == glblOversizeMsgInputMode_Truncate) {
 			MsgTruncateToMaxSize(pMsg);
+		} else {
+			/* in "accept" mode, we do nothing, simply because "accept" means
+			 * to use as-is.
+			 */
+			assert(glblGetOversizeMsgInputMode() == glblOversizeMsgInputMode_Accept);
 		}
 	}
 

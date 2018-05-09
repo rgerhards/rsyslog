@@ -40,6 +40,7 @@
 #define glblGetIOBufSize() 4096 /* size of the IO buffer, e.g. for strm class */
 #define glblOversizeMsgInputMode_Truncate 0
 #define glblOversizeMsgInputMode_Split 1
+#define glblOversizeMsgInputMode_Accept 2
 
 
 extern pid_t glbl_ourpid;

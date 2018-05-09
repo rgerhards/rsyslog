@@ -451,14 +451,16 @@ setDebugLevel(void __attribute__((unused)) *pVal, int level)
 	RETiRet;
 }
 
-static rsRetVal
-setOversizeMsgInputMode(uchar *mode)
+static rsRetVal ATTR_NONNULL()
+setOversizeMsgInputMode(const uchar *const mode)
 {
 	DEFiRet;
 	if(!strcmp((char*)mode, "truncate")) {
 		oversizeMsgInputMode = glblOversizeMsgInputMode_Truncate;
 	} else if(!strcmp((char*)mode, "split")) {
 		oversizeMsgInputMode = glblOversizeMsgInputMode_Split;
+	} else if(!strcmp((char*)mode, "accept")) {
+		oversizeMsgInputMode = glblOversizeMsgInputMode_Accept;
 	} else {
 		oversizeMsgInputMode = glblOversizeMsgInputMode_Truncate;
 	}
@@ -1243,7 +1245,9 @@ glblDoneLoadCnf(void)
 			free(oversizeMsgErrorFile);
 			oversizeMsgErrorFile = (uchar*)es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
 		} else if(!strcmp(paramblk.descr[i].name, "oversizemsg.input.mode")) {
-			setOversizeMsgInputMode((uchar*)es_str2cstr(cnfparamvals[i].val.d.estr, NULL));
+			const char *const tmp = es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
+			setOversizeMsgInputMode((uchar*) tmp);
+			free((void*)tmp);
 		} else if(!strcmp(paramblk.descr[i].name, "debug.onshutdown")) {
 			glblDebugOnShutdown = (int) cnfparamvals[i].val.d.n;
 			LogError(0, RS_RET_OK, "debug: onShutdown set to %d", glblDebugOnShutdown);
