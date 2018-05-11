@@ -19,7 +19,7 @@ action(type="omfile" file="rsyslog.out.log")
 . $srcdir/diag.sh shutdown-when-empty
 . $srcdir/diag.sh wait-shutdown
 
-grep "Framing Error.*change to octet stuffing" rsyslog.out.log > /dev/null
+grep "Framing Error.*frame too large.*change to oc" rsyslog.out.log > /dev/null
 if [ $? -ne 0 ]; then
         echo
         echo "FAIL: expected error message from imptcp truncation not found. rsyslog.out.log is:"
