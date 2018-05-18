@@ -172,6 +172,7 @@ static int bStatsRecords = 0;	/* generate stats records */
 static int bCSVoutput = 0;	/* generate output in CSV (where applicable) */
 static long long batchsize = 100000000ll;
 static int waittime = 0;
+static int waitBtwMsgs = 0;
 static int runMultithreaded = 0; /* run tests in multithreaded mode */
 static int numThrds = 1;	/* number of threads to use */
 static char *tlsCertFile = NULL;
@@ -692,6 +693,9 @@ int sendMessages(struct instdata *inst)
 		}
 		++msgNum;
 		++i;
+		if(waitBtwMsgs > 0) {
+			usleep(waitBtwMsgs);
+		}
 	}
 	if(transport == TP_TLS && offsSendBuf != 0) {
 		/* send remaining buffer */
@@ -1045,7 +1049,7 @@ int main(int argc, char *argv[])
 
 	setvbuf(stdout, buf, _IONBF, 48);
 	
-	while((opt = getopt(argc, argv, "b:ef:F:t:p:c:C:m:i:I:P:d:Dn:l:L:M:rsBR:S:T:XW:yYz:Z:j:Ov")) != -1) {
+	while((opt = getopt(argc, argv, "b:ef:F:t:p:c:C:m:i:I:P:d:Dn:l:L:M:rsBR:S:T:Xw:W:yYz:Z:j:Ov")) != -1) {
 		switch (opt) {
 		case 'b':	batchsize = atoll(optarg);
 				break;
@@ -1139,6 +1143,8 @@ int main(int argc, char *argv[])
 					exit(1);
 				}
 				break;
+		case 'w':	waitBtwMsgs = atoi(optarg);
+				break;
 		case 'W':	waittime = atoi(optarg);
 				break;
 		case 'Y':	runMultithreaded = 1;
@@ -1167,6 +1173,11 @@ int main(int argc, char *argv[])
 	if(bStatsRecords && waittime) {
 		fprintf(stderr, "warning: generating performance stats and using a waittime "
 				"is somewhat contradictory!\n");
+	}
+
+	if(waitBtwMsgs < 0) {
+		fprintf(stderr, "Parameter -w has invalid value: %d. "
+				"Must be the time in microseconds\n", waitBtwMsgs);
 	}
 
 	if(!isatty(1) || bSilent)
