@@ -10,7 +10,7 @@
  *
  * File begun on 2010-08-10 by RGerhards
  *
- * Copyright 2007-2016 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2007-2018 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -55,6 +55,7 @@
 #include <stdint.h>
 #include <zlib.h>
 #include <sys/stat.h>
+#include <regex.h>
 #if HAVE_FCNTL_H
 #include <fcntl.h>
 #endif
@@ -151,6 +152,8 @@ struct instanceConf_s {
 	sbool flowControl;
 	int ratelimitInterval;
 	int ratelimitBurst;
+	uchar *startRegex;
+	regex_t end_preg;	/* compiled version of startRegex */
 	struct instanceConf_s *next;
 };
 
@@ -193,6 +196,7 @@ static struct cnfparamdescr inppdescr[] = {
 	{ "flowcontrol", eCmdHdlrBinary, 0 },
 	{ "name", eCmdHdlrString, 0 },
 	{ "maxframesize", eCmdHdlrInt, 0 },
+	{ "framing.delimiter.regex", eCmdHdlrString, 0 },
 	{ "ruleset", eCmdHdlrString, 0 },
 	{ "defaulttz", eCmdHdlrString, 0 },
 	{ "supportoctetcountedframing", eCmdHdlrBinary, 0 },
@@ -263,6 +267,7 @@ struct ptcpsrv_s {
 	sbool discardTruncatedMsg;
 	sbool flowControl;
 	ratelimit_t *ratelimiter;
+	instanceConf_t *inst;
 };
 
 /* the ptcp session object. Describes a single active session.
@@ -276,8 +281,8 @@ struct ptcpsess_s {
 	sbool bzInitDone; /* did we do an init of zstrm already? */
 	z_stream zstrm;	/* zip stream to use for tcp compression */
 	uint8_t compressionMode;
-//--- from tcps_sess.h
 	int iMsg;		 /* index of next char to store in msg */
+	int iCurrLine;		 /* 2nd char of current line in regex framing mode */
 	int bAtStrtOfFram;	/* are we at the very beginning of a new frame? */
 	sbool bSuppOctetFram;	/**< copy from listener, to speed up access */
 	sbool bSPFramingFix;
@@ -292,7 +297,6 @@ struct ptcpsess_s {
 	uchar *pMsg;		/* message (fragment) received */
 	prop_t *peerName;	/* host name we received messages from */
 	prop_t *peerIP;
-//--- END from tcps_sess.h
 };
 
 
@@ -913,6 +917,50 @@ finalize_it:
 }
 
 
+/* process the data received, special case if the framing is specified via
+ * a regex. For more info see processDataRcvd().
+ */
+static rsRetVal ATTR_NONNULL()
+processDataRcvd_regexFraming(ptcpsess_t *const __restrict__ pThis,
+	char **const buff,
+	struct syslogTime *const stTime,
+	const time_t ttGenTime,
+	multi_submit_t *const pMultiSub,
+	unsigned *const __restrict__ pnMsgs)
+{
+	DEFiRet;
+	const instanceConf_t *const inst = pThis->pLstn->pSrv->inst;
+	assert(inst->startRegex != NULL);
+	const char c = **buff;
+
+	assert(pThis->iMsg < iMaxLine); //TODO: variable length handling!!
+
+	pThis->pMsg[pThis->iMsg++] = c;
+	pThis->pMsg[pThis->iMsg] = '\0';
+
+	if(c == '\n') {
+		pThis->iCurrLine = pThis->iMsg;
+	} else {
+		const int isMatch = !regexec(&inst->end_preg, (char*)pThis->pMsg+pThis->iCurrLine, 0, NULL, 0);
+		if(isMatch) {
+			char savebuf[iMaxLine]; // TODO: do proper!
+			DBGPRINTF("regex match (%d), framing line: %s\n", pThis->iCurrLine, pThis->pMsg);
+			strncpy(savebuf, (char*) pThis->pMsg+pThis->iCurrLine, sizeof(savebuf));
+			pThis->iMsg = pThis->iCurrLine - 1;
+
+			doSubmitMsg(pThis, stTime, ttGenTime, pMultiSub);
+			++(*pnMsgs);
+
+			strcpy((char*)pThis->pMsg, savebuf);
+			pThis->iMsg = strlen(savebuf);
+			pThis->iCurrLine = 1;
+		}
+	}
+
+	RETiRet;
+}
+
+
 /* process the data received. As TCP is stream based, we need to process the
  * data inside a state machine. The actual data received is passed in byte-by-byte
  * from DataRcvd, and this function here compiles messages from them and submits
@@ -936,6 +984,11 @@ processDataRcvd(ptcpsess_t *const __restrict__ pThis,
 	int lenPeerName = 0;
 	uchar *propPeerIP = NULL;
 	int lenPeerIP = 0;
+
+	if(pThis->pLstn->pSrv->inst->startRegex != NULL) {
+		processDataRcvd_regexFraming(pThis, buff, stTime, ttGenTime, pMultiSub, pnMsgs);
+		FINALIZE;
+	}
 
 	if(pThis->inputState == eAtStrtFram) {
 		if(pThis->bSuppOctetFram && isdigit((int) c)) {
@@ -1356,6 +1409,7 @@ addSess(ptcplstn_t *pLstn, int sock, prop_t *peerName, prop_t *peerIP)
 	pSess->bSPFramingFix = pLstn->bSPFramingFix;
 	pSess->inputState = eAtStrtFram;
 	pSess->iMsg = 0;
+	pSess->iCurrLine = 1;
 	pSess->bzInitDone = 0;
 	pSess->bAtStrtOfFram = 1;
 	pSess->peerName = peerName;
@@ -1583,6 +1637,7 @@ addListner(modConfData_t __attribute__((unused)) *modConf, instanceConf_t *inst)
 	pthread_mutex_init(&pSrv->mutSessLst, NULL);
 	pSrv->pSess = NULL;
 	pSrv->pLstn = NULL;
+	pSrv->inst = inst;
 	pSrv->bSuppOctetFram = inst->bSuppOctetFram;
 	pSrv->bSPFramingFix = inst->bSPFramingFix;
 	pSrv->bKeepAlive = inst->bKeepAlive;
@@ -2044,6 +2099,8 @@ CODESTARTnewInpInst
 						"parameter given is %d, max is 200000000", max);
 				ABORT_FINALIZE(RS_RET_PARAM_ERROR);
 			}
+		} else if(!strcmp(inppblk.descr[i].name, "framing.delimiter.regex")) {
+			inst->startRegex = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(inppblk.descr[i].name, "ruleset")) {
 			inst->pszBindRuleset = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(inppblk.descr[i].name, "supportoctetcountedframing")) {
@@ -2097,6 +2154,16 @@ CODESTARTnewInpInst
 		if ((bindPort == NULL || strlen(bindPort) < 1) && (bindPath == NULL || strlen (bindPath) < 1)) {
 			parser_errmsg("imptcp: Must have either port or path defined");
 			ABORT_FINALIZE(RS_RET_PARAM_ERROR);
+		}
+	}
+
+	if(inst->startRegex != NULL) {
+		const int errcode = regcomp(&inst->end_preg, (char*)inst->startRegex, REG_EXTENDED);
+		if(errcode != 0) {
+			char errbuff[512];
+			regerror(errcode, &inst->end_preg, errbuff, sizeof(errbuff));
+			parser_errmsg("imptcp: error in framing.delimiter.regex expansion: %s", errbuff);
+			ABORT_FINALIZE(RS_RET_ERR);
 		}
 	}
 finalize_it:
@@ -2250,6 +2317,10 @@ CODESTARTfreeCnf
 		free(inst->pszBindRuleset);
 		free(inst->pszInputName);
 		free(inst->dfltTZ);
+		if(inst->startRegex != NULL) {
+			regfree(&inst->end_preg);
+			free(inst->startRegex);
+		}
 		del = inst;
 		inst = inst->next;
 		free(del);
