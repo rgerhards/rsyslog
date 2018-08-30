@@ -98,22 +98,20 @@ function generate_conf() {
 	export TCPFLOOD_PORT="$(get_free_port)"
 	new_port="$(get_free_port)"
 	if [ "$1" == "" ]; then
-		export IMDIAG_PORT=$new_port
 		export TESTCONF_NM="${RSYSLOG_DYNNAME}_" # this basename is also used by instance 2!
 		export RSYSLOG_OUT_LOG="${RSYSLOG_DYNNAME}.out.log"
 		export RSYSLOG2_OUT_LOG="${RSYSLOG_DYNNAME}_2.out.log"
 		export RSYSLOG_PIDBASE="${RSYSLOG_DYNNAME}:" # also used by instance 2!
 		mkdir $RSYSLOG_DYNNAME.spool
-	else
-		export IMDIAG_PORT2=$new_port
 	fi
 	echo imdiag running on port $new_port
-	echo "module(load=\"../plugins/imdiag/.libs/imdiag\")
-global(inputs.timeout.shutdown=\"10000\")
-\$IMDiagServerRun $new_port
+	echo 'module(load="../plugins/imdiag/.libs/imdiag")
+global(inputs.timeout.shutdown="10000")
+$IMDiagListenPortFileName '$RSYSLOG_DYNNAME.imdiag-port'
+$IMDiagServerRun 0
 
-:syslogtag, contains, \"rsyslogd\"  ./${RSYSLOG_DYNNAME}$1.started
-###### end of testbench instrumentation part, test conf follows:" > ${TESTCONF_NM}$1.conf
+:syslogtag, contains, "rsyslogd"  ./'${RSYSLOG_DYNNAME}$1'.started
+###### end of testbench instrumentation part, test conf follows:' > ${TESTCONF_NM}$1.conf
 }
 
 
@@ -648,6 +646,9 @@ case $1 in
 			   error_exit 1
 			fi
 		done
+		set -x
+		export IMDIAG_PORT$1=$(cat $RSYSLOG_DYNNAME.imdiag-port)
+		set +x
 		echo "rsyslogd$2 started, start msg not yet seen, pid " `cat $RSYSLOG_PIDBASE$2.pid` pidfile: $RSYSLOG_PIDBASE$2.pid
 		;;
    'wait-startup') # wait for rsyslogd startup ($2 is the instance)
@@ -669,6 +670,11 @@ case $1 in
 			   error_exit 1
 			fi
 		done
+		sleep 2
+		set -x
+		ls -l $RSYSLOG_DYNNAME*
+		export IMDIAG_PORT$1=$(cat $RSYSLOG_DYNNAME.imdiag-port)
+		set +x
 		echo "rsyslogd$2 startup msg seen, pid " `cat $RSYSLOG_PIDBASE$2.pid`
 		;;
    'wait-pid-termination')  # wait for the pid in pid $2 to terminate, abort on timeout

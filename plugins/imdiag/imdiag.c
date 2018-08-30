@@ -522,6 +522,7 @@ static rsRetVal addTCPListener(void __attribute__((unused)) *pVal, uchar *pNewVa
 		CHKiRet(tcpsrv.SetCBOnErrClose(pOurTcpsrv, onErrClose));
 		CHKiRet(tcpsrv.SetDrvrMode(pOurTcpsrv, iStrmDrvrMode));
 		CHKiRet(tcpsrv.SetOnMsgReceive(pOurTcpsrv, OnMsgReceived));
+fprintf(stderr, "imdiag: port file %s\n", pszLstnPortFileName);
 		CHKiRet(tcpsrv.SetLstnPortFileName(pOurTcpsrv, pszLstnPortFileName));
 		/* now set optional params, but only if they were actually configured */
 		if(pszStrmDrvrAuthMode != NULL) {
@@ -700,7 +701,7 @@ CODEmodInit_QueryRegCFSLineHdlr
 				   NULL, &iTCPSessMax, STD_LOADABLE_MODULE_ID));
 	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiagserverstreamdrivermode"), 0,
 				   eCmdHdlrInt, NULL, &iStrmDrvrMode, STD_LOADABLE_MODULE_ID));
-	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("listenportfilename"), 0,
+	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiaglistenportfilename"), 0,
 				   eCmdHdlrGetWord, NULL, &pszLstnPortFileName, STD_LOADABLE_MODULE_ID));
 	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiagserverstreamdriverauthmode"), 0,
 				   eCmdHdlrGetWord, NULL, &pszStrmDrvrAuthMode, STD_LOADABLE_MODULE_ID));
