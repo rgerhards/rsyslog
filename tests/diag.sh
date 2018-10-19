@@ -573,6 +573,7 @@ quit"
 
 # wait for all pending lookup table reloads to complete $1 is the instance.
 function await_lookup_table_reload() {
+echo pwd: `pwd`
 	if [ "$1" == "2" ]; then
 		echo AwaitLookupTableReload | $TESTTOOL_DIR/diagtalker -pIMDIAG_PORT2 || error_exit  $?
 	else
