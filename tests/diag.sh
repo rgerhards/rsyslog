@@ -583,6 +583,7 @@ echo pwd: `pwd`
 
 
 function assert_content_missing() {
+echo pwd: `pwd`
 	grep -qF "$1" < ${RSYSLOG_OUT_LOG}
 	if [ "$?" -eq "0" ]; then
 		echo content-missing assertion failed, some line matched pattern "'$1'"
