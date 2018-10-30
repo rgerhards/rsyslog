@@ -1033,6 +1033,8 @@ releaseDoActionParams(action_t *__restrict__ const pAction, wti_t *__restrict__ 
 			if (ACT_STRING_PASSING == pAction->peParamPassing[j]) {
 				free(pWrkrInfo->p.nontx.actParams[j].param);
 				pWrkrInfo->p.nontx.actParams[j].param = NULL;
+				pWrkrInfo->p.nontx.actParams[j].lenBuf = 0;
+				pWrkrInfo->p.nontx.actParams[j].lenStr = 0;
 			}
 		} else {
 			switch(pAction->peParamPassing[j]) {
@@ -1044,6 +1046,8 @@ releaseDoActionParams(action_t *__restrict__ const pAction, wti_t *__restrict__ 
 				json_object_put((struct json_object*)
 								pWrkrInfo->p.nontx.actParams[j].param);
 				pWrkrInfo->p.nontx.actParams[j].param = NULL;
+				pWrkrInfo->p.nontx.actParams[j].lenBuf = 0;
+				pWrkrInfo->p.nontx.actParams[j].lenStr = 0;
 				break;
 			case ACT_STRING_PASSING:
 			case ACT_MSG_PASSING:
