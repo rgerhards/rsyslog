@@ -3,7 +3,6 @@
 . ${srcdir:=.}/diag.sh init
 export ES_DOWNLOAD=elasticsearch-6.0.0.tar.gz
 export ES_PORT=19200
-download_elasticsearch
 prepare_elasticsearch
 start_elasticsearch
 

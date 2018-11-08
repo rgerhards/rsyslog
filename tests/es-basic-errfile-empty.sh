@@ -3,7 +3,6 @@
 . ${srcdir:=.}/diag.sh init
 export ES_DOWNLOAD=elasticsearch-6.0.0.tar.gz
 export ES_PORT=19200
-download_elasticsearch
 prepare_elasticsearch
 start_elasticsearch
 
@@ -25,10 +24,9 @@ injectmsg  0 10000
 shutdown_when_empty
 wait_shutdown 
 es_getdata 10000 $ES_PORT
-if [ -f ${RSYSLOG_DYNNAME}.errorfile ]
-then
+if [ -f ${RSYSLOG_DYNNAME}.errorfile ]; then
     echo "error: error file exists!"
-    exit 1
+    error_exit 1
 fi
 seq_check  0 9999
 cleanup_elasticsearch

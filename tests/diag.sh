@@ -1660,6 +1660,7 @@ dump_zookeeper_serverlog() {
 
 # download elasticsearch files, if necessary
 download_elasticsearch() {
+	prepare_elasticsearch
 	if [ ! -d $dep_cache_dir ]; then
 		echo "Creating dependency cache dir $dep_cache_dir"
 		mkdir $dep_cache_dir

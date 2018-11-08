@@ -4,7 +4,6 @@
 export ES_DOWNLOAD=elasticsearch-6.0.0.tar.gz
 export NUMMESSAGES=1000 #10000
 
-download_elasticsearch
 prepare_elasticsearch
 start_elasticsearch
 init_elasticsearch
