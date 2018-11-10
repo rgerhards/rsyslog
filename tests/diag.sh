@@ -1881,9 +1881,9 @@ case $1 in
 			export TZ=UTC
 		fi
 		ulimit -c unlimited  &> /dev/null # at least try to get core dumps
-		printf '------------------------------------------------------------\n'
+		printf '%s\n' "------------------------------------------------------------"
 		printf '%s Test: %s\n' "$(tb_timestamp)" "$0"
-		printf '------------------------------------------------------------\n'
+		printf '%s\n' "------------------------------------------------------------"
 		rm -f xlate*.lkp_tbl
 		rm -f log log* # RSyslog debug output 
 		rm -f work 
