@@ -2249,6 +2249,18 @@ AC_ARG_ENABLE(generate-man-pages,
         [have_to_generate_man_pages=no]
 )
 
+# settings for the pcap input module
+AC_ARG_ENABLE(impcap,
+        [AS_HELP_STRING([--enable-impcap],[libpcap input module enabled @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_impcap="yes" ;;
+          no) enable_impcap="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-impcap) ;;
+         esac],
+        [enable_impcap=no]
+)
+AM_CONDITIONAL(ENABLE_IMPCAP, test x$enable_impcap = xyes)
+
 
 # This provides a work-around to use "make distcheck" without
 # running tests (mode used pre 2018-07-02)
@@ -2369,6 +2381,7 @@ AC_CONFIG_FILES([Makefile \
 		contrib/omtcl/Makefile \
 		contrib/omfile-hardened/Makefile \
 		contrib/mmkubernetes/Makefile \
+		contrib/impcap/Makefile \
 		tests/Makefile])
 AC_OUTPUT
 
@@ -2405,6 +2418,7 @@ echo "    imzmq3 input module enabled:              $enable_imzmq3"
 echo "    imczmq input module enabled:              $enable_imczmq"
 echo "    imjournal input module enabled:           $enable_imjournal"
 echo "    imkafka module will be compiled:          $enable_imkafka"
+echo "    impcap input module enabled:              $enable_impcap"
 echo
 echo "---{ output plugins }---"
 echo "    Mail support enabled:                     $enable_mail"

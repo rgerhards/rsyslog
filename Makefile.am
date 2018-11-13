@@ -300,6 +300,10 @@ if ENABLE_MMKUBERNETES
 SUBDIRS += contrib/mmkubernetes
 endif
 
+if ENABLE_IMPCAP
+SUBDIRS += contrib/impcap
+endif
+
 # tests are added as last element, because tests may need different
 # modules that need to be generated first
 SUBDIRS += tests
