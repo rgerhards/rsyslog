@@ -5,14 +5,14 @@
 # not actually check the output
 
 uname
-if [ `uname` = "FreeBSD" ] ; then
+if [ $(uname) = "FreeBSD" ] ; then
    echo "This test currently does not work on FreeBSD."
    exit 77
 fi
 
 echo ===============================================================================
 echo \[json_null.sh\]: test for json containung \"null\" value
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/mmjsonparse/.libs/mmjsonparse")

@@ -1,6 +1,6 @@
 /* Definition of the worker thread pool (wtp) object.
  *
- * Copyright 2008-2012 Adiscon GmbH.
+ * Copyright 2008-2018 Adiscon GmbH.
  *
  * This file is part of the rsyslog runtime library.
  *
@@ -33,6 +33,7 @@
 #define WRKTHRD_STOPPED  	0
 #define WRKTHRD_INITIALIZING	1
 #define WRKTHRD_RUNNING		3
+#define WRKTHRD_WAIT_JOIN	7
 
 
 /* possible states of a worker thread pool */
@@ -75,11 +76,14 @@ struct wtp_s {
 /* some symbolic constants for easier reference */
 
 
+#define DENY_WORKER_START_DURING_SHUTDOWN	0
+#define PERMIT_WORKER_START_DURING_SHUTDOWN	1
+
 /* prototypes */
 rsRetVal wtpConstruct(wtp_t **ppThis);
 rsRetVal wtpConstructFinalize(wtp_t *pThis);
 rsRetVal wtpDestruct(wtp_t **ppThis);
-rsRetVal wtpAdviseMaxWorkers(wtp_t *pThis, int nMaxWrkr);
+rsRetVal wtpAdviseMaxWorkers(wtp_t *pThis, int nMaxWrkr, const int permit_during_shutdown);
 rsRetVal wtpProcessThrdChanges(wtp_t *pThis);
 rsRetVal wtpChkStopWrkr(wtp_t *pThis, int bLockUsrMutex);
 rsRetVal wtpSetState(wtp_t *pThis, wtpState_t iNewState);

@@ -1,14 +1,13 @@
 #!/bin/bash
 # This file is part of the rsyslog project, released under ASL 2.0
+. ${srcdir:=.}/diag.sh init
 export ES_DOWNLOAD=elasticsearch-6.0.0.tar.gz
 export ES_PORT=19200
-. $srcdir/diag.sh download-elasticsearch
-. $srcdir/diag.sh stop-elasticsearch
-. $srcdir/diag.sh prepare-elasticsearch
-. $srcdir/diag.sh start-elasticsearch
+download_elasticsearch
+prepare_elasticsearch
+start_elasticsearch
 
-. $srcdir/diag.sh init
-. $srcdir/diag.sh es-init
+init_elasticsearch
 generate_conf
 add_conf '
 template(name="tpl" type="string"
@@ -23,11 +22,10 @@ module(load="../plugins/omelasticsearch/.libs/omelasticsearch")
 '
 startup_vg
 injectmsg  0 100
-. $srcdir/diag.sh wait-queueempty
+wait_queueempty
 shutdown_when_empty
 wait_shutdown_vg
-. $srcdir/diag.sh es-getdata 100 $ES_PORT
+es_getdata 100 $ES_PORT
 seq_check  0 99
-. $srcdir/diag.sh stop-elasticsearch
-. $srcdir/diag.sh cleanup-elasticsearch
+cleanup_elasticsearch
 exit_test

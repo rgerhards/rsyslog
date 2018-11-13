@@ -46,9 +46,9 @@ If the plugin writes a line to stdout containing anything else (for example,
 the string `Error: could not connect to the database` followed by a LF), rsyslog
 will consider that the plugin has not been able to process the message. The
 message will be retried later, according to the retry settings configured for
-the `omprog` action (e.g. the `action.resumeInterval` setting). When debugging
-is enabled in rsyslog, the line returned by the plugin will be included in the
-debug logs.
+the `omprog` action (in particular, the `action.resumeInterval` setting). If the
+`reportFailures` flag is set to `on`, rsyslog will also log the returned error
+line.
 
 If the plugin terminates, the message is also considered as non-processed.
 The plugin will later be restarted, and the message retried, according to the
@@ -57,7 +57,10 @@ configured retry settings.
 When starting the plugin, if `confirmMessages` is `on`, rsyslog will also wait
 for the plugin to confirm its initialization. The plugin must write an `OK` line
 to stdout just after starting. If it writes anything else or terminates, rsyslog
-will consider the plugin initialization has failed, and will try to restart it later.
+will consider the plugin initialization has failed, and will try to restart it
+later. It is recommended to ensure that the program is really ready to start
+receiving messages before emitting this first confirmation (for example, by
+checking that a destination database is accessible).
 
 Example of exchanged messages
 -----------------------------
@@ -80,17 +83,85 @@ Note that the first `OK` does not confirm any message, but that the plugin has
 correctly started and is ready to receive messages. When the plugin receives
 an end-of-file (EOF), it must silently terminate.
 
+Confirmation timeout
+--------------------
+The plugin must confirm each message before a timeout of 10 seconds. A different
+timeout can be configured using the `confirmTimeout` setting. If the plugin does
+not return anything to rsyslog before this timeout, rsyslog will restart the
+program, and retry the message.
+
+It is important that the `confirmTimeout` be adjusted to an appropriate value for
+your plugin, since a too low timeout can cause duplicate processing of messages
+(if rsyslog decides that the plugin has gone unresponsive when it really hasn't).
+In case of doubt, consider either a) setting a rather high timeout (but note that
+this can go against the _fail fast_ pattern), b) enabling the `signalOnClose`
+and/or `killUnresponsive` flags in the configuration, to ensure that the plugin
+will stop its processing if rsyslog decides to restart it, or c) using keep-alive
+feedback as explained below.
+
+Keep-alive feedback
+-------------------
+The plugin can also provide _keep-alive feedback_ to rsyslog. This allows the
+plugin to exceed the `confirmTimeout` for certain messages requiring a long-
+running processing (for example, attempting to reconnect to a database after a
+temporary loss of connection), without having to increase too much the configured
+timeout in anticipation of those peak latencies.
+
+To provide keep-alive feedback, the plugin must periodically write a dot (`.`)
+to stdout, without ending the line. Each dot must be written before the timeout
+is reached (rsyslog will restart the timeout after receiving each dot). Once the
+plugin completes the processing of the message, it must write the `OK` word (or
+an error message) as usual, followed by a line feed. rsyslog will ignore all
+leading dots when processing the received line.
+
+The following sequence illustrates the use of the keep-alive feedback:
+
+    <= OK
+    => log message 1
+    <= OK
+    => log message 2
+    <= .......OK
+    => log message 3
+    <= ..OK
+    => log message 4
+    <= ...OK
+
+The plugin can also provide keep-alive feedback during its initialization, before
+emitting the first `OK`. This can be useful to give enough time to the plugin to
+complete its initialization checks.
+
 Writing to stderr
 -----------------
 Aside from confirming messages via stdout, at any moment the plugin may write
 anything it wants to stderr. The `output` setting of the `omprog` action allows
-capturing the plugin's stderr to a file, which can be useful for debugging.
-Apart from this facility, rsyslog will ignore the plugin's stderr.
+capturing the plugin's stderr to a file. This provides an easy way for the
+plugin to record its own logs in case something fails (for example, logging the
+details of a database connection error).
 
-Note: When the `output` setting is specified and `confirmMessages` is set to
-`off`, rsyslog will capture both the stdout and stderr of the plugin to the
-specified file. You can use this to debug your plugin if you think it is not
-confirming the messages as expected.
+To prevent the output file from growing too much over time, it is recommended
+to periodically rotate it using a tool like _logrotate_. After each rotation of
+the file, a HUP signal must be sent to rsyslog. This will cause rsyslog to
+reopen the file.
+
+When multiple instances of the program are running concurrently (see [Threading
+Model](#threading-model)), rsyslog guarantees that the lines written to stderr
+by the various instances will not appear intermingled in the output file, as
+long as: 1) the lines are short enough (the actual limit depends on the platform:
+4KB on Linux, and at least 512 bytes on other systems), and 2) the program
+writes each line at a time, without buffering multiple lines. (Commonly, this
+can be accomplished by either flushing the stream after each line, writing to
+the stream in line-buffered mode, or doing a single write in case the stream is
+unbuffered. Which of these alternatives is the easiest or most natural to use
+depends on the language and libraries the program is coded in.)
+
+If the `output` setting is not specified, the plugin's stderr will be ignored
+(it will be redirected to `/dev/null`).
+
+When `confirmMessages` is set to `off`, the `output` setting will capture both
+the stdout and stderr of the plugin to the specified file (and if omitted, both
+stdout and stderr will be redirected to `/dev/null`). The same considerations
+regarding the rotation of the file and the consistency of the lines apply in
+this case.
 
 Example implementation
 ----------------------
@@ -104,6 +175,11 @@ You can write a plugin that processes the messages in batches (also called
 _transactions_), instead of individually. For a general explanation on how
 rsyslog handles the batching of messages, see
 http://www.rsyslog.com/doc/v8-stable/development/dev_oplugins.html.
+
+_**Warning:**
+This feature is currently **experimental**. It could change in future releases
+without keeping backwards compatibility with existing configurations or the
+interface described below._
 
 How to process the messages in batches (transactions)
 -----------------------------------------------------

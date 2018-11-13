@@ -23,7 +23,6 @@
  * limitations under the License.
  */
 #include "config.h"
-#include "rsyslog.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -40,6 +39,7 @@
 #include <fcntl.h>
 #include <zlib.h>
 #include <pthread.h>
+#include "rsyslog.h"
 #include "syslogd.h"
 #include "conf.h"
 #include "syslogd-types.h"
@@ -988,7 +988,7 @@ processMsg(wrkrInstanceData_t *__restrict__ const pWrkrData,
 		uLongf destLen = iMaxLine + iMaxLine/100 +12; /* recommended value from zlib doc */
 		uLong srcLen = l;
 		int ret;
-		CHKmalloc(out = (Bytef*) MALLOC(destLen));
+		CHKmalloc(out = (Bytef*) malloc(destLen));
 		out[0] = 'z';
 		out[1] = '\0';
 		ret = compress2((Bytef*) out+1, &destLen, (Bytef*) psz,
@@ -1139,8 +1139,6 @@ CODESTARTnewActInst
 
 	pvals = nvlstGetParams(lst, &actpblk, NULL);
 	if(pvals == NULL) {
-		LogError(0, RS_RET_MISSING_CNFPARAMS, "omfwd: either the \"file\" or "
-				"\"dynfile\" parameter must be given");
 		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
 	}
 
@@ -1438,7 +1436,7 @@ CODE_STD_STRING_REQUESTparseSelectorAct(1)
 		tmp = ++p;
 		for(i=0 ; *p && isdigit((int) *p) ; ++p, ++i)
 			/* SKIP AND COUNT */;
-		pData->port = MALLOC(i + 1);
+		pData->port = malloc(i + 1);
 		if(pData->port == NULL) {
 			LogError(0, NO_ERRCODE, "Could not get memory to store syslog forwarding port, "
 				 "using default port, results may not be what you intend");

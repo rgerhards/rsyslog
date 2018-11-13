@@ -4,12 +4,12 @@ echo ===========================================================================
 echo \[failover-async.sh\]: async test for failover functionality
 
 uname
-if [ `uname` = "SunOS" ] ; then
+if [ $(uname) = "SunOS" ] ; then
    echo "This test currently does not work on all flavors of Solaris."
    exit 77
 fi
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $template outfmt,"%msg:F,58:2%\n"

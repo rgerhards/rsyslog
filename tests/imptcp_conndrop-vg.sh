@@ -3,7 +3,7 @@
 # Copyright (C) 2014 Rainer Gerhards -- 2014-11-14
 echo ====================================================================================
 echo TEST: \[imptcp_conndrop-vg.sh\]: test imptcp with random connection drops
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $MaxMessageSize 10k
@@ -25,6 +25,6 @@ tcpflood -c20 -m50000 -r -d100 -P129 -D
 sleep 10 # due to large messages, we need this time for the tcp receiver to settle...
 shutdown_when_empty # shut down rsyslogd when done processing messages
 wait_shutdown_vg    # and wait for it to terminate
-. $srcdir/diag.sh check-exit-vg
+check_exit_vg
 seq_check 0 49999 -E
 exit_test

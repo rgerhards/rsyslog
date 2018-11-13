@@ -8,7 +8,7 @@
 echo ===============================================================================
 echo \[rsf_getenv.sh\]: testing RainerScript getenv\(\) function
 export MSGNUM="msgnum:"
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $ModLoad ../plugins/imtcp/.libs/imtcp
@@ -16,7 +16,7 @@ $MainMsgQueueTimeoutShutdown 10000
 $InputTCPServerRun '$TCPFLOOD_PORT'
 
 # set spool locations and switch queue to disk-only mode
-$WorkDirectory test-spool
+$WorkDirectory '$RSYSLOG_DYNNAME'.spool
 $MainMsgQueueFilename mainq
 $MainMsgQueueType disk
 

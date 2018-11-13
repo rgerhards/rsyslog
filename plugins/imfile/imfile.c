@@ -62,15 +62,26 @@
 #include "stringbuf.h"
 #include "ruleset.h"
 #include "ratelimit.h"
+#include "srUtils.h"
 #include "parserif.h"
 
 #include <regex.h>
 
-MODULE_TYPE_INPUT	/* must be present for input modules, do not remove */
+/* some platforms do not have large file support :( */
+#ifndef O_LARGEFILE
+#  define O_LARGEFILE 0
+#endif
+#ifndef HAVE_LSEEK64
+#  define lseek64(fd, offset, whence) lseek(fd, offset, whence)
+#endif
+
+MODULE_TYPE_INPUT
 MODULE_TYPE_NOKEEP
 MODULE_CNFNAME("imfile")
 
 /* defines */
+#define FILE_ID_HASH_SIZE 20	/* max size of a file_id hash */
+#define FILE_ID_SIZE	512	/* how many bytes are used for file-id? */
 
 /* Module static data */
 DEF_IMOD_STATIC_DATA	/* must be present, starts static data */
@@ -78,6 +89,9 @@ DEFobjCurrIf(glbl)
 DEFobjCurrIf(strm)
 DEFobjCurrIf(prop)
 DEFobjCurrIf(ruleset)
+
+extern int rs_siphash(const uint8_t *in, const size_t inlen, const uint8_t *k,
+	uint8_t *out, const size_t outlen); /* see siphash.c */
 
 static int bLegacyCnfModGlobalsPermitted;/* are legacy module-global config parameters permitted? */
 
@@ -123,10 +137,13 @@ struct instanceConf_s {
 	int iFacility;
 	int iSeverity;
 	int readTimeout;
+	unsigned delay_perMsg;
 	sbool bRMStateOnDel;
 	uint8_t readMode;
 	uchar *startRegex;
-	regex_t end_preg;	/* compiled version of startRegex */
+	uchar *endRegex;
+	regex_t start_preg;	/* compiled version of startRegex */
+	regex_t end_preg;	/* compiled version of endRegex */
 	sbool discardTruncatedMsg;
 	sbool msgDiscardingError;
 	sbool escapeLF;
@@ -194,7 +211,8 @@ static rsRetVal ATTR_NONNULL(1) pollFile(act_obj_t *act);
 static int ATTR_NONNULL() getBasename(uchar *const __restrict__ basen, uchar *const __restrict__ path);
 static void ATTR_NONNULL() act_obj_unlink(act_obj_t *act);
 static uchar * ATTR_NONNULL(1, 2) getStateFileName(const act_obj_t *, uchar *, const size_t);
-static int ATTR_NONNULL() getFullStateFileName(const uchar *const, uchar *const pszout, const size_t ilenout);
+static int ATTR_NONNULL() getFullStateFileName(const uchar *const, const char *const,
+	uchar *const pszout, const size_t ilenout);
 
 
 #define OPMODE_POLLING 0
@@ -281,6 +299,7 @@ static struct cnfparamdescr inppdescr[] = {
 	{ "ruleset", eCmdHdlrString, 0 },
 	{ "readmode", eCmdHdlrInt, 0 },
 	{ "startmsg.regex", eCmdHdlrString, 0 },
+	{ "endmsg.regex", eCmdHdlrString, 0 },
 	{ "discardtruncatedmsg", eCmdHdlrBinary, 0 },
 	{ "msgdiscardingerror", eCmdHdlrBinary, 0 },
 	{ "escapelf", eCmdHdlrBinary, 0 },
@@ -291,6 +310,7 @@ static struct cnfparamdescr inppdescr[] = {
 	{ "removestateondelete", eCmdHdlrBinary, 0 },
 	{ "persiststateinterval", eCmdHdlrInt, 0 },
 	{ "deletestateonfiledelete", eCmdHdlrBinary, 0 },
+	{ "delay.message", eCmdHdlrPositiveInt, 0 },
 	{ "addmetadata", eCmdHdlrBinary, 0 },
 	{ "addceetag", eCmdHdlrBinary, 0 },
 	{ "statefile", eCmdHdlrString, CNFPARAM_DEPRECATED },
@@ -349,7 +369,7 @@ OLD_openFileWithStateFile(act_obj_t *const act)
 		  act->name, statefn);
 
 	/* Get full path and file name */
-	lenSFNam = getFullStateFileName(statefn, pszSFNam, sizeof(pszSFNam));
+	lenSFNam = getFullStateFileName(statefn, "", pszSFNam, sizeof(pszSFNam));
 
 	/* check if the file exists */
 	if(stat((char*) pszSFNam, &stat_buf) == -1) {
@@ -683,7 +703,7 @@ act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file,
 	if(is_file && !is_symlink) {
 		const instanceConf_t *const inst = edge->instarr[0];// TODO: same file, multiple instances?
 		CHKiRet(ratelimitNew(&act->ratelimiter, "imfile", name));
-		CHKmalloc(act->multiSub.ppMsgs = MALLOC(inst->nMultiSub * sizeof(smsg_t *)));
+		CHKmalloc(act->multiSub.ppMsgs = malloc(inst->nMultiSub * sizeof(smsg_t *)));
 		act->multiSub.maxElem = inst->nMultiSub;
 		act->multiSub.nElem = 0;
 		pollFile(act);
@@ -695,9 +715,6 @@ act_obj_add(fs_edge_t *const edge, const char *const name, const int is_file,
 	}
 	act->next = edge->active;
 	edge->active = act;
-//dbgprintf("printout of fs tree after act_obj_add for '%s'\n", name);
-//fs_node_print(runModConf->conf_tree, 0);
-//dbg_wdmapPrint("wdmap after act_obj_add");
 finalize_it:
 	if(iRet != RS_RET_OK) {
 		if(act != NULL) {
@@ -728,8 +745,19 @@ detect_updates(fs_edge_t *const edge)
 			act_obj_unlink(act);
 			restart = 1;
 			break;
+		} else if(fileInfo.st_ino != act->ino) {
+			DBGPRINTF("file '%s' inode changed from %llu to %llu, unlinking from "
+				"internal lists\n", act->name, (long long unsigned) act->ino,
+				(long long unsigned) fileInfo.st_ino);
+			if(act->pStrm != NULL) {
+				/* we do no need to re-set later, as act_obj_unlink
+				 * will destroy the strm obj */
+				strmSet_checkRotation(act->pStrm, STRM_ROTATION_DO_NOT_CHECK);
+			}
+			act_obj_unlink(act);
+			restart = 1;
+			break;
 		}
-		// TODO: add inode check for change notification!
 
 	}
 
@@ -778,7 +806,8 @@ process_symlink(fs_edge_t *const chld, const char *symlink)
 		uint idx = ustrlen(chld->active->name) - ustrlen(chld->active->basename);
 		if (idx) { /* basename is different from name */
 			char parent[MAXFNAME];
-			memcpy(parent, chld->active->name, idx-1);
+			idx--; /* move past trailing slash */
+			memcpy(parent, chld->active->name, idx);
 			parent[idx] = '\0';
 			if(lstat(parent, &fileInfo) != 0) {
 				LogError(errno, RS_RET_ERR,
@@ -902,15 +931,12 @@ act_obj_destroy(act_obj_t *const act, const int is_deleted)
 			}
 		}
 	}
-	if(act->ratelimiter != NULL) {
-		ratelimitDestruct(act->ratelimiter);
-	}
 	if(act->pStrm != NULL) {
 		const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
 		pollFile(act); /* get any left-over data */
 		if(inst->bRMStateOnDel) {
 			statefn = getStateFileName(act, statefile, sizeof(statefile));
-			getFullStateFileName(statefn, toDel, sizeof(toDel));
+			getFullStateFileName(statefn, "", toDel, sizeof(toDel)); // TODO: check!
 			statefn = toDel;
 		}
 		persistStrmState(act);
@@ -920,6 +946,9 @@ act_obj_destroy(act_obj_t *const act, const int is_deleted)
 			DBGPRINTF("act_obj_destroy: deleting state file %s\n", statefn);
 			unlink((char*)statefn);
 		}
+	}
+	if(act->ratelimiter != NULL) {
+		ratelimitDestruct(act->ratelimiter);
 	}
 	#ifdef HAVE_INOTIFY_INIT
 	if(act->wd != -1) {
@@ -934,7 +963,6 @@ act_obj_destroy(act_obj_t *const act, const int is_deleted)
 	#endif
 	free(act->basename);
 	free(act->source_name);
-	//free(act->statefile);
 	free(act->multiSub.ppMsgs);
 	#if defined(OS_SOLARIS) && defined (HAVE_PORT_SOURCE_FILE)
 		act->is_deleted = 1;
@@ -980,10 +1008,10 @@ chk_active(const act_obj_t *act, const act_obj_t *const deleted)
 /* unlink act object from linked list and then
  * destruct it.
  */
-static void //ATTR_NONNULL()
+static void ATTR_NONNULL()
 act_obj_unlink(act_obj_t *act)
 {
-	DBGPRINTF("act_obj_unlink %p: %s\n", act, act->name);
+	DBGPRINTF("act_obj_unlink %p: %s, pStrm %p\n", act, act->name, act->pStrm);
 	if(act->prev == NULL) {
 		act->edge->active = act->next;
 	} else {
@@ -994,9 +1022,6 @@ act_obj_unlink(act_obj_t *act)
 	}
 	act_obj_destroy(act, 1);
 	act = NULL;
-//dbgprintf("printout of fs tree post unlink\n");
-//fs_node_print(runModConf->conf_tree, 0);
-//dbg_wdmapPrint("wdmap after");
 }
 
 static void
@@ -1120,45 +1145,16 @@ finalize_it:
 	RETiRet;
 }
 
-#if 0 //TODO: check if we need (specialised?) versions of this?
-/* we receive a notification that a new object is found *beneath*
- * act. This function now finds the right spot to place it and the
- * activate the monitor.
- * TODO: think if it is worth optimizing this based on the inotify-provided
- * name. But it's complex in any case...
- */
-static rsRetVal ATTR_NONNULL(1, 2)
-fs_node_notify_new_obj(act_obj_t *const act, const char *const name)
-{
-	DBGPRINTF("fs_node_notify_new_obj: act->name '%s', name '%s'\n",
-		act->name, name);
-#if 0
-	char fullname[MAXFNAME];
-	snprintf(fullname, MAXFNAME, "%s/%s", act->name, name);
-//	act_obj_add(act->edge->node, fullname, 0);
-#endif
-	fs_node_walk(act->edge->node, poll_tree);
-	return RS_RET_OK;
-}
-
-static rsRetVal ATTR_NONNULL(1, 2)
-fs_node_notify_file_del(act_obj_t *const act, const char *const name)
-{
-	DBGPRINTF("fs_node_notify_file_del: act->name '%s', name '%s'\n",
-		act->name, name);
-	fs_node_walk(act->edge->parent, poll_tree);
-	// TODO: 1. impl: walk tree, 2. impl: use inotify name
-	return RS_RET_OK;
-}
-#endif
-
 
 /* Helper function to combine statefile and workdir
  * This function is guranteed to work only on config data and DOES NOT
  * open or otherwise modify disk file state.
  */
 static int ATTR_NONNULL()
-getFullStateFileName(const uchar *const pszstatefile, uchar *const pszout, const size_t ilenout)
+getFullStateFileName(const uchar *const pszstatefile,
+	const char *const file_id,
+	uchar *const pszout,
+	const size_t ilenout)
 {
 	int lenout;
 	const uchar* pszworkdir;
@@ -1167,13 +1163,70 @@ getFullStateFileName(const uchar *const pszstatefile, uchar *const pszout, const
 	pszworkdir = glblGetWorkDirRaw();
 
 	/* Construct file name */
-	lenout = snprintf((char*)pszout, ilenout, "%s/%s",
-			     (char*) (pszworkdir == NULL ? "." : (char*) pszworkdir), (char*)pszstatefile);
+	lenout = snprintf((char*)pszout, ilenout, "%s/%s%s%s",
+		(char*) (pszworkdir == NULL ? "." : (char*) pszworkdir), (char*)pszstatefile,
+		(*file_id == '\0') ? "" : ":", file_id);
 
 	/* return out length */
 	return lenout;
 }
 
+
+/* hash function for file-id
+ * Takes a block of data and returns a string with the hash value.
+ *
+ * Currently one provided by Aaaron Wiebe based on perl's hashing algorithm
+ * (so probably pretty generic). Not for excessively large strings!
+ * TODO: re-think the hash function!
+ */
+#if defined(__clang__)
+#pragma GCC diagnostic ignored "-Wunknown-attributes"
+#endif
+static void __attribute__((nonnull(1,3)))
+#if defined(__clang__)
+__attribute__((no_sanitize("unsigned-integer-overflow")))
+#endif
+get_file_id_hash(const char *data, size_t lendata,
+	char *const hash_str, const size_t len_hash_str)
+{
+	assert(len_hash_str >= 17); /* we always generate 8-byte strings */
+
+	size_t i;
+	uint8_t out[8], k[16];
+	for (i = 0; i < 16; ++i)
+		k[i] = i;
+	memset(out, 0, sizeof(out));
+	rs_siphash((const uint8_t *)data, lendata, k, out, 8);
+
+	for(i = 0 ; i < 8 ; ++i) {
+		if(2 * i+1 >= len_hash_str)
+			break;
+		snprintf(hash_str+(2*i), 3, "%2.2x", out[i]);
+	}
+}
+
+
+/* this returns the file-id for a given file
+ */
+static void ATTR_NONNULL(1, 2)
+getFileID(const act_obj_t *const act, char *const buf, const size_t lenbuf)
+{
+	*buf = '\0'; /* default: empty hash, only set if file has sufficient data */
+	const int fd = open(act->name, O_RDONLY | O_CLOEXEC);
+	if(fd >= 0) {
+		char filedata[FILE_ID_SIZE];
+		const int r = read(fd, filedata, FILE_ID_SIZE);
+		if(r == FILE_ID_SIZE) {
+			get_file_id_hash(filedata, sizeof(filedata), buf, lenbuf);
+		} else {
+			DBGPRINTF("getFileID partial or error read, ret %d\n", r);
+		}
+		close(fd);
+	} else {
+		DBGPRINTF("getFileID open %s failed\n", act->name);
+	}
+	DBGPRINTF("getFileID for '%s', file_id_hash '%s'\n", act->name, buf);
+}
 
 /* this generates a state file name suitable for the given file. To avoid
  * malloc calls, it must be passed a buffer which should be MAXFNAME large.
@@ -1223,7 +1276,7 @@ enqLine(act_obj_t *const act,
 		/* Make sure we account for terminating null byte */
 		size_t ceeMsgSize = msgLen + CONST_LEN_CEE_COOKIE + 1;
 		char *ceeMsg;
-		CHKmalloc(ceeMsg = MALLOC(ceeMsgSize));
+		CHKmalloc(ceeMsg = malloc(ceeMsgSize));
 		strcpy(ceeMsg, CONST_CEE_COOKIE);
 		strcat(ceeMsg, (char*)rsCStrGetSzStrNoNULL(cstrLine));
 		MsgSetRawMsg(pMsg, ceeMsg, ceeMsgSize);
@@ -1246,12 +1299,15 @@ enqLine(act_obj_t *const act,
 		metadata_values[1] = file_offset;
 		msgAddMultiMetadata(pMsg, metadata_names, metadata_values, 2);
 	}
+
+	if(inst->delay_perMsg) {
+		srSleep(inst->delay_perMsg % 1000000, inst->delay_perMsg / 1000000);
+	}
+
 	ratelimitAddMsg(act->ratelimiter, &act->multiSub, pMsg);
 finalize_it:
 	RETiRet;
 }
-
-
 /* try to open a file which has a state file. If the state file does not
  * exist or cannot be read, an error is returned.
  */
@@ -1261,22 +1317,48 @@ openFileWithStateFile(act_obj_t *const act)
 	DEFiRet;
 	uchar pszSFNam[MAXFNAME];
 	uchar statefile[MAXFNAME];
+	char file_id[FILE_ID_HASH_SIZE];
 	int fd = -1;
 	const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
 
 	uchar *const statefn = getStateFileName(act, statefile, sizeof(statefile));
+	getFileID(act, file_id, sizeof(file_id));
 
-	getFullStateFileName(statefn, pszSFNam, sizeof(pszSFNam));
+	getFullStateFileName(statefn, file_id, pszSFNam, sizeof(pszSFNam));
 	DBGPRINTF("trying to open state for '%s', state file '%s'\n", act->name, pszSFNam);
 
 	/* check if the file exists */
 	fd = open((char*)pszSFNam, O_CLOEXEC | O_NOCTTY | O_RDONLY, 0600);
 	if(fd < 0) {
 		if(errno == ENOENT) {
-			DBGPRINTF("NO state file (%s) exists for '%s' - trying to see if "
-				"old-style file exists\n", pszSFNam, act->name);
-			CHKiRet(OLD_openFileWithStateFile(act));
-			FINALIZE;
+			if(file_id[0] != '\0') {
+				const char *pszSFNamHash = strdup((const char*)pszSFNam);
+				CHKmalloc(pszSFNamHash);
+				DBGPRINTF("state file %s for %s does not exist - trying to see if "
+					"inode-only file exists\n", pszSFNam, act->name);
+				getFullStateFileName(statefn, "", pszSFNam, sizeof(pszSFNam));
+				fd = open((char*)pszSFNam, O_CLOEXEC | O_NOCTTY | O_RDONLY, 0600);
+				if(fd >= 0) {
+					/* we now can use identify the file, so let's rename it */
+					if(rename((const char*)pszSFNam, pszSFNamHash) != 0) {
+						LogError(errno, RS_RET_IO_ERROR,
+							"imfile error trying to rename state file for '%s' - "
+							"ignoring this error, usually this means a file no "
+							"longer file is left over, but this may also cause "
+							"some real trouble. Still the best we can do ",
+							act->name);
+						free((void*) pszSFNamHash);
+						ABORT_FINALIZE(RS_RET_IO_ERROR);
+					}
+				}
+				free((void*) pszSFNamHash);
+			}
+			if(fd < 0) {
+				DBGPRINTF("state file %s for %s does not exist - trying to see if "
+					"old-style file exists\n", pszSFNam, act->name);
+				CHKiRet(OLD_openFileWithStateFile(act));
+				FINALIZE;
+			}
 		} else {
 			LogError(errno, RS_RET_IO_ERROR,
 				"imfile error trying to access state file for '%s'",
@@ -1285,6 +1367,7 @@ openFileWithStateFile(act_obj_t *const act)
 		}
 	}
 
+	DBGPRINTF("opened state file %s for %s\n", pszSFNam, act->name);
 	CHKiRet(strm.Construct(&act->pStrm));
 
 	struct json_object *jval;
@@ -1350,8 +1433,6 @@ static rsRetVal
 openFileWithoutStateFile(act_obj_t *const act)
 {
 	DEFiRet;
-	struct stat stat_buf;
-
 	const instanceConf_t *const inst = act->edge->instarr[0];// TODO: same file, multiple instances?
 
 	DBGPRINTF("clean startup withOUT state file for '%s'\n", act->name);
@@ -1367,9 +1448,16 @@ openFileWithoutStateFile(act_obj_t *const act)
 	/* As a state file not exist, this is a fresh start. seek to file end
 	 * when freshStartTail is on.
 	 */
-	if(inst->freshStartTail){
-		if(stat((char*) act->name, &stat_buf) != -1) {
-			act->pStrm->iCurrOffs = stat_buf.st_size;
+	if(inst->freshStartTail) {
+		const int fd = open(act->name, O_RDONLY | O_CLOEXEC);
+		if(fd >= 0) {
+			act->pStrm->iCurrOffs = lseek64(fd, 0, SEEK_END);
+			if(act->pStrm->iCurrOffs < 0) {
+				act->pStrm->iCurrOffs = 0;
+				LogError(errno, RS_RET_ERR, "imfile: could not query current "
+					"file size for %s - 'freshStartTail' option will "
+					"be ignored, starting at begin of file", inst->pszFileName);
+			}
 			CHKiRet(strm.SeekCurrOffs(act->pStrm));
 		}
 	}
@@ -1405,11 +1493,9 @@ finalize_it:
  */
 static void pollFileCancelCleanup(void *pArg)
 {
-	BEGINfunc;
 	cstr_t **ppCStr = (cstr_t**) pArg;
 	if(*ppCStr != NULL)
 		rsCStrDestruct(ppCStr);
-	ENDfunc;
 }
 
 
@@ -1420,8 +1506,9 @@ pollFileReal(act_obj_t *act, cstr_t **pCStr)
 	int64 strtOffs;
 	DEFiRet;
 	int nProcessed = 0;
+	regex_t *start_preg = NULL, *end_preg = NULL;
 
-	DBGPRINTF("pollFileReal enter, pStrm %p, name '%s'\n", act->pStrm, act->name);
+	DBGPRINTF("pollFileReal enter, act %p, pStrm %p, name '%s'\n", act, act->pStrm, act->name);
 	DBGPRINTF("pollFileReal enter, edge %p\n", act->edge);
 	DBGPRINTF("pollFileReal enter, edge->instarr %p\n", act->edge->instarr);
 
@@ -1431,15 +1518,18 @@ pollFileReal(act_obj_t *act, cstr_t **pCStr)
 		CHKiRet(openFile(act)); /* open file */
 	}
 
+	start_preg = (inst->startRegex == NULL) ? NULL : &inst->start_preg;
+	end_preg = (inst->endRegex == NULL) ? NULL : &inst->end_preg;
+
 	/* loop below will be exited when strmReadLine() returns EOF */
 	while(glbl.GetGlobalInputTermState() == 0) {
 		if(inst->maxLinesAtOnce != 0 && nProcessed >= inst->maxLinesAtOnce)
 			break;
-		if(inst->startRegex == NULL) {
+		if((start_preg == NULL) && (end_preg == NULL)) {
 			CHKiRet(strm.ReadLine(act->pStrm, pCStr, inst->readMode, inst->escapeLF,
 				inst->trimLineOverBytes, &strtOffs));
 		} else {
-			CHKiRet(strmReadMultiLine(act->pStrm, pCStr, &inst->end_preg,
+			CHKiRet(strmReadMultiLine(act->pStrm, pCStr, start_preg, end_preg,
 				inst->escapeLF, inst->discardTruncatedMsg, inst->msgDiscardingError, &strtOffs));
 		}
 		++nProcessed;
@@ -1489,7 +1579,7 @@ createInstance(instanceConf_t **const pinst)
 {
 	instanceConf_t *inst;
 	DEFiRet;
-	CHKmalloc(inst = MALLOC(sizeof(instanceConf_t)));
+	CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
 	inst->next = NULL;
 	inst->pBindRuleset = NULL;
 
@@ -1505,6 +1595,7 @@ createInstance(instanceConf_t **const pinst)
 	inst->iPersistStateInterval = 0;
 	inst->readMode = 0;
 	inst->startRegex = NULL;
+	inst->endRegex = NULL;
 	inst->discardTruncatedMsg = 0;
 	inst->msgDiscardingError = 1;
 	inst->bRMStateOnDel = 1;
@@ -1515,6 +1606,7 @@ createInstance(instanceConf_t **const pinst)
 	inst->freshStartTail = 0;
 	inst->fileNotFoundError = 1;
 	inst->readTimeout = loadModConf->readTimeout;
+	inst->delay_perMsg = 0;
 
 	/* node created, let's add to config */
 	if(loadModConf->tail == NULL) {
@@ -1712,6 +1804,8 @@ CODESTARTnewInpInst
 			inst->readMode = (sbool) pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "startmsg.regex")) {
 			inst->startRegex = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+		} else if(!strcmp(inppblk.descr[i].name, "endmsg.regex")) {
+			inst->endRegex = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(inppblk.descr[i].name, "discardtruncatedmsg")) {
 			inst->discardTruncatedMsg = (sbool) pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "msgdiscardingerror")) {
@@ -1720,6 +1814,8 @@ CODESTARTnewInpInst
 			inst->bRMStateOnDel = (sbool) pvals[i].val.d.n; // TODO: duplicate!
 		} else if(!strcmp(inppblk.descr[i].name, "addmetadata")) {
 			inst->addMetadata = (sbool) pvals[i].val.d.n;
+		} else if(!strcmp(inppblk.descr[i].name, "delay.message")) {
+			inst->delay_perMsg = (unsigned) pvals[i].val.d.n;
 		} else if (!strcmp(inppblk.descr[i].name, "addceetag")) {
 			inst->addCeeTag = (sbool) pvals[i].val.d.n;
 		} else if(!strcmp(inppblk.descr[i].name, "freshstarttail")) {
@@ -1752,19 +1848,31 @@ CODESTARTnewInpInst
 			  "param '%s'\n", inppblk.descr[i].name);
 		}
 	}
-	if(inst->readMode != 0 &&  inst->startRegex != NULL) {
+	i = (inst->readMode > 0) ? 1 : 0;
+	i = (NULL != inst->startRegex) ? (i+1) : i;
+	i = (NULL != inst->endRegex) ? (i+1) : i;
+	if(i > 1) {
 		LogError(0, RS_RET_PARAM_NOT_PERMITTED,
-			"readMode and startmsg.regex cannot be set "
-			"at the same time --- remove one of them");
+			"only one of readMode or startmsg.regex or endmsg.regex can be set "
+			"at the same time");
 			ABORT_FINALIZE(RS_RET_PARAM_NOT_PERMITTED);
 	}
 
 	if(inst->startRegex != NULL) {
-		const int errcode = regcomp(&inst->end_preg, (char*)inst->startRegex, REG_EXTENDED);
+		const int errcode = regcomp(&inst->start_preg, (char*)inst->startRegex, REG_EXTENDED);
+		if(errcode != 0) {
+			char errbuff[512];
+			regerror(errcode, &inst->start_preg, errbuff, sizeof(errbuff));
+			parser_errmsg("imfile: error in startmsg.regex expansion: %s", errbuff);
+			ABORT_FINALIZE(RS_RET_ERR);
+		}
+	}
+	if(inst->endRegex != NULL) {
+		const int errcode = regcomp(&inst->end_preg, (char*)inst->endRegex, REG_EXTENDED);
 		if(errcode != 0) {
 			char errbuff[512];
 			regerror(errcode, &inst->end_preg, errbuff, sizeof(errbuff));
-			parser_errmsg("imfile: error in regex expansion: %s", errbuff);
+			parser_errmsg("imfile: error in endmsg.regex expansion: %s", errbuff);
 			ABORT_FINALIZE(RS_RET_ERR);
 		}
 	}
@@ -1810,16 +1918,14 @@ BEGINsetModCnf
 	struct cnfparamvals *pvals = NULL;
 	int i;
 CODESTARTsetModCnf
-	/* new style config has different default! */
-#if defined(OS_SOLARIS)
-	#if defined (HAVE_PORT_SOURCE_FILE) /* use FEN on Solaris if available */
+	#if defined(HAVE_PORT_SOURCE_FILE)
+		/* this means we are on Solaris, so inotify is not there */
 		loadModConf->opMode = OPMODE_FEN;
+	#elif defined(HAVE_INOTIFY_INIT)
+		loadModConf->opMode = OPMODE_INOTIFY;
 	#else
 		loadModConf->opMode = OPMODE_POLLING;
 	#endif
-#else
-	loadModConf->opMode = OPMODE_INOTIFY;
-#endif
 	pvals = nvlstGetParams(lst, &modpblk, NULL);
 	if(pvals == NULL) {
 		LogError(0, RS_RET_MISSING_CNFPARAMS, "imfile: error processing module "
@@ -1961,7 +2067,6 @@ BEGINfreeCnf
 	instanceConf_t *inst, *del;
 CODESTARTfreeCnf
 	fs_node_destroy(pModConf->conf_tree);
-	//move_list_destruct(pModConf);
 	for(inst = pModConf->root ; inst != NULL ; ) {
 		free(inst->pszBindRuleset);
 		free(inst->pszFileName);
@@ -1969,8 +2074,12 @@ CODESTARTfreeCnf
 		free(inst->pszStateFile);
 		free(inst->pszFileName_forOldStateFile);
 		if(inst->startRegex != NULL) {
-			regfree(&inst->end_preg);
+			regfree(&inst->start_preg);
 			free(inst->startRegex);
+		}
+		if(inst->endRegex != NULL) {
+			regfree(&inst->end_preg);
+			free(inst->endRegex);
 		}
 		del = inst;
 		inst = inst->next;
@@ -2279,7 +2388,6 @@ do_fen(void)
 	port_event_t portEvent;
 	struct timespec timeout;
 	DEFiRet;
-	//rsRetVal iRetTmp = RS_RET_OK;
 
 	/* Set port timeout to 1 second. We need to check for unmonitored files during meantime */
 	// TODO: do we need this timeout at all for equality to old code?
@@ -2325,7 +2433,6 @@ do_fen(void)
 			if(act->edge->is_file) {
 				pollFile(act);
 			} else {
-				// curr: fs_node_walk(act->edge->parent, poll_tree);
 				fs_node_walk(act->edge->node, poll_tree);
 			}
 		}
@@ -2436,11 +2543,13 @@ static rsRetVal ATTR_NONNULL()
 persistStrmState(act_obj_t *const act)
 {
 	DEFiRet;
+	char file_id[FILE_ID_HASH_SIZE];
 	uchar statefile[MAXFNAME];
 	uchar statefname[MAXFNAME];
 
 	uchar *const statefn = getStateFileName(act, statefile, sizeof(statefile));
-	getFullStateFileName(statefn, statefname, sizeof(statefname));
+	getFileID(act, file_id, sizeof(file_id));
+	getFullStateFileName(statefn, file_id, statefname, sizeof(statefname));
 	DBGPRINTF("persisting state for '%s', state file '%s'\n", act->name, statefname);
 
 	struct json_object *jval = NULL;

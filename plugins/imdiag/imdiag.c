@@ -99,8 +99,10 @@ struct modConfData_s {
 	EMPTY_STRUCT;
 };
 
+static flowControl_t injectmsgDelayMode = eFLOWCTL_NO_DELAY;
 static int iTCPSessMax = 20; /* max number of sessions */
 static int iStrmDrvrMode = 0; /* mode for stream driver, driver-dependent (0 mostly means plain tcp) */
+static uchar *pszLstnPortFileName = NULL;
 static uchar *pszStrmDrvrAuthMode = NULL; /* authentication mode to use */
 static uchar *pszInputName = NULL; /* value for inputname property, NULL is OK and handled by core engine */
 
@@ -225,7 +227,7 @@ doInjectMsg(uchar *szMsg, ratelimit_t *ratelimiter)
 	CHKiRet(msgConstructWithTime(&pMsg, &stTime, ttGenTime));
 	MsgSetRawMsg(pMsg, (char*) szMsg, ustrlen(szMsg));
 	MsgSetInputName(pMsg, pInputName);
-	MsgSetFlowControlType(pMsg, eFLOWCTL_NO_DELAY);
+	MsgSetFlowControlType(pMsg, injectmsgDelayMode);
 	pMsg->msgFlags  = NEEDS_PARSING | PARSE_HOSTNAME;
 	MsgSetRcvFrom(pMsg, pRcvDummy);
 	CHKiRet(MsgSetRcvFromIP(pMsg, pRcvIPDummy));
@@ -352,6 +354,21 @@ finalize_it:
 	RETiRet;
 }
 
+static rsRetVal
+enableDebug(tcps_sess_t *pSess)
+{
+	DEFiRet;
+
+	Debug = DEBUG_FULL;
+	debugging_on = 1;
+	dbgprintf("Note: debug turned on via imdiag\n");
+
+	CHKiRet(sendResponse(pSess, "debug enabled\n"));
+
+finalize_it:
+	RETiRet;
+}
+
 static void
 imdiag_statsReadCallback(statsobj_t __attribute__((unused)) *const ignore_stats,
 	void __attribute__((unused)) *const ignore_ctx)
@@ -446,8 +463,8 @@ finalize_it:
 /* Function to handle received messages. This is our core function!
  * rgerhards, 2009-05-24
  */
-static rsRetVal
-OnMsgReceived(tcps_sess_t *pSess, uchar *pRcv, int iLenMsg)
+static rsRetVal ATTR_NONNULL()
+OnMsgReceived(tcps_sess_t *const pSess, uchar *const pRcv, const int iLenMsg)
 {
 	uchar *pszMsg;
 	uchar *pToFree = NULL;
@@ -461,7 +478,7 @@ OnMsgReceived(tcps_sess_t *pSess, uchar *pRcv, int iLenMsg)
 	 * WITHOUT a termination \0 char. So we need to convert it to one
 	 * before proceeding.
 	 */
-	CHKmalloc(pszMsg = MALLOC(iLenMsg + 1));
+	CHKmalloc(pszMsg = malloc(iLenMsg + 1));
 	pToFree = pszMsg;
 	memcpy(pszMsg, pRcv, iLenMsg);
 	pszMsg[iLenMsg] = '\0';
@@ -482,14 +499,15 @@ OnMsgReceived(tcps_sess_t *pSess, uchar *pRcv, int iLenMsg)
 		CHKiRet(blockStatsReporting(pSess));
 	} else if(!ustrcmp(cmdBuf, UCHAR_CONSTANT("awaitstatsreport"))) {
 		CHKiRet(awaitStatsReport(pszMsg, pSess));
+	} else if(!ustrcmp(cmdBuf, UCHAR_CONSTANT("enabledebug"))) {
+		CHKiRet(enableDebug(pSess));
 	} else {
 		dbgprintf("imdiag unkown command '%s'\n", cmdBuf);
 		CHKiRet(sendResponse(pSess, "unkown command '%s'\n", cmdBuf));
 	}
 
 finalize_it:
-	if(pToFree != NULL)
-		free(pToFree);
+	free(pToFree);
 	RETiRet;
 }
 
@@ -503,6 +521,26 @@ setPermittedPeer(void __attribute__((unused)) *pVal, uchar *pszID)
 	CHKiRet(net.AddPermittedPeer(&pPermPeersRoot, pszID));
 	free(pszID); /* no longer needed, but we need to free as of interface def */
 finalize_it:
+	RETiRet;
+}
+
+
+static rsRetVal
+setInjectDelayMode(void __attribute__((unused)) *pVal, uchar *const pszMode)
+{
+	DEFiRet;
+
+	if(!strcasecmp((char*)pszMode, "no")) {
+		injectmsgDelayMode = eFLOWCTL_NO_DELAY;
+	} else if(!strcasecmp((char*)pszMode, "light")) {
+		injectmsgDelayMode = eFLOWCTL_LIGHT_DELAY;
+	} else if(!strcasecmp((char*)pszMode, "full")) {
+		injectmsgDelayMode = eFLOWCTL_FULL_DELAY;
+	} else {
+		LogError(0, RS_RET_PARAM_ERROR,
+			"imdiag: invalid imdiagInjectDelayMode '%s' - ignored", pszMode);
+	}
+	free(pszMode);
 	RETiRet;
 }
 
@@ -521,6 +559,7 @@ static rsRetVal addTCPListener(void __attribute__((unused)) *pVal, uchar *pNewVa
 		CHKiRet(tcpsrv.SetCBOnErrClose(pOurTcpsrv, onErrClose));
 		CHKiRet(tcpsrv.SetDrvrMode(pOurTcpsrv, iStrmDrvrMode));
 		CHKiRet(tcpsrv.SetOnMsgReceive(pOurTcpsrv, OnMsgReceived));
+		CHKiRet(tcpsrv.SetLstnPortFileName(pOurTcpsrv, pszLstnPortFileName));
 		/* now set optional params, but only if they were actually configured */
 		if(pszStrmDrvrAuthMode != NULL) {
 			CHKiRet(tcpsrv.SetDrvrAuthMode(pOurTcpsrv, pszStrmDrvrAuthMode));
@@ -534,7 +573,7 @@ static rsRetVal addTCPListener(void __attribute__((unused)) *pVal, uchar *pNewVa
 	CHKiRet(tcpsrv.SetInputName(pOurTcpsrv, pszInputName == NULL ?
 						UCHAR_CONSTANT("imdiag") : pszInputName));
 	CHKiRet(tcpsrv.SetOrigin(pOurTcpsrv, (uchar*)"imdiag"));
-	/* we support octect-cuunted frame (constant 1 below) */
+	/* we support octect-counted frame (constant 1 below) */
 	tcpsrv.configureTCPListen(pOurTcpsrv, pNewVal, 1, NULL);
 
 finalize_it:
@@ -629,6 +668,8 @@ CODESTARTmodExit
 
 	/* free some globals to keep valgrind happy */
 	free(pszInputName);
+	free(pszLstnPortFileName);
+	free(pszStrmDrvrAuthMode);
 
 	statsobj.Destruct(&diagStats);
 	sem_destroy(&statsReportingBlocker);
@@ -653,7 +694,8 @@ resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unus
 	iTCPSessMax = 200;
 	iStrmDrvrMode = 0;
 	free(pszInputName);
-	pszInputName = NULL;
+	free(pszLstnPortFileName);
+	pszLstnPortFileName = NULL;
 	if(pszStrmDrvrAuthMode != NULL) {
 		free(pszStrmDrvrAuthMode);
 		pszStrmDrvrAuthMode = NULL;
@@ -693,10 +735,14 @@ CODEmodInit_QueryRegCFSLineHdlr
 	/* register config file handlers */
 	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiagserverrun"), 0, eCmdHdlrGetWord,
 				   addTCPListener, NULL, STD_LOADABLE_MODULE_ID));
+	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiaginjectdelaymode"), 0, eCmdHdlrGetWord,
+				   setInjectDelayMode, NULL, STD_LOADABLE_MODULE_ID));
 	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiagmaxsessions"), 0, eCmdHdlrInt,
 				   NULL, &iTCPSessMax, STD_LOADABLE_MODULE_ID));
 	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiagserverstreamdrivermode"), 0,
 				   eCmdHdlrInt, NULL, &iStrmDrvrMode, STD_LOADABLE_MODULE_ID));
+	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiaglistenportfilename"), 0,
+				   eCmdHdlrGetWord, NULL, &pszLstnPortFileName, STD_LOADABLE_MODULE_ID));
 	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiagserverstreamdriverauthmode"), 0,
 				   eCmdHdlrGetWord, NULL, &pszStrmDrvrAuthMode, STD_LOADABLE_MODULE_ID));
 	CHKiRet(omsdRegCFSLineHdlr(UCHAR_CONSTANT("imdiagserverstreamdriverpermittedpeer"), 0,
@@ -727,7 +773,3 @@ CODEmodInit_QueryRegCFSLineHdlr
 	CHKiRet(statsobj.SetReadNotifier(diagStats, imdiag_statsReadCallback, NULL));
 	CHKiRet(statsobj.ConstructFinalize(diagStats));
 ENDmodInit
-
-
-/* vim:set ai:
- */

@@ -3,7 +3,7 @@
  * This is the implementation of TCP-based syslog clients (the counterpart
  * of the tcpsrv class).
  *
- * Copyright 2007-2012 Adiscon GmbH.
+ * Copyright 2007-2018 Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -22,7 +22,6 @@
  * limitations under the License.
  */
 #include "config.h"
-#include "rsyslog.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -37,6 +36,7 @@
 #if HAVE_FCNTL_H
 #include <fcntl.h>
 #endif
+#include "rsyslog.h"
 #include "dirty.h"
 #include "syslogd-types.h"
 #include "net.h"
@@ -170,7 +170,7 @@ TCPSendBldFrame(tcpclt_t *pThis, char **pmsg, size_t *plen, int *pbMustBeFreed)
 			 * I have added this comment so that the logic is not accidently
 			 * changed again. rgerhards, 2005-10-25
 			 */
-			if((buf = MALLOC(len + 2)) == NULL) {
+			if((buf = malloc(len + 2)) == NULL) {
 				/* extreme mem shortage, try to solve
 				 * as good as we can. No point in calling
 				 * any alarms, they might as well run out
@@ -218,7 +218,7 @@ TCPSendBldFrame(tcpclt_t *pThis, char **pmsg, size_t *plen, int *pbMustBeFreed)
 		/* IETF20061218 iLenBuf =
 		  snprintf(szLenBuf, sizeof(szLenBuf), "%d ", len + iLenBuf);*/
 
-		if((buf = MALLOC(len + iLenBuf)) == NULL) {
+		if((buf = malloc(len + iLenBuf)) == NULL) {
 			/* we are out of memory. This is an extreme situation. We do not
 			 * call any alarm handlers because they most likely run out of mem,
 			 * too. We are brave enough to call debug output, though. Other than
@@ -325,7 +325,7 @@ Send(tcpclt_t *pThis, void *pData, char *msg, size_t len)
 				 * happens is that we lose our message recovery buffer - anything else would
 				 * be worse, so don't try anything ;) -- rgerhards, 2008-03-12
 				 */
-				if((pThis->prevMsg = MALLOC(len)) != NULL) {
+				if((pThis->prevMsg = malloc(len)) != NULL) {
 					memcpy(pThis->prevMsg, msg, len);
 					pThis->lenPrevMsg = len;
 				}

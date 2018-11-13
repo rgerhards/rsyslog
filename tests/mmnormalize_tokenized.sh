@@ -3,7 +3,7 @@
 # This file is part of the rsyslog project, released under ASL 2.0
 echo ===============================================================================
 echo \[mmnormalize_tokenized.sh\]: test for mmnormalize tokenized field_type
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 template(name="ips" type="string" string="%$.ips%\n")
@@ -38,9 +38,9 @@ shutdown_when_empty
 echo wait on shutdown
 wait_shutdown 
 cp  $RSYSLOG_OUT_LOG /tmp/
-. $srcdir/diag.sh content-check '[ "10.20.30.40", "50.60.70.80", "90.100.110.120", "130.140.150.160" ]'
-. $srcdir/diag.sh content-check '[ "192.168.1.2", "192.168.1.3", "192.168.1.4" ]'
-. $srcdir/diag.sh content-check '[ "10.20.30.40", "50.60.70.80", "190.200.210.220" ]'
-. $srcdir/diag.sh content-check '[ "\/bin", "\/usr\/local\/bin", "\/usr\/bin" ] foo'
-. $srcdir/diag.sh content-check '[ [ [ "10" ] ], [ [ "20" ], [ "30", "40", "50" ], [ "60", "70", "80" ] ], [ [ "90" ], [ "100" ] ] ]'
+content_check '[ "10.20.30.40", "50.60.70.80", "90.100.110.120", "130.140.150.160" ]'
+content_check '[ "192.168.1.2", "192.168.1.3", "192.168.1.4" ]'
+content_check '[ "10.20.30.40", "50.60.70.80", "190.200.210.220" ]'
+content_check '[ "\/bin", "\/usr\/local\/bin", "\/usr\/bin" ] foo'
+content_check '[ [ [ "10" ] ], [ [ "20" ], [ "30", "40", "50" ], [ "60", "70", "80" ] ], [ [ "90" ], [ "100" ] ] ]'
 exit_test

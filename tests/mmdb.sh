@@ -6,7 +6,7 @@ echo \[mmdb.sh\]: test for mmdb
 # uncomment for debugging support:
 #export RSYSLOG_DEBUG="debug nostdout"
 #export RSYSLOG_DEBUGLOG="log"
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 template(name="outfmt" type="string" string="%$!iplocation%\n")
@@ -25,5 +25,5 @@ startup
 tcpflood -m 1 -j "202.106.0.20\ "
 shutdown_when_empty
 wait_shutdown
-. $srcdir/diag.sh content-check '{ "city": "Beijing" }'
+content_check '{ "city": "Beijing" }'
 exit_test 

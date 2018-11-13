@@ -1,13 +1,12 @@
 #!/bin/bash
 # This file is part of the rsyslog project, released under ASL 2.0
+. ${srcdir:=.}/diag.sh init
 export ES_DOWNLOAD=elasticsearch-6.0.0.tar.gz
-. $srcdir/diag.sh download-elasticsearch
-. $srcdir/diag.sh stop-elasticsearch
-. $srcdir/diag.sh prepare-elasticsearch
-. $srcdir/diag.sh start-elasticsearch
+download_elasticsearch
+prepare_elasticsearch
+start_elasticsearch
 
-. $srcdir/diag.sh init
-. $srcdir/diag.sh es-init
+init_elasticsearch
 echo '{ "name" : "foo" }
 {"name": bar"}
 {"name": "baz"}
@@ -34,7 +33,7 @@ ruleset(name="foo") {
 	 searchType="test-type"
 	 bulkmode="on"
 	 serverport="19200"
-	 errorFile="./rsyslog.errorfile"
+	 errorFile="./'${RSYSLOG_DYNNAME}'.errorfile"
 	erroronly="on"		 
 	interleaved="on")
 }
@@ -57,5 +56,5 @@ then
     echo "error: Format for error file different! " $?
     exit 1
 fi
-. $srcdir/diag.sh cleanup-elasticsearch
+cleanup_elasticsearch
 exit_test

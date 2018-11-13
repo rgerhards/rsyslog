@@ -48,7 +48,7 @@
  *
  * File begun on 2008-01-04 by RGerhards
  *
- * Copyright 2008-2016 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2008-2018 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of the rsyslog runtime library.
  *
@@ -959,39 +959,6 @@ finalize_it:
 	RETiRet;
 }
 
-/* This is a dummy deserializer, to be used for the delete queue reader
- * specifically. This is kind of a hack, but also to be replace (hopefully) soon
- * by totally different code. So let's make it as simple as possible...
- * rgerhards, 2012-11-06
- */
-rsRetVal
-objDeserializeDummy(obj_t __attribute__((unused)) *pObj, strm_t *pStrm)
-{
-	DEFiRet;
-	var_t *pVar = NULL;
-
-	CHKiRet(var.Construct(&pVar));
-	CHKiRet(var.ConstructFinalize(pVar));
-
-	iRet = objDeserializeProperty(pVar, pStrm);
-	while(iRet == RS_RET_OK) {
-		/* this loop does actually NOGHTING but read the file... */
-		/* re-init var object - TODO: method of var! */
-		rsCStrDestruct(&pVar->pcsName); /* no longer needed */
-		if(pVar->varType == VARTYPE_STR) {
-			if(pVar->val.pStr != NULL)
-				rsCStrDestruct(&pVar->val.pStr);
-		}
-		iRet = objDeserializeProperty(pVar, pStrm);
-	}
-finalize_it:
-	if(iRet == RS_RET_NO_PROPLINE)
-		iRet = RS_RET_OK; /* NO_PROPLINE is OK and a kind of EOF! */
-	if(pVar != NULL)
-		var.Destruct(&pVar);
-	RETiRet;
-}
-
 
 /* De-Serialize an object property bag. As a property bag contains only partial properties,
  * it is not instanciable. Thus, the caller must provide a pointer of an already-instanciated
@@ -1078,7 +1045,6 @@ objGetName(obj_t *const pThis)
 	uchar *ret;
 	uchar szName[128];
 
-	BEGINfunc
 	ISOBJ_assert(pThis);
 
 	if(pThis->pszName == NULL) {
@@ -1096,7 +1062,6 @@ objGetName(obj_t *const pThis)
 		ret = pThis->pszName;
 	}
 
-	ENDfunc
 	return ret;
 }
 
@@ -1127,10 +1092,7 @@ FindObjInfo(const char *const __restrict__ strOID, objInfo_t **ppInfo)
 	*ppInfo = arrObjInfo[i];
 
 finalize_it:
-	if(iRet == RS_RET_OK) {
-		/* DEV DEBUG ONLY dbgprintf("caller requested object '%s', found at index %d\n", (*ppInfo)->pszID, i);*/
-		/*EMPTY BY INTENSION*/;
-	} else {
+	if(iRet != RS_RET_OK) {
 		dbgprintf("caller requested object '%s', not found (iRet %d)\n", strOID, iRet);
 	}
 
@@ -1387,7 +1349,6 @@ objClassExit(void)
 	cfsyslineExit(pModInfo);
 	varClassExit(pModInfo);
 #endif
-	errmsgClassExit();
 	moduleClassExit();
 	RETiRet;
 }
@@ -1426,7 +1387,6 @@ objClassInit(modInfo_t *pModInfo)
 	CHKiRet(objGetObjInterface(&obj)); /* get ourselves ;) */
 
 	/* init classes we use (limit to as few as possible!) */
-	CHKiRet(errmsgClassInit(pModInfo));
 	CHKiRet(datetimeClassInit(pModInfo));
 	CHKiRet(cfsyslineInit());
 	CHKiRet(varClassInit(pModInfo));

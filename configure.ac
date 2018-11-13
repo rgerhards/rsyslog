@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([rsyslog],[8.38.0.master],[rsyslog@lists.adiscon.com])
+AC_INIT([rsyslog],[8.40.0.master],[rsyslog@lists.adiscon.com])
 
 # AIXPORT START: Detect the underlying OS
 unamestr=$(uname)
@@ -12,7 +12,7 @@ if test "$unamestr" = "AIX"; then
 	LIBS="-lbsd -lsrc"
 	CPPFLAGS="-D_THREAD_SAFE -D_BSD43 -D_AIX"
 	CFLAGS="-D_AIX"
-	LDFLAGS="-qcpluscmt -brtl -bexpall -bE:strippedsymbols.exp "
+	LDFLAGS="-qcpluscmt -brtl "
 	LIBESTR_LIBS="-L/usr/lib/ -lestr"
 	LIBESTR_CFLAGS="-I/usr/include"
 	LIBLOGGING_STDLOG_LIBS="-L/usr/lib/ -llogging-stdlog"
@@ -129,6 +129,8 @@ case "${host}" in
 esac
 AM_CONDITIONAL(OS_APPLE, test x$os_type == xapple)
 AM_CONDITIONAL(OS_LINUX, test x$os_type == xlinux)
+AM_CONDITIONAL(OS_AIX, test x$os_type == xaix)
+
 
 # Running from git source?
 in_git_src=no
@@ -916,6 +918,23 @@ fi
 AM_CONDITIONAL(ENABLE_ELASTICSEARCH, test x$enable_elasticsearch = xyes)
 
 
+# omhttp support
+AC_ARG_ENABLE(omhttp,
+        [AS_HELP_STRING([--enable-omhttp],[Enable http output module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_omhttp="yes" ;;
+          no) enable_omhttp="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-omhttp) ;;
+         esac],
+        [enable_omhttp=no]
+)
+if test "x$enable_omhttp" = "xyes"; then
+        PKG_CHECK_MODULES([CURL], [libcurl])
+        LT_LIB_M
+fi
+AM_CONDITIONAL(ENABLE_OMHTTP, test x$enable_omhttp = xyes)
+
+
 # capability to enable elasticsearch testbench tests. This requries that an ES test
 # environment is present on the local (127.0.0.1) machine. 
 # we support a "minimal" mode to take care of travis where we cannot run all tests
@@ -1384,6 +1403,8 @@ if test "x$enable_relp" = "xyes"; then
 
         AC_CHECK_FUNC([relpSrvSetOversizeMode],
                       [AC_DEFINE([HAVE_RELPSRVSETOVERSIZEMODE], [1], [Define if relpSrvSetOversizeMode exists.])])
+        AC_CHECK_FUNC([relpSrvSetLstnAddr],
+                      [AC_DEFINE([HAVE_RELPSRVSETLSTNADDR], [1], [Define if relpSrvSetLstnAddr exists.])])
 
         CFLAGS="$save_CFLAGS"
         LIBS="$save_LIBS"
@@ -1415,6 +1436,12 @@ fi
 AM_CONDITIONAL(ENABLE_KSI_LS12, test x$enable_ksi_ls12 = xyes)
 
 # liblogging-stdlog support
+# we use liblogging-stdlog inside the testbench, which is why we need to check for it in any case
+PKG_CHECK_MODULES(LIBLOGGING_STDLOG, liblogging-stdlog >= 1.0.3,
+	AC_DEFINE(HAVE_LIBLOGGING_STDLOG, 1, [Define to 1 if liblogging-stdlog is available.]),
+	[AC_MSG_NOTICE([liblogging-stdlog not found, parts of the testbench will not run])]
+)
+
 AC_ARG_ENABLE(liblogging-stdlog,
         [AS_HELP_STRING([--enable-liblogging-stdlog],[Enable liblogging-stdlog support @<:@default=no@:>@])],
         [case "${enableval}" in
@@ -1424,18 +1451,10 @@ AC_ARG_ENABLE(liblogging-stdlog,
          esac],
         [enable_liblogging_stdlog=no]
 )
-if test "x$enable_liblogging_stdlog" = "xyes"; then
-	PKG_CHECK_MODULES(LIBLOGGING_STDLOG, liblogging-stdlog >= 1.0.3,
-		AC_DEFINE(HAVE_LIBLOGGING_STDLOG, 1, [Define to 1 if liblogging-stdlog is available.])
-	)
+if test "x$enable_liblogging_stdlog" = "xyes" -a "x$HAVE_LIBLOGGING_STDLOG" != "x1"; then
+	AC_MSG_ERROR(--enable-liblogging-stdlog set but liblogging-stdlog was not found)
 fi
-AM_CONDITIONAL(ENABLE_LIBLOGGING_STDLOG, test x$enable_liblogging_stdlog = xyes)
-
-# we use liblogging-stdlog inside the testbench, which is why we need to check for it in any case
-PKG_CHECK_MODULES(LIBLOGGING_STDLOG, liblogging-stdlog >= 1.0.3,
-	AC_DEFINE(HAVE_LIBLOGGING_STDLOG, 1, [Define to 1 if liblogging-stdlog is available.]),
-	[AC_MSG_NOTICE([liblogging-stdlog not found, parts of the testbench will not run])]
-)
+AM_CONDITIONAL(ENABLE_LIBLOGGING_STDLOG, [test "x$enable_liblogging_stdlog" = "xyes"])
 
 # RFC 3195 support
 AC_ARG_ENABLE(rfc3195,
@@ -1676,6 +1695,22 @@ if test "x$enable_omjournal" = "xyes"; then
 	])
 fi
 AM_CONDITIONAL(ENABLE_OMJOURNAL, test x$enable_omjournal = xyes)
+
+# capability to enable journal testbench tests. They have very special requirements,
+# so it does not make sense to have them run by default.
+# Also note that as of now, they have a pretty high rate of false positives due
+# to bugs in the journal.
+# see also https://github.com/rsyslog/rsyslog/issues/2931#issuecomment-416914707
+AC_ARG_ENABLE(journal_tests,
+        [AS_HELP_STRING([--enable-journal-tests],[enable systemd journal specific tests in testbench @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_journal_tests="yes" ;;
+          no) enable_journal_tests="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-journal-tests) ;;
+         esac],
+        [enable_journal_tests=no]
+)
+AM_CONDITIONAL(ENABLE_JOURNAL_TESTS, test x$enable_journal_tests = xyes)
 
 
 # settings for pmlastmsg
@@ -2312,6 +2347,7 @@ AC_CONFIG_FILES([Makefile \
 		plugins/mmsnmptrapd/Makefile \
 		plugins/pmlastmsg/Makefile \
 		plugins/mmdblookup/Makefile \
+		contrib/omhttp/Makefile \
 		contrib/fmhash/Makefile \
 		contrib/pmsnare/Makefile \
 		contrib/pmpanngfw/Makefile \
@@ -2378,6 +2414,7 @@ echo "    omstdout module will be compiled:         $enable_omstdout"
 echo "    omjournal module will be compiled:        $enable_omjournal"
 echo "    omhdfs module will be compiled:           $enable_omhdfs"
 echo "    omelasticsearch module will be compiled:  $enable_elasticsearch"
+echo "    omhttp module will be compiled:           $enable_omhttp"
 echo "    omruleset module will be compiled:        $enable_omruleset"
 echo "    omudpspoof module will be compiled:       $enable_omudpspoof"
 echo "    omuxsock module will be compiled:         $enable_omuxsock"
@@ -2443,6 +2480,7 @@ echo "    MySQL Tests enabled:                      $enable_mysql_tests"
 echo "    Elasticsearch Tests:                      $enable_elasticsearch_tests"
 echo "    PostgreSQL Tests enabled:                 $enable_pgsql_tests"
 echo "    Kafka Tests enabled:                      $enable_kafka_tests"
+echo "    systemd journal tests enabled:            $enable_journal_tests"
 echo "    Debug mode enabled:                       $enable_debug"
 echo "    (total) debugless mode enabled:           $enable_debugless"
 echo "    Diagnostic tools enabled:                 $enable_diagtools"

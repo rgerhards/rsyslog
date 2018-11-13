@@ -1,0 +1,28 @@
+comment: off
+
+coverage:
+  # to get things started, let's aim at a lower goal. This actually helps
+  # to find those areas that we need to concentrate on.
+  range: 50..75
+  status:
+    project:
+      default:
+        target: auto
+        threshold: .2
+
+ignore:
+  # different execution pathes (if not, remove) -- rgerhards, 2018-10-12
+  # will be removed soon: https://github.com/rsyslog/rsyslog/issues/2103
+  - "contrib/imczmq"
+  - "contrib/omczmq"
+
+  # we are currently unable to provide test environment for these:
+  - "plugins/imgssapi"
+  - "plugins/omgssapi"
+
+  # these seem to be untestable under CI runs by principle because
+  # that would require a service registration
+  # see also: https://github.com/rsyslog/rsyslog/issues/3073
+  - "runtime/lib_ksi_queue.c"
+  - "runtime/lib_ksils12.c"
+  - "runtime/lmsig_ksi-ls12.c"

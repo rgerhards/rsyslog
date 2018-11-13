@@ -61,6 +61,10 @@ DEFobjCurrIf(ruleset)
 DEFobjCurrIf(glbl)
 DEFobjCurrIf(statsobj)
 
+/* forward references */
+static void * imkafkawrkr(void *myself);
+
+
 struct kafka_params {
 	const char *name;
 	const char *val;
@@ -92,6 +96,7 @@ struct instanceConf_s {
 	rd_kafka_topic_conf_t *topic_conf;
 	int partition;
 	int bIsSubscribed;
+	int nMsgParsingFlags;
 
 	struct instanceConf_s *next;
 };
@@ -106,6 +111,17 @@ struct modConfData_s {
 	ruleset_t *pBindRuleset;	/* ruleset to bind listener to (use system default if unspecified) */
 	uchar *pszBindRuleset;		/* default name of Ruleset to bind to */
 };
+
+/* global data */
+pthread_attr_t wrkrThrdAttr;	/* Attribute for worker threads ; read only after startup */
+static int activeKafkaworkers = 0;
+/* The following structure controls the worker threads. Global data is
+ * needed for their access.
+ */
+static struct kafkaWrkrInfo_s {
+	pthread_t tid;		/* the worker's thread ID */
+	instanceConf_t *inst;	/* Pointer to imkafka instance */
+} *kafkaWrkrInfo;
 
 static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current load process */
 static modConfData_t *runModConf = NULL;/* modConf ptr to use for the current load process */
@@ -130,6 +146,7 @@ static struct cnfparamdescr inppdescr[] = {
 	{ "confparam", eCmdHdlrArray, 0 },
 	{ "consumergroup", eCmdHdlrString, 0},
 	{ "ruleset", eCmdHdlrString, 0 },
+	{ "parsehostname", eCmdHdlrBinary, 0 },
 };
 static struct cnfparamblk inppblk =
 	{ CNFPARAMBLK_VERSION,
@@ -176,7 +193,7 @@ DBGPRINTF("imkafka: enqMsg: Msg: %.*s\n", (int)rkmessage->len, (char *)rkmessage
 	MsgSetRawMsg(pMsg, (char*)rkmessage->payload, (int)rkmessage->len);
 	MsgSetFlowControlType(pMsg, eFLOWCTL_LIGHT_DELAY);
 	MsgSetRuleset(pMsg, inst->pBindRuleset);
-	pMsg->msgFlags  = NEEDS_PARSING; // | PARSE_HOSTNAME;
+	pMsg->msgFlags  = inst->nMsgParsingFlags;
 	/* Optional Fields */
 	if (rkmessage->key_len) {
 		DBGPRINTF("imkafka: enqMsg: Key: %.*s\n", (int)rkmessage->key_len, (char *)rkmessage->key);
@@ -186,10 +203,6 @@ DBGPRINTF("imkafka: enqMsg: Msg: %.*s\n", (int)rkmessage->len, (char *)rkmessage
 
 	CHKiRet(submitMsg2(pMsg));
 
-/* useful?
-	MsgSetHOSTNAME(pMsg, glbl.GetLocalHostName(), ustrlen(glbl.GetLocalHostName()));
-	ratelimitAddMsg(pLstn->ratelimiter, &pLstn->multiSub, pMsg);
-*/
 finalize_it:
 	RETiRet;
 }
@@ -265,10 +278,9 @@ done:
 static rsRetVal
 createInstance(instanceConf_t **pinst)
 {
-/*	rd_kafka_conf_res_t res = RD_KAFKA_CONF_UNKNOWN;*/
 	instanceConf_t *inst;
 	DEFiRet;
-	CHKmalloc(inst = MALLOC(sizeof(instanceConf_t)));
+	CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
 	inst->next = NULL;
 
 	inst->brokers = NULL;
@@ -279,6 +291,7 @@ createInstance(instanceConf_t **pinst)
 	inst->confParams = NULL;
 	inst->pBindRuleset = NULL;
 	inst->bReportErrs = 1; /* Fixed for now */
+	inst->nMsgParsingFlags = NEEDS_PARSING;
 	inst->bIsConnected = 0;
 	inst->bIsSubscribed = 0;
 	/* Kafka objects */
@@ -324,7 +337,8 @@ checkInstance(instanceConf_t *const inst)
 	/* enable kafka debug output */
 	if(rd_kafka_conf_set(inst->conf, "debug", RD_KAFKA_DEBUG_CONTEXTS,
 		kafkaErrMsg, sizeof(kafkaErrMsg)) != RD_KAFKA_CONF_OK) {
-		ABORT_FINALIZE(RS_RET_PARAM_ERROR);
+		LogError(0, RS_RET_KAFKA_ERROR, "imkafka: error setting kafka debug option: %s\n", kafkaErrMsg);
+		/* DO NOT ABORT IN THIS CASE! */
 	}
 #	endif
 
@@ -339,8 +353,12 @@ checkInstance(instanceConf_t *const inst)
 			inst->confParams[i].val,
 			kafkaErrMsg, sizeof(kafkaErrMsg)) != RD_KAFKA_CONF_OK) {
 			if(inst->bReportErrs) {
-				LogError(0, RS_RET_PARAM_ERROR, "imkafka: error in kafka "
+				LogError(0, RS_RET_PARAM_ERROR, "error setting custom configuration "
 					"parameter '%s=%s': %s",
+					inst->confParams[i].name,
+					inst->confParams[i].val, kafkaErrMsg);
+			} else {
+				DBGPRINTF("imkafka: error setting custom configuration parameter '%s=%s': %s",
 					inst->confParams[i].name,
 					inst->confParams[i].val, kafkaErrMsg);
 			}
@@ -555,6 +573,12 @@ CODESTARTnewInpInst
 			inst->consumergroup = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(inppblk.descr[i].name, "ruleset")) {
 			inst->pszBindRuleset = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+		} else if(!strcmp(inppblk.descr[i].name, "parsehostname")) {
+			if (pvals[i].val.d.n) {
+				inst->nMsgParsingFlags = NEEDS_PARSING | PARSE_HOSTNAME;
+			} else {
+				inst->nMsgParsingFlags = NEEDS_PARSING;
+			}
 		} else {
 			dbgprintf("imkafka: program error, non-handled "
 			  "param '%s'\n", inppblk.descr[i].name);
@@ -570,7 +594,6 @@ CODESTARTnewInpInst
 	DBGPRINTF("imkafka: newInpIns brokers=%s, topic=%s, consumergroup=%s\n",
 		inst->brokers, inst->topic, inst->consumergroup);
 
-	iRet = checkInstance(inst);
 finalize_it:
 CODE_STD_FINALIZERnewInpInst
 	cnfparamvalsDestruct(pvals, &inppblk);
@@ -651,6 +674,9 @@ ENDactivateCnfPrePrivDrop
 
 BEGINactivateCnf
 CODESTARTactivateCnf
+	for(instanceConf_t *inst = pModConf->root ; inst != NULL ; inst = inst->next) {
+		iRet = checkInstance(inst);
+	}
 ENDactivateCnf
 
 
@@ -675,20 +701,58 @@ CODESTARTfreeCnf
 ENDfreeCnf
 
 
-/* This function is called to gather input.
- */
+/* Cleanup imkafka worker threads */
+static void
+shutdownKafkaWorkers(void)
+{
+	int i;
+	instanceConf_t *inst;
+
+	assert(kafkaWrkrInfo != NULL);
+
+	DBGPRINTF("imkafka: waiting on imkafka workerthread termination\n");
+	for(i = 0 ; i < activeKafkaworkers ; ++i) {
+		pthread_join(kafkaWrkrInfo[i].tid, NULL);
+		DBGPRINTF("imkafka: Stopped worker %d\n", i);
+	}
+	free(kafkaWrkrInfo);
+	kafkaWrkrInfo = NULL;
+
+	for(inst = runModConf->root ; inst != NULL ; inst = inst->next) {
+		DBGPRINTF("imkafka: stop consuming %s/%s/%s\n",
+			inst->topic, inst->consumergroup, inst->brokers);
+		rd_kafka_consumer_close(inst->rk); /* Close the consumer, committing final offsets, etc. */
+		rd_kafka_destroy(inst->rk); /* Destroy handle object */
+		DBGPRINTF("imkafka: stopped consuming %s/%s/%s\n",
+			inst->topic, inst->consumergroup, inst->brokers);
+
+		#if RD_KAFKA_VERSION < 0x00090001
+		/* Wait for kafka being destroyed in old API */
+		if (rd_kafka_wait_destroyed(10000) < 0)	{
+			DBGPRINTF("imkafka: error, rd_kafka_destroy did not finish after grace "
+				"timeout (10s)!\n");
+		} else {
+			DBGPRINTF("imkafka: rd_kafka_destroy successfully finished\n");
+		}
+		#endif
+	}
+}
+
+
+/* This function is called to gather input.  */
 BEGINrunInput
+	int i;
 	instanceConf_t *inst;
 CODESTARTrunInput
 	DBGPRINTF("imkafka: runInput loop started ...\n");
-	int activeListeners = 0;
+	activeKafkaworkers = 0;
 	for(inst = runModConf->root ; inst != NULL ; inst = inst->next) {
 		if(inst->rk != NULL) {
-			++activeListeners;
+			++activeKafkaworkers;
 		}
 	}
 
-	if(activeListeners == 0) {
+	if(activeKafkaworkers == 0) {
 		LogError(0, RS_RET_ERR, "imkafka: no active inputs, input does "
 			"not run - there should have been additional error "
 			"messages given previously");
@@ -696,37 +760,41 @@ CODESTARTrunInput
 	}
 
 
-	/* Start endless consumer loop - it is terminated when the thread is
-	 * signalled to do so. This, however, is handled by the framework.
-	 */
-	do {
-		for(inst = runModConf->root ; inst != NULL ; inst = inst->next) {
-			if(glbl.GetGlobalInputTermState() == 1)
-				break; /* terminate input! */
+	DBGPRINTF("imkafka: Starting %d imkafka workerthreads\n", activeKafkaworkers);
+	kafkaWrkrInfo = calloc(activeKafkaworkers, sizeof(struct kafkaWrkrInfo_s));
+	if (kafkaWrkrInfo == NULL) {
+		LogError(errno, RS_RET_OUT_OF_MEMORY, "imkafka: worker-info array allocation failed.");
+		ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+	}
 
-			if(inst->rk == NULL) {
-				continue;
-			}
+	/* Start worker threads for each imkafka input source
+	*/
+	i = 0;
+	for(inst = runModConf->root ; inst != NULL ; inst = inst->next) {
+		/* init worker info structure! */
+		kafkaWrkrInfo[i].inst = inst; /* Set reference pointer */
+		pthread_create(&kafkaWrkrInfo[i].tid, &wrkrThrdAttr, imkafkawrkr, &(kafkaWrkrInfo[i]));
+		i++;
+	}
 
-			// Try to add consumer only if connected! */
-			if(inst->bIsConnected == 1 && inst->bIsSubscribed == 0 ) {
-				addConsumer(runModConf, inst);
-			}
-			if(inst->bIsSubscribed == 1 ) {
-				msgConsume(inst);
-			}
-		}
+	while(glbl.GetGlobalInputTermState() == 0) {
 
 		/* Note: the additional 10000ns wait is vitally important. It guards rsyslog
 		 * against totally hogging the CPU if the users selects a polling interval
 		 * of 0 seconds. It doesn't hurt any other valid scenario. So do not remove.
-		 * rgerhards, 2008-02-14
 		 */
 		if(glbl.GetGlobalInputTermState() == 0)
 			srSleep(0, 100000);
-	} while(glbl.GetGlobalInputTermState() == 0);
-
+	}
 	DBGPRINTF("imkafka: terminating upon request of rsyslog core\n");
+
+	/* we need to shutdown kafak worker threads here because this operation can
+	 * potentially block (e.g. when no kafka broker is available!). If this
+	 * happens in runInput, the rsyslog core can cancel our thread. However,
+	 * in afterRun this is not possible, because the core does not assume it
+	 * can block there. -- rgerhards, 2018-10-23
+	 */
+	shutdownKafkaWorkers();
 finalize_it:
 ENDrunInput
 
@@ -737,48 +805,21 @@ CODESTARTwillRun
 	CHKiRet(prop.Construct(&pInputName));
 	CHKiRet(prop.SetString(pInputName, UCHAR_CONSTANT("imkafka"), sizeof("imkafka") - 1));
 	CHKiRet(prop.ConstructFinalize(pInputName));
-
 finalize_it:
 ENDwillRun
 
 
 BEGINafterRun
 CODESTARTafterRun
-	/* do cleanup here */
 	if(pInputName != NULL)
 		prop.Destruct(&pInputName);
 
-	/* kafka cleanup */
-	instanceConf_t *inst;
-	for(inst = runModConf->root ; inst != NULL ; inst = inst->next) {
-		DBGPRINTF("imkafka: afterRun stop consuming %s/%s/%s\n",
-			inst->topic, inst->consumergroup, inst->brokers);
-
-		/* 1) Close the consumer, committing final offsets, etc. */
-		rd_kafka_consumer_close(inst->rk);
-
-		/* 2) Destroy handle object */
-		rd_kafka_destroy(inst->rk);
-
-		DBGPRINTF("imkafka: afterRun stopped consuming %s/%s/%s\n",
-			inst->topic, inst->consumergroup, inst->brokers);
-
-#	if RD_KAFKA_VERSION < 0x00090001
-	/* Wait for kafka being destroyed in old API */
-	if (rd_kafka_wait_destroyed(10000) < 0)	{
-		DBGPRINTF("imkafka: error, rd_kafka_destroy did not finish after grace "
-			"timeout (10s)!\n");
-	} else {
-		DBGPRINTF("imkafka: rd_kafka_destroy successfully finished\n");
-	}
-#	endif
-
-	}
 ENDafterRun
 
 
 BEGINmodExit
 CODESTARTmodExit
+	pthread_attr_destroy(&wrkrThrdAttr);
 	/* release objects we used */
 	objRelease(statsobj, CORE_COMPONENT);
 	objRelease(ruleset, CORE_COMPONENT);
@@ -814,5 +855,50 @@ CODEmodInit_QueryRegCFSLineHdlr
 	CHKiRet(objUse(prop, CORE_COMPONENT));
 	CHKiRet(objUse(ruleset, CORE_COMPONENT));
 	CHKiRet(objUse(statsobj, CORE_COMPONENT));
-	DBGPRINTF("imkafka: version %s initializing\n", VERSION);
+
+	/* initialize "read-only" thread attributes */
+	pthread_attr_init(&wrkrThrdAttr);
+	pthread_attr_setstacksize(&wrkrThrdAttr, 4096*1024);
+
+	DBGPRINTF("imkafka %s using librdkafka version %s, 0x%x\n",
+		VERSION, rd_kafka_version_str(), rd_kafka_version());
 ENDmodInit
+
+/*
+*	Workerthread function for a single kafka consomer
+ */
+static void *
+imkafkawrkr(void *myself)
+{
+	struct kafkaWrkrInfo_s *me = (struct kafkaWrkrInfo_s*) myself;
+	DBGPRINTF("imkafka: started kafka consumer workerthread on %s/%s/%s\n",
+		me->inst->topic, me->inst->consumergroup, me->inst->brokers);
+
+	do {
+		if(glbl.GetGlobalInputTermState() == 1)
+			break; /* terminate input! */
+
+		if(me->inst->rk == NULL) {
+			continue;
+		}
+
+		// Try to add consumer only if connected! */
+		if(me->inst->bIsConnected == 1 && me->inst->bIsSubscribed == 0 ) {
+			addConsumer(runModConf, me->inst);
+		}
+		if(me->inst->bIsSubscribed == 1 ) {
+			msgConsume(me->inst);
+		}
+		/* Note: the additional 10000ns wait is vitally important. It guards rsyslog
+		 * against totally hogging the CPU if the users selects a polling interval
+		 * of 0 seconds. It doesn't hurt any other valid scenario. So do not remove.
+		 * rgerhards, 2008-02-14
+		 */
+		if(glbl.GetGlobalInputTermState() == 0)
+			srSleep(0, 100000);
+	} while(glbl.GetGlobalInputTermState() == 0);
+
+	DBGPRINTF("imkafka: stopped kafka consumer workerthread on %s/%s/%s\n",
+		me->inst->topic, me->inst->consumergroup, me->inst->brokers);
+	return NULL;
+}

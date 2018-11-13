@@ -5,7 +5,7 @@
 # thus we need a supressions file:
 export RS_TESTBENCH_VALGRIND_EXTRA_OPTS="$RS_TESTBENCH_VALGRIND_EXTRA_OPTS --suppressions=$srcdir/libmaxmindb.supp"
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 template(name="outfmt" type="string" string="%$!iplocation%\n")
@@ -24,6 +24,6 @@ startup_vg
 tcpflood -m 100 -j "202.106.0.20\ "
 shutdown_when_empty
 wait_shutdown_vg
-. $srcdir/diag.sh check-exit-vg
-. $srcdir/diag.sh content-check '{ "city": "Beijing" }'
+check_exit_vg
+content_check '{ "city": "Beijing" }'
 exit_test 

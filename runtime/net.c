@@ -12,7 +12,7 @@
  * long term, but it is good to have it out of syslogd.c. Maybe this here is
  * an interim location ;)
  *
- * Copyright 2007-2016 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2007-2018 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -32,7 +32,6 @@
  */
 #include "config.h"
 
-#include "rsyslog.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -53,6 +52,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 
+#include "rsyslog.h"
 #include "syslogd-types.h"
 #include "module-template.h"
 #include "parse.h"
@@ -178,7 +178,7 @@ AddPermittedPeerWildcard(permittedPeers_t *pPeer, uchar* pszStr, size_t lenStr)
 		/* alloc memory for the domain component. We may waste a byte or
 		 * two, but that's ok.
 		 */
-		CHKmalloc(pNew->pszDomainPart = MALLOC(lenStr +1 ));
+		CHKmalloc(pNew->pszDomainPart = malloc(lenStr +1 ));
 	}
 
 	if(pszStr[0] == '*') {
@@ -710,7 +710,7 @@ static rsRetVal AddAllowedSender(struct AllowedSenders **ppRoot, struct AllowedS
 				case AF_INET: /* add IPv4 */
 					iSignificantBits = 32;
 					allowIP.flags = 0;
-					if((allowIP.addr.NetAddr = MALLOC(res->ai_addrlen)) == NULL) {
+					if((allowIP.addr.NetAddr = malloc(res->ai_addrlen)) == NULL) {
 						ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
 					}
 					memcpy(allowIP.addr.NetAddr, res->ai_addr, res->ai_addrlen);
@@ -728,7 +728,7 @@ static rsRetVal AddAllowedSender(struct AllowedSenders **ppRoot, struct AllowedS
 						iSignificantBits = 32;
 						allowIP.flags = 0;
 						if((allowIP.addr.NetAddr = (struct sockaddr *)
-						MALLOC(sizeof(struct sockaddr))) == NULL) {
+						malloc(sizeof(struct sockaddr))) == NULL) {
 							ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
 						}
 						SIN(allowIP.addr.NetAddr)->sin_family = AF_INET;
@@ -751,7 +751,7 @@ static rsRetVal AddAllowedSender(struct AllowedSenders **ppRoot, struct AllowedS
 
 						iSignificantBits = 128;
 						allowIP.flags = 0;
-						if((allowIP.addr.NetAddr = MALLOC(res->ai_addrlen)) == NULL) {
+						if((allowIP.addr.NetAddr = malloc(res->ai_addrlen)) == NULL) {
 							ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
 						}
 						memcpy(allowIP.addr.NetAddr, res->ai_addr, res->ai_addrlen);
@@ -793,7 +793,6 @@ PrintAllowedSenders(int iListToPrint)
 	struct AllowedSenders *pSender;
 	uchar szIP[64];
 	
-#ifdef _AIX
 #ifdef USE_GSSAPI
 	assert((iListToPrint == 1) || (iListToPrint == 2) || (iListToPrint == 3));
 	dbgprintf("Allowed %s Senders:\n",
@@ -806,20 +805,6 @@ PrintAllowedSenders(int iListToPrint)
 	       (iListToPrint == 1) ? "UDP" :
 	       "TCP");
 #endif /* USE_GSSAPI */
-#else /* _AIX */
-	assert((iListToPrint == 1) || (iListToPrint == 2)
-#ifdef USE_GSSAPI
-	       || (iListToPrint == 3)
-#endif
-	       );
-
-	dbgprintf("Allowed %s Senders:\n",
-	       (iListToPrint == 1) ? "UDP" :
-#ifdef USE_GSSAPI
-	       (iListToPrint == 3) ? "GSS" :
-#endif
-	       "TCP");
-#endif /* End of _AIX */
 
 	pSender = (iListToPrint == 1) ? pAllowedSenders_UDP :
 #ifdef USE_GSSAPI
@@ -1499,7 +1484,7 @@ create_udp_socket(uchar *hostname,
 	/* Count max number of sockets we may open */
 	for (maxs = 0, r = res; r != NULL ; r = r->ai_next, maxs++)
 		/* EMPTY */;
-	socks = MALLOC((maxs+1) * sizeof(int));
+	socks = malloc((maxs+1) * sizeof(int));
 	if (socks == NULL) {
 		LogError(0, RS_RET_OUT_OF_MEMORY, "couldn't allocate memory for UDP "
 			"sockets, suspending UDP message reception");

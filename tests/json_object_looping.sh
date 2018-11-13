@@ -3,7 +3,7 @@
 # This file is part of the rsyslog project, released under ASL 2.0
 echo ===============================================================================
 echo \[json_object_looping.sh\]: basic test for looping over json object / associative-array
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 template(name="garply" type="string" string="garply: %$.garply%\n")
@@ -20,7 +20,7 @@ action(type="mmjsonparse")
 set $.garply = "";
 
 ruleset(name="prefixed_writer" queue.type="linkedlist" queue.workerthreads="5") {
-  action(type="omfile" file="./rsyslog.out.prefixed.log" template="prefixed_corge" queue.type="linkedlist")
+  action(type="omfile" file="'$RSYSLOG_DYNNAME'.out.prefixed.log" template="prefixed_corge" queue.type="linkedlist")
 }
 
 foreach ($.quux in $!foo) do {
@@ -31,7 +31,7 @@ foreach ($.quux in $!foo) do {
 	}
   action(type="omfile" file=`echo $RSYSLOG_OUT_LOG` template="quux")
   foreach ($.corge in $.quux!value) do {
-    action(type="omfile" file="./rsyslog.out.async.log" template="corge" queue.type="linkedlist" action.copyMsg="on")
+    action(type="omfile" file="'$RSYSLOG_DYNNAME'.out.async.log" template="corge" queue.type="linkedlist" action.copyMsg="on")
     call prefixed_writer
 
     foreach ($.grault in $.corge!value) do {
@@ -50,14 +50,14 @@ echo doing shutdown
 shutdown_when_empty
 echo wait on shutdown
 wait_shutdown
-. $srcdir/diag.sh content-check 'quux: { "key": "str1", "value": "abc0" }'
-. $srcdir/diag.sh content-check 'quux: { "key": "str2", "value": "def1", "random_key": "str2" }'
-. $srcdir/diag.sh content-check 'quux: { "key": "str3", "value": "ghi2" }'
-. $srcdir/diag.sh assert-content-missing 'quux: { "key": "str4", "value": "jkl3" }'
-. $srcdir/diag.sh content-check 'new: jkl3'
-. $srcdir/diag.sh assert-content-missing 'deleted: ghi2'
-. $srcdir/diag.sh content-check 'quux: { "key": "obj", "value": { "bar": { "k1": "important_msg", "k2": "other_msg" } } }'
-. $srcdir/diag.sh custom-content-check 'corge: key: bar val: { "k1": "important_msg", "k2": "other_msg" }' 'rsyslog.out.async.log'
-. $srcdir/diag.sh custom-content-check 'prefixed_corge: { "key": "bar", "value": { "k1": "important_msg", "k2": "other_msg" } }' 'rsyslog.out.prefixed.log'
-. $srcdir/diag.sh content-check 'garply: k1=important_msg, k2=other_msg'
+content_check 'quux: { "key": "str1", "value": "abc0" }'
+content_check 'quux: { "key": "str2", "value": "def1", "random_key": "str2" }'
+content_check 'quux: { "key": "str3", "value": "ghi2" }'
+assert_content_missing 'quux: { "key": "str4", "value": "jkl3" }'
+content_check 'new: jkl3'
+assert_content_missing 'deleted: ghi2'
+content_check 'quux: { "key": "obj", "value": { "bar": { "k1": "important_msg", "k2": "other_msg" } } }'
+custom_content_check 'corge: key: bar val: { "k1": "important_msg", "k2": "other_msg" }' $RSYSLOG_DYNNAME.out.async.log
+custom_content_check 'prefixed_corge: { "key": "bar", "value": { "k1": "important_msg", "k2": "other_msg" } }' $RSYSLOG_DYNNAME.out.prefixed.log
+content_check 'garply: k1=important_msg, k2=other_msg'
 exit_test

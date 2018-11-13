@@ -133,6 +133,7 @@ extern int src_exists;
 /* make sure we uses consistent macros, no matter what the
  * platform gives us.
  */
+#undef LOG_NFACILITIES /* may be system defined, override */
 #define LOG_NFACILITIES 24+1 /* plus one for our special "invld" facility! */
 #define LOG_MAXPRI 191	/* highest supported valid PRI value --> RFC3164, RFC5424 */
 #undef LOG_MAKEPRI
@@ -220,9 +221,9 @@ enum rsRetVal_				/** return value. All methods return this if not specified oth
 	/* begin regular error codes */
 	RS_RET_NOT_IMPLEMENTED = -7,	/**< implementation is missing (probably internal error or lazyness ;)) */
 	RS_RET_OUT_OF_MEMORY = -6,	/**< memory allocation failed */
-	RS_RET_PROVIDED_BUFFER_TOO_SMALL = -50,
-/*< the caller provided a buffer, but the called function sees the size of this buffer is too small -
-operation not carried out */
+	RS_RET_PROVIDED_BUFFER_TOO_SMALL = -50, /*< the caller provided a buffer, but the called function sees
+						  the size of this buffer is too small - operation not carried out */
+	RS_RET_FILE_TRUNCATED = -51,	/**< (input) file was truncated, not an error but a status */
 	RS_RET_TRUE = -3,		/**< to indicate a true state (can be used as TRUE, legacy) */
 	RS_RET_FALSE = -2,		/**< to indicate a false state (can be used as FALSE, legacy) */
 	RS_RET_NO_IRET = -8,	/**< This is a trick for the debuging system - it means no iRet is provided  */
@@ -533,6 +534,7 @@ operation not carried out */
 	RS_RET_FS_ERR = -2443, /**< file-system error */
 	RS_RET_POLL_ERR = -2444, /**< error in poll() system call */
 	RS_RET_OVERSIZE_MSG = -2445, /**< message is too long (above configured max) */
+	RS_RET_TLS_KEY_ERR = -2446, /**< TLS KEY has problems */
 
 	/* RainerScript error messages (range 1000.. 1999) */
 	RS_RET_SYSVAR_NOT_FOUND = 1001, /**< system variable could not be found (maybe misspelled) */
@@ -573,8 +575,8 @@ operation not carried out */
 #define CHKmalloc(operation) if((operation) == NULL) ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY)
 /* macro below is used in conjunction with CHKiRet_Hdlr, else use ABORT_FINALIZE */
 #define FINALIZE goto finalize_it;
-#define DEFiRet BEGINfunc rsRetVal iRet = RS_RET_OK
-#define RETiRet do{ ENDfuncIRet return iRet; }while(0)
+#define DEFiRet rsRetVal iRet = RS_RET_OK
+#define RETiRet return iRet
 
 #define ABORT_FINALIZE(errCode)			\
 	do {					\
@@ -679,10 +681,6 @@ struct actWrkrIParams {
 /* some constants */
 #define MUTEX_ALREADY_LOCKED	0
 #define LOCK_MUTEX		1
-
-/* The following prototype is convenient, even though it may not be the 100%
-correct place.. -- rgerhards 2008-01-07 */
-//void dbgprintf(const char *, ...) __attribute__((format(printf, 1, 2)));
 
 
 #include "debug.h"

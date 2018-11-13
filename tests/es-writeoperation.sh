@@ -1,12 +1,10 @@
 #!/bin/bash
 # This file is part of the rsyslog project, released under ASL 2.0
-. $srcdir/diag.sh download-elasticsearch
-. $srcdir/diag.sh stop-elasticsearch
-. $srcdir/diag.sh prepare-elasticsearch
-. $srcdir/diag.sh start-elasticsearch
+. ${srcdir:=.}/diag.sh init
+download_elasticsearch
+prepare_elasticsearch
+start_elasticsearch
 
-#  Starting actual testbench
-. $srcdir/diag.sh init
 generate_conf
 add_conf '
 template(name="tpl" type="string"
@@ -25,7 +23,6 @@ if $msg contains "msgnum:" then
 action(type="omfile" file=`echo $RSYSLOG_OUT_LOG`)
 '
 
-# . $srcdir/diag.sh es-init
 startup
 injectmsg  0 1
 shutdown_when_empty
@@ -38,7 +35,6 @@ else
 	error_exit 1
 fi
 
-. $srcdir/diag.sh init
 generate_conf
 add_conf '
 template(name="tpl" type="string"
@@ -57,7 +53,6 @@ if $msg contains "msgnum:" then
 action(type="omfile" file=`echo $RSYSLOG_OUT_LOG`)
 '
 
-# . $srcdir/diag.sh es-init
 startup
 injectmsg  0 1
 shutdown_when_empty
@@ -70,7 +65,6 @@ else
 	error_exit 1
 fi
 
-. $srcdir/diag.sh init
 generate_conf
 add_conf '
 template(name="tpl" type="string"
@@ -95,17 +89,16 @@ action(type="omfile" file=`echo $RSYSLOG_OUT_LOG`)
 '
 
 export ES_PORT=19200
-. $srcdir/diag.sh es-init
+init_elasticsearch
 #export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
 #export RSYSLOG_DEBUGLOG="debug.log"
 startup
 injectmsg  0 1
 shutdown_when_empty
 wait_shutdown
-. $srcdir/diag.sh es-getdata 1 $ES_PORT
+es_getdata 1 $ES_PORT
 
-cat work | \
-	python -c '
+python <$RSYSLOG_DYNNAME.work -c '
 import sys,json
 hsh = json.load(sys.stdin)
 try:
@@ -126,6 +119,5 @@ else
 	error_exit 1
 fi
 
-. $srcdir/diag.sh stop-elasticsearch
-. $srcdir/diag.sh cleanup-elasticsearch
+cleanup_elasticsearch
 exit_test

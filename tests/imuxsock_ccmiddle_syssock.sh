@@ -2,7 +2,7 @@
 echo \[imuxsock_ccmiddle_syssock.sh\]: test trailing LF handling in imuxsock
 
 uname
-if [ `uname` = "SunOS" ] ; then
+if [ $(uname) = "SunOS" ] ; then
    echo "Solaris: FIX ME"
    exit 77
 fi
@@ -13,18 +13,18 @@ if [ $no_liblogging_stdlog -ne 0 ];then
   echo "liblogging-stdlog not available - skipping test"
   exit 77
 fi
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/imuxsock/.libs/imuxsock"
-       SysSock.name="testbench_socket")
+       SysSock.name="'$RSYSLOG_DYNNAME'-testbench_socket")
 
 template(name="outfmt" type="string" string="%msg:%\n")
 local1.*    action(type="omfile" file=`echo $RSYSLOG_OUT_LOG` template="outfmt")
 '
 startup
 # send a message with trailing LF
-./syslog_caller -fsyslog_inject-c -m1 -C "uxsock:testbench_socket"
+./syslog_caller -fsyslog_inject-c -m1 -C "uxsock:$RSYSLOG_DYNNAME-testbench_socket"
 # the sleep below is needed to prevent too-early termination of rsyslogd
 ./msleep 100
 shutdown_when_empty # shut down rsyslogd when done processing messages

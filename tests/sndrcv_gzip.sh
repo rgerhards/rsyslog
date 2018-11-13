@@ -3,7 +3,7 @@
 # zlib-compressed format (our own syslog extension).
 # rgerhards, 2009-11-11
 # This file is part of the rsyslog project, released under ASL 2.0
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 # start up the instances
 #export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
 export RSYSLOG_DEBUGLOG="log"
@@ -19,7 +19,6 @@ $template dynfile,"'$RSYSLOG_OUT_LOG'" # trick to use relative path names!
 :msg, contains, "msgnum:" ?dynfile;outfmt
 '
 startup
-. $srcdir/diag.sh wait-startup
 
 export RSYSLOG_DEBUGLOG="log2"
 #valgrind="valgrind"
@@ -31,7 +30,6 @@ $InputTCPServerRun '$TCPFLOOD_PORT'
 *.*	@@127.0.0.1:'$RCVR_PORT'
 ' 2
 startup 2
-. $srcdir/diag.sh wait-startup 2
 # may be needed by TLS (once we do it): sleep 30
 
 # now inject the messages into instance 2. It will connect to instance 1,
@@ -48,3 +46,4 @@ wait_shutdown
 # may be needed by TLS (once we do it): sleep 60
 # do the final check
 seq_check 1 50000 $3
+exit_test

@@ -4,8 +4,7 @@
 # This test checks that omprog does NOT send a TERM signal to the
 # external program when signalOnClose=off, closes the pipe, and kills
 # the unresponsive child if killUnresponsive=on.
-
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/omprog/.libs/omprog")
@@ -19,7 +18,7 @@ main_queue(
 :msg, contains, "msgnum:" {
     action(
         type="omprog"
-        binary=`echo $srcdir/testsuites/omprog-close-unresponsive-bin.sh`
+        binary="'$RSYSLOG_DYNNAME.'omprog-close-unresponsive-bin.sh"
         template="outfmt"
         name="omprog_action"
         queue.type="Direct"  # the default; facilitates sync with the child process
@@ -30,15 +29,14 @@ main_queue(
     )
 }
 '
+cp -f $srcdir/testsuites/omprog-close-unresponsive-bin.sh $RSYSLOG_DYNNAME.omprog-close-unresponsive-bin.sh
 startup
-. $srcdir/diag.sh wait-startup
 injectmsg 0 10
-. $srcdir/diag.sh wait-queueempty
 shutdown_when_empty
 wait_shutdown
-. $srcdir/diag.sh ensure-no-process-exists omprog-close-unresponsive-bin.sh
+. $srcdir/diag.sh ensure-no-process-exists $RSYSLOG_DYNNAME.omprog-close-unresponsive-bin.sh
 
-expected_output="Starting
+export EXPECTED="Starting
 Received msgnum:00000000:
 Received msgnum:00000001:
 Received msgnum:00000002:
@@ -50,12 +48,6 @@ Received msgnum:00000007:
 Received msgnum:00000008:
 Received msgnum:00000009:
 Terminating unresponsively"
-
-written_output=$(<$RSYSLOG_OUT_LOG)
-if [[ "$expected_output" != "$written_output" ]]; then
-    echo unexpected omprog script output:
-    echo "$written_output"
-    error_exit 1
-fi
+cmp_exact $RSYSLOG_OUT_LOG
 
 exit_test

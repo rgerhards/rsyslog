@@ -5,7 +5,7 @@ echo ===========================================================================
 echo \[sndrcv_udp_nonstdpt_v6.sh\]: testing sending and receiving via udp
 
 # uncomment for debugging support:
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 # start up the instances
 #export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
 export RSYSLOG_DEBUGLOG="log"
@@ -20,7 +20,6 @@ template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 :msg, contains, "msgnum:" action(type="omfile" file=`echo $RSYSLOG_OUT_LOG` template="outfmt")
 '
 startup
-. $srcdir/diag.sh wait-startup
 export RSYSLOG_DEBUGLOG="log2"
 #valgrind="valgrind"
 generate_conf 2
@@ -35,7 +34,6 @@ action(type="omfwd"
        protocol="udp" udp.sendDelay="1")
 ' 2
 startup 2
-. $srcdir/diag.sh wait-startup 2
 # may be needed by TLS (once we do it): sleep 30
 
 # now inject the messages into instance 2. It will connect to instance 1,

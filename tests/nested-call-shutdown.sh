@@ -1,7 +1,7 @@
 #!/bin/bash
 # addd 2017-10-18 by RGerhards, released under ASL 2.0
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/omtesting/.libs/omtesting")
@@ -28,7 +28,7 @@ if $msg contains "msgnum:" then call rs1
 startup
 #tcpflood -p'$TCPFLOOD_PORT' -m10000
 injectmsg 0 1000
-. $srcdir/diag.sh shutdown-immediate
+shutdown_immediate
 wait_shutdown
 # wo do not check reception - the main point is that we do not abort. The actual
 # message count is unknown (as the point is to shut down while still in processing).

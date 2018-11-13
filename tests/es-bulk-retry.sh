@@ -1,21 +1,25 @@
 #!/bin/bash
 # This file is part of the rsyslog project, released under ASL 2.0
+. ${srcdir:=.}/diag.sh init
+
 export ES_PORT=19200
-. $srcdir/diag.sh download-elasticsearch
-. $srcdir/diag.sh stop-elasticsearch
-. $srcdir/diag.sh prepare-elasticsearch
+export NUMMESSAGES=100
+override_test_timeout 120
+#export USE_VALGRIND="YES" # to enable this to run under valgrind
+
+download_elasticsearch
+prepare_elasticsearch
 # change settings to cause bulk rejection errors
 cat >> $dep_work_dir/es/config/elasticsearch.yml <<EOF
 thread_pool.bulk.queue_size: 1
 thread_pool.bulk.size: 1
 EOF
-. $srcdir/diag.sh start-elasticsearch
+start_elasticsearch
 
-. $srcdir/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/impstats/.libs/impstats" interval="1"
-	   log.file="test-spool/es-stats.log" log.syslog="off" format="cee")
+	   log.file="'$RSYSLOG_DYNNAME'.spool/es-stats.log" log.syslog="off" format="cee")
 
 set $.msgnum = field($msg, 58, 2);
 set $.testval = cnum($.msgnum % 2);
@@ -35,7 +39,7 @@ module(load="../plugins/omelasticsearch/.libs/omelasticsearch")
 template(name="id-template" type="string" string="%$.es_msg_id%")
 
 ruleset(name="error_es") {
-	action(type="omfile" template="RSYSLOG_DebugFormat" file="test-spool/es-bulk-errors.log")
+	action(type="omfile" template="RSYSLOG_DebugFormat" file="'$RSYSLOG_DYNNAME'.spool/es-bulk-errors.log")
 }
 
 ruleset(name="try_es") {
@@ -95,39 +99,34 @@ curl -s -H 'Content-Type: application/json' -XPUT localhost:${ES_PORT:-19200}/rs
 ' | python -mjson.tool
 #export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
 #export RSYSLOG_DEBUGLOG="debug.log"
-if [ "x${USE_VALGRIND:-false}" == "xtrue" ] ; then
-	startup_vg
-else
-	startup
-fi
+startup
 if [ -n "${USE_GDB:-}" ] ; then
 	echo attach gdb here
 	sleep 54321 || :
 fi
-numrecords=100
 success=50
 badarg=50
-injectmsg 0 $numrecords
+injectmsg 0 $NUMMESSAGES
+wait_content '"response.success": 50' $RSYSLOG_DYNNAME.spool/es-stats.log
 shutdown_when_empty
-if [ "x${USE_VALGRIND:-false}" == "xtrue" ] ; then
-	wait_shutdown_vg
-	. $srcdir/diag.sh check-exit-vg
-else
-	wait_shutdown
-fi
-. $srcdir/diag.sh es-getdata $numrecords $ES_PORT
+wait_shutdown
+es_getdata $NUMMESSAGES $ES_PORT
 rc=$?
 
-. $srcdir/diag.sh stop-elasticsearch
-. $srcdir/diag.sh cleanup-elasticsearch
+stop_elasticsearch
+cleanup_elasticsearch
 
-if [ -f work ] ; then
-	cat work | \
+if [ -f $RSYSLOG_DYNNAME.work ] ; then
+	< $RSYSLOG_DYNNAME.work  \
 	python -c '
 import sys,json
 records = int(sys.argv[1])
+extra_recs = open(sys.argv[2], "w")
+missing_recs = open(sys.argv[3], "w")
 expectedrecs = {}
 rc = 0
+nextra = 0
+nmissing = 0
 for ii in xrange(0, records*2, 2):
 	ss = "{:08}".format(ii)
 	expectedrecs[ss] = ss
@@ -136,25 +135,34 @@ for item in json.load(sys.stdin)["hits"]["hits"]:
 	if msgnum in expectedrecs:
 		del expectedrecs[msgnum]
 	else:
-		print "Error: found unexpected msgnum {} in record".format(msgnum)
-		rc = 1
+		extra_recs.write("FAIL: found unexpected msgnum {} in record\n".format(msgnum))
+		nextra += 1
 for item in expectedrecs:
-	print "Error: msgnum {} was missing in Elasticsearch".format(item)
+	missing_recs.write("FAIL: msgnum {} was missing in Elasticsearch\n".format(item))
+	nmissing += 1
+if nextra > 0:
+	print("FAIL: Found {} unexpected records - see {} for the full list.".format(nextra, sys.argv[2]))
+	rc = 1
+if nmissing > 0:
+	print("FAIL: Found {} missing records - see {} for the full list.".format(nmissing, sys.argv[3]))
 	rc = 1
 sys.exit(rc)
-' $success || { rc=$?; echo error: did not find expected records in Elasticsearch; }
+' $success ${RSYSLOG_DYNNAME}.spool/extra_records ${RSYSLOG_DYNNAME}.spool/missing_records || { rc=$?; errmsg="FAIL: found unexpected or missing records in Elasticsearch"; }
+	if [ $rc = 0 ] ; then
+		echo "good - no missing or unexpected records were found in Elasticsearch"
+	fi
 else
-	echo error: elasticsearch output file work not found
+	errmsg="FAIL: elasticsearch output file $RSYSLOG_DYNNAME.work not found"
 	rc=1
 fi
 
-if [ -f test-spool/es-stats.log ] ; then
-	cat test-spool/es-stats.log | \
-	python -c '
+if [ -f ${RSYSLOG_DYNNAME}.spool/es-stats.log ] ; then
+	python < ${RSYSLOG_DYNNAME}.spool/es-stats.log -c '
 import sys,json
 success = int(sys.argv[1])
 badarg = int(sys.argv[2])
 lasthsh = {}
+rc = 0
 for line in sys.stdin:
 	jstart = line.find("{")
 	if jstart >= 0:
@@ -165,44 +173,56 @@ actualsuccess = lasthsh["response.success"]
 actualbadarg = lasthsh["response.badargument"]
 actualrej = lasthsh["response.bulkrejection"]
 actualsubmitted = lasthsh["submitted"]
-assert(actualsuccess == success)
-assert(actualbadarg == badarg)
-assert(actualrej > 0)
-assert(actualsuccess + actualbadarg + actualrej == actualsubmitted)
-' $success $badarg || { rc=$?; echo error: expected responses not found in test-spool/es-stats.log; }
+if actualsuccess != success:
+	print("FAIL: expected {} successful responses but omelasticsearch stats reported {}".format(success, actualsuccess))
+	rc = 1
+if actualbadarg != badarg:
+	print("FAIL: expected {} bad argument errors but omelasticsearch stats reported {}".format(badarg, actualbadarg))
+	rc = 1
+if actualrej == 0:
+	print("FAIL: there were no bulk index rejections reported by Elasticsearch")
+	rc = 1
+if actualsuccess + actualbadarg + actualrej != actualsubmitted:
+	print("FAIL: The sum of the number of successful responses and bad argument errors and bulk index rejections {} did not equal the number of requests actually submitted to Elasticsearch {}".format(actualsuccess + actualbadarg + actualrej, actualsubmitted))
+	rc = 1
+sys.exit(rc)
+' $success $badarg || { rc=$?; errmsg="FAIL: expected responses not found in ${RSYSLOG_DYNNAME}.spool/es-stats.log"; }
+	if [ $rc = 0 ] ; then
+		echo "good - all expected stats were found in Elasticsearch stats file ${RSYSLOG_DYNNAME}.spool/es-stats.log"
+	fi
 else
-	echo error: stats file test-spool/es-stats.log not found
+	errmsg="FAIL: stats file ${RSYSLOG_DYNNAME}.spool/es-stats.log not found"
 	rc=1
 fi
 
-if [ -f test-spool/es-bulk-errors.log ] ; then
+if [ -f ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log ] ; then
 	found=0
 	for ii in $(seq --format="x%08.f" 1 2 $(expr 2 \* $badarg)) ; do
-		if grep -q '^[$][!]:{.*"msgnum": "'$ii'"' test-spool/es-bulk-errors.log ; then
-			found=$( expr $found + 1 )
+		if grep -q '^[$][!]:{.*"msgnum": "'$ii'"' ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log ; then
+			(( found++ ))
 		else
-			echo error: missing message $ii in test-spool/es-bulk-errors.log
+			errmsg="FAIL: missing message $ii in ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log"
 			rc=1
 		fi
 	done
 	if [ $found -ne $badarg ] ; then
-		echo error: found only $found of $badarg messages in test-spool/es-bulk-errors.log
+		errmsg="FAIL: found only $found of $badarg messages in ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log"
 		rc=1
 	fi
-	if grep -q '^[$][.]:{.*"omes": {' test-spool/es-bulk-errors.log ; then
+	if grep -q '^[$][.]:{.*"omes": {' ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log ; then
 		:
 	else
-		echo error: es response info not found in test-spool/es-bulk-errors.log
+		errmsg="FAIL: es response info not found in ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log"
 		rc=1
 	fi
-	if grep -q '^[$][.]:{.*"status": 400' test-spool/es-bulk-errors.log ; then
+	if grep -q '^[$][.]:{.*"status": 400' ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log ; then
 		:
 	else
-		echo error: status 400 not found in test-spool/es-bulk-errors.log
+		errmsg="FAIL: status 400 not found in ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log"
 		rc=1
 	fi
 else
-	echo error: bulk error file test-spool/es-bulk-errors.log not found
+	errmsg="FAIL: bulk error file ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log not found"
 	rc=1
 fi
 
@@ -210,13 +230,14 @@ if [ $rc -eq 0 ] ; then
 	echo tests completed successfully
 else
 	cat $RSYSLOG_OUT_LOG
-	if [ -f test-spool/es-stats.log ] ; then
-		cat test-spool/es-stats.log
+	if [ -f ${RSYSLOG_DYNNAME}.spool/es-stats.log ] ; then
+		cat ${RSYSLOG_DYNNAME}.spool/es-stats.log
 	fi
-	if [ -f test-spool/es-bulk-errors.log ] ; then
-		cat test-spool/es-bulk-errors.log
+	if [ -f ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log ] ; then
+		cat ${RSYSLOG_DYNNAME}.spool/es-bulk-errors.log
 	fi
-	error_exit 1 stacktrace
+	printf '\n%s\n' "$errmsg"
+	error_exit 1
 fi
 
 exit_test

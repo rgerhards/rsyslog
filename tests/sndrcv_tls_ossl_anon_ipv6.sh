@@ -6,7 +6,7 @@ echo \[sndrcv_tls_ossl_anon_ipv6.sh\]: testing sending and receiving via TLS wit
 . $srcdir/diag.sh check-ipv6-available
 
 # uncomment for debugging support:
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 # start up the instances
 #export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
 export RSYSLOG_DEBUGLOG="log"
@@ -35,7 +35,6 @@ template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 					file="'$RSYSLOG_OUT_LOG'")
 '
 startup 
-. $srcdir/diag.sh wait-startup
 export RSYSLOG_DEBUGLOG="log2"
 #valgrind="valgrind"
 generate_conf 2
@@ -61,7 +60,6 @@ $ActionSendStreamDriverAuthMode anon
 *.*	@@[::1]:'$PORT_RCVR'
 ' 2
 startup 2
-. $srcdir/diag.sh wait-startup 2
 # may be needed by TLS (once we do it): sleep 30
 
 # now inject the messages into instance 2. It will connect to instance 1,

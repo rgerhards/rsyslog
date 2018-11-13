@@ -5,14 +5,14 @@
 # This file is part of the rsyslog project, released  under GPLv3
 
 uname
-if [ `uname` = "FreeBSD" ] ; then
+if [ $(uname) = "FreeBSD" ] ; then
    echo "This test currently does not work on FreeBSD."
    exit 77
 fi
 
 echo ====================================================================================
 echo TEST: \[imtcp_conndrop.sh\]: test imtcp with random connection drops
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $MaxMessageSize 10k

@@ -6,12 +6,12 @@
 # This file is part of the rsyslog project, released under ASL 2.0
 
 uname
-if [ `uname` = "FreeBSD" ] ; then
+if [ $(uname) = "FreeBSD" ] ; then
    echo "This test currently does not work on FreeBSD."
    exit 77
 fi
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/imtcp/.libs/imtcp")
@@ -36,7 +36,7 @@ startup_vg
 tcpflood -m5000
 shutdown_when_empty
 wait_shutdown_vg
-. $srcdir/diag.sh check-exit-vg
+check_exit_vg
 # note: we check only the valgrind result, we are not really interested
 # in the output data (non-standard format in any way...)
 exit_test

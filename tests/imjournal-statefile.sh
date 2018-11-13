@@ -7,7 +7,7 @@
 # sometimes happen in some environments.
 # addd 2017-10-25 by RGerhards, released under ASL 2.0
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 . $srcdir/diag.sh require-journalctl
 generate_conf
 add_conf '
@@ -38,7 +38,7 @@ startup
 ./msleep 500
 shutdown_when_empty # shut down rsyslogd when done processing messages
 wait_shutdown
-COUNT= cat $RSYSLOG_OUT_LOG | fgrep "$TESTMSG" | wc -l
+COUNT= fgrep "$TESTMSG" < $RSYSLOG_OUT_LOG | wc -l
 if [ $COUNT -ne 1 ]; then
   echo "FAIL: message found $COUNT times (expected 1)"
   echo " $RSYSLOG_OUT_LOG content (tail -n200):"

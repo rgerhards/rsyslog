@@ -205,7 +205,7 @@ createInstance(instanceConf_t **pinst)
 {
 	instanceConf_t *inst;
 	DEFiRet;
-	CHKmalloc(inst = MALLOC(sizeof(instanceConf_t)));
+	CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
 	inst->next = NULL;
 	inst->pBindRuleset = NULL;
 
@@ -899,13 +899,15 @@ rcvMainLoop(struct wrkrInfo_s *const __restrict__ pWrkr)
 		i = 0;
 		for(lstn = lcnfRoot ; nfds && lstn != NULL ; lstn = lstn->next) {
 			assert(i < nfd);
-			if(glbl.GetGlobalInputTermState() == 1)
-				ABORT_FINALIZE(RS_RET_FORCE_TERM); /* terminate input! */
-			if(pollfds[i].revents & POLLIN) {
-		       		processSocket(pWrkr, lstn, &frominetPrev, &bIsPermitted);
-				--nfds;
+			if(lstn->sock != -1) {
+				if(glbl.GetGlobalInputTermState() == 1)
+					ABORT_FINALIZE(RS_RET_FORCE_TERM); /* terminate input! */
+				if(pollfds[i].revents & POLLIN) {
+					processSocket(pWrkr, lstn, &frominetPrev, &bIsPermitted);
+					--nfds;
+				}
+				++i;
 			}
-			++i;
 	       }
 	       /* end of a run, back to loop for next recv() */
 	}
@@ -1172,11 +1174,11 @@ CODESTARTactivateCnf
 	DBGPRINTF("imudp: config params iMaxLine %d, lenRcvBuf %d\n", iMaxLine, lenRcvBuf);
 	for(i = 0 ; i < runModConf->wrkrMax ; ++i) {
 #		ifdef HAVE_RECVMMSG
-		CHKmalloc(wrkrInfo[i].recvmsg_iov = MALLOC(runModConf->batchSize * sizeof(struct iovec)));
-		CHKmalloc(wrkrInfo[i].recvmsg_mmh = MALLOC(runModConf->batchSize * sizeof(struct mmsghdr)));
-		CHKmalloc(wrkrInfo[i].frominet = MALLOC(runModConf->batchSize * sizeof(struct sockaddr_storage)));
+		CHKmalloc(wrkrInfo[i].recvmsg_iov = malloc(runModConf->batchSize * sizeof(struct iovec)));
+		CHKmalloc(wrkrInfo[i].recvmsg_mmh = malloc(runModConf->batchSize * sizeof(struct mmsghdr)));
+		CHKmalloc(wrkrInfo[i].frominet = malloc(runModConf->batchSize * sizeof(struct sockaddr_storage)));
 #		endif
-		CHKmalloc(wrkrInfo[i].pRcvBuf = MALLOC(lenRcvBuf));
+		CHKmalloc(wrkrInfo[i].pRcvBuf = malloc(lenRcvBuf));
 		wrkrInfo[i].id = i;
 	}
 finalize_it:

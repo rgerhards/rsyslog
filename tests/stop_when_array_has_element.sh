@@ -3,7 +3,7 @@
 # This file is part of the rsyslog project, released under ASL 2.0
 echo ===============================================================================
 echo \[stop_when_array_has_element.sh\]: loop detecting presense of an element and stopping ruleset execution
-. $srcdir/diag.sh init stop_when_array_has_element.sh
+. ${srcdir:=.}/diag.sh init stop_when_array_has_element.sh
 generate_conf
 add_conf '
 template(name="foo" type="string" string="%$!foo%\n")
@@ -25,7 +25,7 @@ echo doing shutdown
 shutdown_when_empty
 echo wait on shutdown
 wait_shutdown 
-. $srcdir/diag.sh content-check '"abc0"'
-. $srcdir/diag.sh content-check '"abc2"'
-. $srcdir/diag.sh assert-content-missing 'xyz0'
+content_check '"abc0"'
+content_check '"abc2"'
+assert_content_missing 'xyz0'
 exit_test

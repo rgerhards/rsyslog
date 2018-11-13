@@ -31,8 +31,6 @@
 %top{
 #ifndef __clang_analyzer__ /* this is not really our code */
 #include "config.h"
-#include "rsyslog.h"
-#include "srUtils.h"
 #if !defined(_AIX)
 #pragma GCC diagnostic ignored "-Wsign-compare"
 #pragma GCC diagnostic ignored "-Wmissing-noreturn"
@@ -46,6 +44,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "rsyslog.h"
+#include "srUtils.h"
 #include "parserif.h"
 
 /* TODO: move this to a better modules, refactor -- rgerhards, 2018-01-22 */
@@ -106,7 +106,8 @@ expand_backticks_echo(const char *param)
 			if(isspace(*param) || *param == '/') {
 				envvar[i_envvar] = '\0';
 				const char *envval = getenv(envvar);
-				es_addBuf(&estr, envval, strlen(envval));
+				if(envval != NULL)
+					es_addBuf(&estr, envval, strlen(envval));
 				es_addChar(&estr, *param); /* curr char part of output! */
 				i_envvar = 0;
 				in_env = 0;
@@ -128,7 +129,8 @@ expand_backticks_echo(const char *param)
 	if(in_env) {
 		envvar[i_envvar] = '\0';
 		const char *envval = getenv(envvar);
-		es_addBuf(&estr, envval, strlen(envval));
+		if(envval != NULL)
+			es_addBuf(&estr, envval, strlen(envval));
 	}
 
 done:	return estr;

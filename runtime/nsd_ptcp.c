@@ -2,7 +2,7 @@
  *
  * An implementation of the nsd interface for plain tcp sockets.
  *
- * Copyright 2007-2017 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2007-2018 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of the rsyslog runtime library.
  *
@@ -24,7 +24,6 @@
  */
 #include "config.h"
 
-#include "rsyslog.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -39,6 +38,7 @@
 #include <unistd.h>
 #include <netinet/tcp.h>
 
+#include "rsyslog.h"
 #include "syslogd-types.h"
 #include "module-template.h"
 #include "parse.h"
@@ -325,7 +325,7 @@ FillRemHost(nsd_ptcp_t *pThis, struct sockaddr_storage *pAddr)
 	 * (side note: we may hold on to these values for quite a while, thus we trim their
 	 * memory consumption)
 	 */
-	if((pThis->pRemHostName = MALLOC(prop.GetStringLen(fqdn)+1)) == NULL)
+	if((pThis->pRemHostName = malloc(prop.GetStringLen(fqdn)+1)) == NULL)
 		ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
 	memcpy(pThis->pRemHostName, propGetSzStr(fqdn), prop.GetStringLen(fqdn)+1);
 	prop.Destruct(&fqdn);
@@ -409,17 +409,22 @@ finalize_it:
  * number of sessions permitted.
  * rgerhards, 2008-04-22
  */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
 static rsRetVal
 LstnInit(netstrms_t *pNS, void *pUsr, rsRetVal(*fAddLstn)(void*,netstrm_t*),
-	 uchar *pLstnPort, uchar *pLstnIP, int iSessMax)
+	 uchar *pLstnPort, uchar *pLstnIP, int iSessMax,
+	 uchar *pszLstnPortFileName)
 {
 	DEFiRet;
 	netstrm_t *pNewStrm = NULL;
 	nsd_t *pNewNsd = NULL;
 	int error, maxs, on = 1;
+	int isIPv6 = 0;
 	int sock = -1;
 	int numSocks;
 	int sockflags;
+	int port_override = 0; /* if dyn port (0): use this for actually bound port */
 	struct addrinfo hints, *res = NULL, *r;
 
 	ISOBJ_TYPE_assert(pNS, netstrms);
@@ -447,6 +452,13 @@ LstnInit(netstrms_t *pNS, void *pUsr, rsRetVal(*fAddLstn)(void*,netstrm_t*),
 
 	numSocks = 0;   /* num of sockets counter at start of array */
 	for(r = res; r != NULL ; r = r->ai_next) {
+		if(port_override != 0) {
+			if(r->ai_family == AF_INET6) {
+				((struct sockaddr_in6*)r->ai_addr)->sin6_port = port_override;
+			} else {
+				((struct sockaddr_in*)r->ai_addr)->sin_port = port_override;
+			}
+		}
 		sock = socket(r->ai_family, r->ai_socktype, r->ai_protocol);
 		if(sock < 0) {
 			if(!(r->ai_family == PF_INET6 && errno == EAFNOSUPPORT)) {
@@ -458,18 +470,19 @@ LstnInit(netstrms_t *pNS, void *pUsr, rsRetVal(*fAddLstn)(void*,netstrm_t*),
 			continue;
 		}
 
-#ifdef IPV6_V6ONLY
-		if(r->ai_family == AF_INET6) {
-			int iOn = 1;
-			if(setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY,
-			      (char *)&iOn, sizeof (iOn)) < 0) {
-				close(sock);
-				sock = -1;
-				continue;
+		#ifdef IPV6_V6ONLY
+			if(r->ai_family == AF_INET6) {
+				isIPv6 = 1;
+				int iOn = 1;
+				if(setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY,
+				      (char *)&iOn, sizeof (iOn)) < 0) {
+					close(sock);
+					sock = -1;
+					continue;
+				}
 			}
-		}
-#endif
-			if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *) &on, sizeof(on)) < 0 ) {
+		#endif
+		if(setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *) &on, sizeof(on)) < 0 ) {
 			dbgprintf("error %d setting tcp socket option\n", errno);
 			close(sock);
 			sock = -1;
@@ -491,39 +504,69 @@ LstnInit(netstrms_t *pNS, void *pUsr, rsRetVal(*fAddLstn)(void*,netstrm_t*),
 			continue;
 		}
 
-
 		/* We need to enable BSD compatibility. Otherwise an attacker
 		 * could flood our log files by sending us tons of ICMP errors.
 		 */
-/* AIXPORT : SO_BSDCOMPAT socket option is depricated , and its usage has been discontinued
- * on most unixes, AIX does not support this option , hence remove the call.
- */
-#if !defined(_AIX)
-#ifndef BSD
-		if(net.should_use_so_bsdcompat()) {
-			if (setsockopt(sock, SOL_SOCKET, SO_BSDCOMPAT,
-					(char *) &on, sizeof(on)) < 0) {
-				LogError(errno, NO_ERRCODE, "TCP setsockopt(BSDCOMPAT)");
-				close(sock);
-				sock = -1;
-				continue;
+		#if !defined(_AIX) && !defined(BSD)
+			if(net.should_use_so_bsdcompat()) {
+				if (setsockopt(sock, SOL_SOCKET, SO_BSDCOMPAT,
+						(char *) &on, sizeof(on)) < 0) {
+					LogError(errno, NO_ERRCODE, "TCP setsockopt(BSDCOMPAT)");
+					close(sock);
+					sock = -1;
+					continue;
+				}
 			}
-		}
-#endif
-#endif
+		#endif
 
 	        if( (bind(sock, r->ai_addr, r->ai_addrlen) < 0)
-#ifndef IPV6_V6ONLY
-		     && (errno != EADDRINUSE)
-#endif
+			#ifndef IPV6_V6ONLY
+			&& (errno != EADDRINUSE)
+			#endif
 	           ) {
 			/* TODO: check if *we* bound the socket - else we *have* an error! */
 			char errStr[1024];
 			rs_strerror_r(errno, errStr, sizeof(errStr));
+			LogError(errno, NO_ERRCODE, "Error while binding tcp socket");
 			dbgprintf("error %d while binding tcp socket: %s\n", errno, errStr);
 			close(sock);
 			sock = -1;
 			continue;
+		}
+
+		/* if we bind to dynamic port (port 0 given), we will do so consistently. Thus
+		 * once we got a dynamic port, we will keep it and use it for other protocols
+		 * as well. As of my understanding, this should always work as the OS does not
+		 * pick a port that is used by some protocol (well, at least this looks very
+		 * unlikely...). If our asusmption is wrong, we should iterate until we find a
+		 * combination that works - it is very unusual to have the same service listen
+		 * on differnt ports on IPv4 and IPv6.
+		 */
+		const int currport = (isIPv6) ?
+			(((struct sockaddr_in6*)r->ai_addr)->sin6_port) :
+			(((struct sockaddr_in*)r->ai_addr)->sin_port) ;
+		if(currport == 0) {
+			if(getsockname(sock, r->ai_addr, &r->ai_addrlen) == -1) {
+				LogError(errno, NO_ERRCODE, "nsd_ptcp: ListenPortFileName: getsockname:"
+						"error while trying to get socket");
+			}
+			port_override = (isIPv6) ?
+				(((struct sockaddr_in6*)r->ai_addr)->sin6_port) :
+				(((struct sockaddr_in*)r->ai_addr)->sin_port) ;
+			if(pszLstnPortFileName != NULL) {
+				FILE *fp;
+				if((fp = fopen((const char*)pszLstnPortFileName, "w+")) == NULL) {
+					LogError(errno, RS_RET_IO_ERROR, "nsd_ptcp: ListenPortFileName: "
+							"error while trying to open file");
+					ABORT_FINALIZE(RS_RET_IO_ERROR);
+				}
+				if(isIPv6) {
+					fprintf(fp, "%d", ntohs((((struct sockaddr_in6*)r->ai_addr)->sin6_port)));
+				} else {
+					fprintf(fp, "%d", ntohs((((struct sockaddr_in*)r->ai_addr)->sin_port)));
+				}
+				fclose(fp);
+			}
 		}
 
 		if(listen(sock, iSessMax / 10 + 5) < 0) {
@@ -590,7 +633,7 @@ finalize_it:
 
 	RETiRet;
 }
-
+#pragma GCC diagnostic pop
 
 /* receive data from a tcp socket
  * The lenBuf parameter must contain the max buffer size on entry and contains

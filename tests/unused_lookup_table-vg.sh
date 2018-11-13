@@ -3,14 +3,14 @@
 # This file is part of the rsyslog project, released under ASL 2.0
 
 uname
-if [ `uname` = "FreeBSD" ] ; then
+if [ $(uname) = "FreeBSD" ] ; then
    echo "This test currently does not work on FreeBSD."
    exit 77
 fi
 
 echo ===============================================================================
 echo \[unused_lookup_table.sh\]: test for ensuring clean destruction of lookup-table even when it is never used
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 lookup_table(name="xlate" file="xlate.lkp_tbl")
@@ -24,8 +24,8 @@ startup_vg
 injectmsg  0 1
 shutdown_when_empty
 wait_shutdown_vg
-. $srcdir/diag.sh check-exit-vg
-. $srcdir/diag.sh content-check "msgnum:00000000:"
+check_exit_vg
+content_check "msgnum:00000000:"
 exit_test
 
 # the test actually expects clean destruction of lookup_table

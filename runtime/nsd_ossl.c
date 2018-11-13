@@ -187,45 +187,32 @@ int opensslh_THREAD_cleanup(void)
 void osslLastSSLErrorMsg(int ret, SSL *ssl, int severity, const char* pszCallSource)
 {
 	unsigned long un_error = 0;
-//	char psz[256];
-	int iSSLErr = SSL_get_error(ssl, ret);
-
-	/* Check which kind of error we have */
-	dbgprintf("OpenSSL Error '%s(%d)' in '%s' with ret=%d\n",
-		ERR_error_string(iSSLErr, NULL), iSSLErr, pszCallSource, ret);
-	if(iSSLErr == SSL_ERROR_SSL) {
-		LogMsg(0, RS_RET_NO_ERRCODE, severity, "SSL_ERROR_SSL in '%s'", pszCallSource);
-	} else if(iSSLErr == SSL_ERROR_SYSCALL){
-		LogMsg(0, RS_RET_NO_ERRCODE, severity, "SSL_ERROR_SYSCALL in '%s'", pszCallSource);
-/*
-		if(ret == 0) {
-			// iSSLErr = ERR_get_error();
-			// iSSLErr = SSL_get_error(ssl, iSSLErr);
-			if(iSSLErr == 0) {
-				*psz = '\0';
-			} else {
-				ERR_error_string_n(ERR_get_error(), psz, sizeof(psz));
-			}
-		}
-		LogMsg(0, RS_RET_NO_ERRCODE, "SSL_ERROR_SYSCALL in '%s': %s",
-			pszCallSource, psz);
-*/
+	int iSSLErr = 0;
+	if (ssl == NULL) {
+		/* Output Error Info*/
+		dbgprintf("OpenSSL Error in '%s' with ret=%d\n", pszCallSource, ret);
 	} else {
-		LogMsg(0, RS_RET_NO_ERRCODE, severity, "SSL_ERROR_UNKNOWN in '%s', SSL_get_error: '%s(%d)'",
-			pszCallSource, ERR_error_string(iSSLErr, NULL), iSSLErr);
+		/* if object is set, get error code */
+		iSSLErr = SSL_get_error(ssl, ret);
+
+		/* Output error message */
+		dbgprintf("OpenSSL Error '%s(%d)' in '%s' with ret=%d\n",
+			ERR_error_string(iSSLErr, NULL), iSSLErr, pszCallSource, ret);
+		if(iSSLErr == SSL_ERROR_SSL) {
+			LogMsg(0, RS_RET_NO_ERRCODE, severity, "SSL_ERROR_SSL in '%s'", pszCallSource);
+		} else if(iSSLErr == SSL_ERROR_SYSCALL){
+			LogMsg(0, RS_RET_NO_ERRCODE, severity, "SSL_ERROR_SYSCALL in '%s'", pszCallSource);
+		} else {
+			LogMsg(0, RS_RET_NO_ERRCODE, severity, "SSL_ERROR_UNKNOWN in '%s', SSL_get_error: '%s(%d)'",
+				pszCallSource, ERR_error_string(iSSLErr, NULL), iSSLErr);
+		}
 	}
 
 	/* Loop through ERR_get_error */
 	while ((un_error = ERR_get_error()) > 0){
-		LogMsg(0, RS_RET_NO_ERRCODE, severity, "Error Stack: %s", ERR_error_string(un_error, NULL) );
-		dbgprintf("OpenSSL Error Stack: %s\n", ERR_error_string(un_error, NULL) );
+		LogMsg(0, RS_RET_NO_ERRCODE, severity, "OpenSSL Error Stack: %s", ERR_error_string(un_error, NULL) );
 	}
 
-	/* Loop through ERR_peek_last_error */
-	while ((un_error = ERR_peek_last_error()) != 0){
-		LogMsg(0, RS_RET_NO_ERRCODE, severity, "Error Stack: %s", ERR_error_string(un_error, NULL) );
-		dbgprintf("OpenSSL Error Stack: %s\n", ERR_error_string(un_error, NULL) );
-	}
 }
 
 int verify_callback(int status, X509_STORE_CTX *store)
@@ -419,20 +406,28 @@ osslGlblInit(void)
 	/* Create main CTX Object */
 	ctx = SSL_CTX_new(SSLv23_method());
 	if(SSL_CTX_load_verify_locations(ctx, caFile, NULL) != 1) {
-		LogError(0, RS_RET_NO_ERRCODE, "Error: CA certificate could not be accessed."
-				" Is the file at the right path? And do we have the permissions?");
-		ABORT_FINALIZE(RS_RET_NO_ERRCODE);
+		LogError(0, RS_RET_TLS_CERT_ERR, "Error: CA certificate could not be accessed. "
+				"Check at least: 1) file path is correct, 2) file exist, "
+				"3) permissions are correct, 4) file content is correct. "
+				"Open ssl error info may follow in next messages");
+		osslLastSSLErrorMsg(0, NULL, LOG_ERR, "osslGlblInit");
+		ABORT_FINALIZE(RS_RET_TLS_CERT_ERR);
 	}
 	if(SSL_CTX_use_certificate_file(ctx, certFile, SSL_FILETYPE_PEM) != 1) {
-		LogError(0, RS_RET_NO_ERRCODE, "Error: Certificate file could not be "
-				"accessed. Is the file at the right path? And do we have the "
-				"permissions?");
-		ABORT_FINALIZE(RS_RET_NO_ERRCODE);
+		LogError(0, RS_RET_TLS_CERT_ERR, "Error: Certificate could not be accessed. "
+				"Check at least: 1) file path is correct, 2) file exist, "
+				"3) permissions are correct, 4) file content is correct. "
+				"Open ssl error info may follow in next messages");
+		osslLastSSLErrorMsg(0, NULL, LOG_ERR, "osslGlblInit");
+		ABORT_FINALIZE(RS_RET_TLS_CERT_ERR);
 	}
 	if(SSL_CTX_use_PrivateKey_file(ctx, keyFile, SSL_FILETYPE_PEM) != 1) {
-		LogError(0, RS_RET_NO_ERRCODE, "Error: Key file could not be accessed. "
-				"Is the file at the right path? And do we have the permissions?");
-		ABORT_FINALIZE(RS_RET_NO_ERRCODE);
+		LogError(0, RS_RET_TLS_KEY_ERR , "Error: Key could not be accessed. "
+				"Check at least: 1) file path is correct, 2) file exist, "
+				"3) permissions are correct, 4) file content is correct. "
+				"Open ssl error info may follow in next messages");
+		osslLastSSLErrorMsg(0, NULL, LOG_ERR, "osslGlblInit");
+		ABORT_FINALIZE(RS_RET_TLS_KEY_ERR);
 	}
 
 	/* Set CTX Options */
@@ -440,9 +435,6 @@ osslGlblInit(void)
 	SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv3);		/* Disable insecure SSLv3 Protocol */
 	SSL_CTX_sess_set_cache_size(ctx,1024);			/* TODO: make configurable? */
 
-	/* TODO: DO ONLY SUPPORT DEFAULT CIPHERS YET
-	SSL_CTX_set_cipher_list(ctx,"ALL");			Support all ciphers */
-// TODO MORE NEEDED 	SSL_CTX_set_ecdh_auto(ctx, 1);
 	/* Enable Support for automatic EC temporary key parameter selection. */
 
 	/* Set default VERIFY Options for OpenSSL CTX - and CALLBACK */
@@ -1104,7 +1096,7 @@ Abort(nsd_t *pNsd)
  */
 static rsRetVal
 LstnInit(netstrms_t *pNS, void *pUsr, rsRetVal(*fAddLstn)(void*,netstrm_t*),
-	 uchar *pLstnPort, uchar *pLstnIP, int iSessMax)
+	 uchar *pLstnPort, uchar *pLstnIP, int iSessMax, uchar *pszLstnPortFileName)
 {
 	DEFiRet;
 
@@ -1112,7 +1104,8 @@ LstnInit(netstrms_t *pNS, void *pUsr, rsRetVal(*fAddLstn)(void*,netstrm_t*),
 		fAddLstn, pLstnIP, pLstnPort, iSessMax);
 
 	/* Init TCP Listener using base ptcp class */
-	iRet = nsd_ptcp.LstnInit(pNS, pUsr, fAddLstn, pLstnPort, pLstnIP, iSessMax);
+	iRet = nsd_ptcp.LstnInit(pNS, pUsr, fAddLstn, pLstnPort, pLstnIP,
+			iSessMax, pszLstnPortFileName);
 	RETiRet;
 }
 
@@ -1294,7 +1287,7 @@ AcceptConnReq(nsd_t *pNsd, nsd_t **ppNew)
 	}
 
 	/* If we reach this point, we are in TLS mode */
-	CHKiRet(osslInitSession(pNew)); /*, pThis));*/
+	CHKiRet(osslInitSession(pNew));
 	pNew->authMode = pThis->authMode;
 	pNew->pPermPeers = pThis->pPermPeers;
 
@@ -1368,7 +1361,7 @@ Rcv(nsd_t *pNsd, uchar *pBuf, ssize_t *pLenBuf, int *const oserr)
 
 	if(pThis->pszRcvBuf == NULL) {
 		/* we have no buffer, so we need to malloc one */
-		CHKmalloc(pThis->pszRcvBuf = MALLOC(NSD_OSSL_MAX_RCVBUF));
+		CHKmalloc(pThis->pszRcvBuf = malloc(NSD_OSSL_MAX_RCVBUF));
 		pThis->lenRcvBuf = -1;
 	}
 
@@ -1535,7 +1528,6 @@ BIO_set_nbio( conn, 1 );
 	DBGPRINTF("Connect: TLS Mode\n");
 	if(!(pThis->ssl = SSL_new(ctx))) {
 		osslLastSSLErrorMsg(0, pThis->ssl, LOG_ERR, "Connect");
-/*		LogError(0, RS_RET_NO_ERRCODE, "Error creating an SSL context"); */
 		ABORT_FINALIZE(RS_RET_NO_ERRCODE);
 	}
 	SSL_set_bio(pThis->ssl, conn, conn);

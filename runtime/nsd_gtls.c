@@ -146,7 +146,7 @@ readFile(uchar *pszFile, gnutls_datum_t *pBuf)
 		ABORT_FINALIZE(RS_RET_FILE_TOO_LARGE);
 	}
 
-	CHKmalloc(pBuf->data = MALLOC(stat_st.st_size));
+	CHKmalloc(pBuf->data = malloc(stat_st.st_size));
 	pBuf->size = stat_st.st_size;
 	if(read(fd,  pBuf->data, stat_st.st_size) != stat_st.st_size) {
 		LogError(0, RS_RET_IO_ERROR, "error or incomplete read of file '%s'", pszFile);
@@ -696,13 +696,7 @@ gtlsGlblInitLstn(void)
 	DEFiRet;
 
 	if(bGlblSrvrInitDone == 0) {
-		/* we do not use CRLs right now, and I doubt we'll ever do. This functionality is
-		 * considered legacy. -- rgerhards, 2008-05-05
-		 */
-		/*CHKgnutls(gnutls_certificate_set_x509_crl_file(xcred, CRLFILE, GNUTLS_X509_FMT_PEM));*/
-		bGlblSrvrInitDone = 1; /* we are all set now */
-
-		/* now we need to add our certificate */
+		bGlblSrvrInitDone = 1;
 		CHKiRet(gtlsAddOurCert());
 	}
 
@@ -1433,11 +1427,12 @@ Abort(nsd_t *pNsd)
  */
 static rsRetVal
 LstnInit(netstrms_t *pNS, void *pUsr, rsRetVal(*fAddLstn)(void*,netstrm_t*),
-	 uchar *pLstnPort, uchar *pLstnIP, int iSessMax)
+	 uchar *pLstnPort, uchar *pLstnIP, int iSessMax,
+	 uchar *pszLstnPortFileName)
 {
 	DEFiRet;
 	CHKiRet(gtlsGlblInitLstn());
-	iRet = nsd_ptcp.LstnInit(pNS, pUsr, fAddLstn, pLstnPort, pLstnIP, iSessMax);
+	iRet = nsd_ptcp.LstnInit(pNS, pUsr, fAddLstn, pLstnPort, pLstnIP, iSessMax, pszLstnPortFileName);
 finalize_it:
 	RETiRet;
 }
@@ -1624,7 +1619,7 @@ Rcv(nsd_t *pNsd, uchar *pBuf, ssize_t *pLenBuf, int *const oserr)
 
 	if(pThis->pszRcvBuf == NULL) {
 		/* we have no buffer, so we need to malloc one */
-		CHKmalloc(pThis->pszRcvBuf = MALLOC(NSD_GTLS_MAX_RCVBUF));
+		CHKmalloc(pThis->pszRcvBuf = malloc(NSD_GTLS_MAX_RCVBUF));
 		pThis->lenRcvBuf = -1;
 	}
 

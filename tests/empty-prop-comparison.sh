@@ -1,7 +1,7 @@
 #!/bin/bash
 # addd 2016-07-08 by RGerhards, released under ASL 2.0
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/imtcp/.libs/imtcp")
@@ -17,8 +17,8 @@ action(type="omfile" template="outfmt" file=`echo $RSYSLOG_OUT_LOG`)
 '
 startup
 echo '<167>Mar  6 16:57:54 172.20.245.8 test: msgnum:0
-<167>Mar  6 16:57:54 172.20.245.8 test: msgnum:' > rsyslog.input
-tcpflood -B -I rsyslog.input
+<167>Mar  6 16:57:54 172.20.245.8 test: msgnum:' > $RSYSLOG_DYNNAME.input
+tcpflood -B -I $RSYSLOG_DYNNAME.input
 shutdown_when_empty
 wait_shutdown
 seq_check 0 0

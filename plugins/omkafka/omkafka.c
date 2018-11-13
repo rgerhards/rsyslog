@@ -234,7 +234,7 @@ getPartition(instanceData *const __restrict__ pData)
 
 /* must always be called with appropriate locks taken */
 static void
-d_free_topic(rd_kafka_topic_t **topic)
+free_topic(rd_kafka_topic_t **topic)
 {
 	if (*topic != NULL) {
 		DBGPRINTF("omkafka: closing topic %s\n", rd_kafka_topic_name(*topic));
@@ -280,7 +280,7 @@ failedmsg_entry_construct(const char *const msg, const size_t msglen, const char
 static void
 closeTopic(instanceData *__restrict__ const pData)
 {
-	d_free_topic(&pData->pTopic);
+	free_topic(&pData->pTopic);
 }
 
 /* these dynaTopic* functions are only slightly modified versions of those found in omfile.c.
@@ -295,7 +295,7 @@ dynaTopicDelCacheEntry(instanceData *__restrict__ const pData, const int iEntry,
 {
 	dynaTopicCacheEntry **pCache = pData->dynCache;
 	DEFiRet;
-	ASSERT(pCache != NULL);
+	assert(pCache != NULL);
 
 	if(pCache[iEntry] == NULL)
 		FINALIZE;
@@ -305,7 +305,7 @@ dynaTopicDelCacheEntry(instanceData *__restrict__ const pData, const int iEntry,
 		pCache[iEntry]->pName == NULL ? UCHAR_CONSTANT("[OPEN FAILED]") : pCache[iEntry]->pName);
 
 	if(pCache[iEntry]->pName != NULL) {
-		d_free(pCache[iEntry]->pName);
+		free(pCache[iEntry]->pName);
 		pCache[iEntry]->pName = NULL;
 	}
 
@@ -313,7 +313,7 @@ dynaTopicDelCacheEntry(instanceData *__restrict__ const pData, const int iEntry,
 
 	if(bFreeEntry) {
 		pthread_rwlock_destroy(&pCache[iEntry]->lock);
-		d_free(pCache[iEntry]);
+		free(pCache[iEntry]);
 		pCache[iEntry] = NULL;
 	}
 
@@ -326,16 +326,14 @@ static void
 dynaTopicFreeCacheEntries(instanceData *__restrict__ const pData)
 {
 	register int i;
-	ASSERT(pData != NULL);
+	assert(pData != NULL);
 
-	BEGINfunc;
 	pthread_mutex_lock(&pData->mutDynCache);
 	for(i = 0 ; i < pData->iCurrCacheSize ; ++i) {
 		dynaTopicDelCacheEntry(pData, i, 1);
 	}
 	pData->iCurrElt = -1; /* invalidate current element */
 	pthread_mutex_unlock(&pData->mutDynCache);
-	ENDfunc;
 }
 
 /* create the topic object */
@@ -366,6 +364,10 @@ rd_kafka_topic_t** topic) {
 			if(pData->bReportErrs) {
 				LogError(0, RS_RET_PARAM_ERROR, "error in kafka "
 					"topic conf parameter '%s=%s': %s",
+					pData->topicConfParams[i].name,
+					pData->topicConfParams[i].val, errstr);
+			} else {
+				DBGPRINTF("omkafka: setting custom topic configuration parameter '%s=%s': %s",
 					pData->topicConfParams[i].name,
 					pData->topicConfParams[i].val, errstr);
 			}
@@ -419,8 +421,8 @@ prepareDynTopic(instanceData *__restrict__ const pData, const uchar *__restrict_
 	dynaTopicCacheEntry *entry = NULL;
 	rd_kafka_topic_t *tmpTopic = NULL;
 	DEFiRet;
-	ASSERT(pData != NULL);
-	ASSERT(newTopicName != NULL);
+	assert(pData != NULL);
+	assert(newTopicName != NULL);
 
 	pCache = pData->dynCache;
 	/* first check, if we still have the current topic */
@@ -499,7 +501,7 @@ prepareDynTopic(instanceData *__restrict__ const pData, const uchar *__restrict_
 	}
 
 	if((pCache[iFirstFree]->pName = ustrdup(newTopicName)) == NULL) {
-		d_free_topic(&tmpTopic);
+		free_topic(&tmpTopic);
 		ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
 	}
 	pCache[iFirstFree]->pTopic = tmpTopic;
@@ -646,7 +648,7 @@ writeKafka(instanceData *const pData, uchar *const msg,
 #if RD_KAFKA_VERSION >= 0x00090400
 	if (msgTimestamp == NULL) {
 		/* Resubmitted items don't have a timestamp */
-		ttMsgTimestamp = time(NULL);
+		ttMsgTimestamp = 0;
 	} else {
 		ttMsgTimestamp = atoi((char*)msgTimestamp); /* Convert timestamp into int */
 		ttMsgTimestamp *= 1000; /* Timestamp in Milliseconds for kafka */
@@ -661,8 +663,10 @@ writeKafka(instanceData *const pData, uchar *const msg,
 						RD_KAFKA_V_VALUE(msg, strlen((char*)msg)),
 						RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
 						RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp),
+						RD_KAFKA_V_KEY(NULL, 0),
 						RD_KAFKA_V_END);
 	} else {
+		DBGPRINTF("omkafka: rd_kafka_producev key=%s\n", pData->key);
 		msg_kafka_response = rd_kafka_producev(pData->rk,
 						RD_KAFKA_V_RKT(rkt),
 						RD_KAFKA_V_PARTITION(partition),
@@ -688,9 +692,9 @@ writeKafka(instanceData *const pData, uchar *const msg,
 		} else {
 			LogError(0, RS_RET_KAFKA_PRODUCE_ERR,
 				"omkafka: Failed to produce to topic '%s' (rd_kafka_producev)"
-				"partition %d: %d/%s\n",
+				"partition %d: %d/%s - MSG '%s'\n",
 				rd_kafka_topic_name(rkt), partition, msg_kafka_response,
-				rd_kafka_err2str(msg_kafka_response));
+				rd_kafka_err2str(msg_kafka_response), msg);
 		}
 	}
 #else
@@ -717,9 +721,9 @@ writeKafka(instanceData *const pData, uchar *const msg,
 		} else {
 			LogError(0, RS_RET_KAFKA_PRODUCE_ERR,
 				"omkafka: Failed to produce to topic '%s' (rd_kafka_produce) "
-				"partition %d: %d/%s\n",
+				"partition %d: %d/%s - MSG '%s'\n",
 				rd_kafka_topic_name(rkt), partition, msg_kafka_response,
-				rd_kafka_err2str(msg_kafka_response));
+				rd_kafka_err2str(msg_kafka_response), msg);
 		}
 	}
 #endif
@@ -962,24 +966,25 @@ do_rd_kafka_destroy(instanceData *const __restrict__ pData)
 		queuedCount = rd_kafka_outq_len(pData->rk);
 		if (queuedCount > 0) {
 			/* Flush all remaining kafka messages (rd_kafka_poll is called inside) */
-			const int flushStatus = rd_kafka_flush(pData->rk, 5000);
-			if (flushStatus != RD_KAFKA_RESP_ERR_NO_ERROR) /* TODO: Handle unsend messages here! */ {
+			const int flushStatus = rd_kafka_flush(pData->rk, pData->closeTimeout);
+			if (flushStatus == RD_KAFKA_RESP_ERR_NO_ERROR) {
+				DBGPRINTF("omkafka: onDestroyflushed remaining '%d' messages "
+					"to kafka topic '%s'\n", queuedCount,
+					rd_kafka_topic_name(pData->pTopic));
+
+				/* Trigger callbacks a last time before shutdown */
+				const int callbacksCalled = rd_kafka_poll(pData->rk, 0); /* call callbacks */
+				DBGPRINTF("omkafka: onDestroy kafka outqueue length: %d, "
+					"callbacks called %d\n", rd_kafka_outq_len(pData->rk),
+					callbacksCalled);
+			} else /* TODO: Handle unsend messages here! */ {
+				/* timeout = RD_KAFKA_RESP_ERR__TIMED_OUT */
 				LogError(0, RS_RET_KAFKA_ERROR, "omkafka: onDestroy "
 						"Failed to send remaing '%d' messages to "
 						"topic '%s' on shutdown with error: '%s'",
 						queuedCount,
 						rd_kafka_topic_name(pData->pTopic),
 						rd_kafka_err2str(flushStatus));
-			} else {
-				DBGPRINTF("omkafka: onDestroyflushed remaining '%d' messages "
-					"to kafka topic '%s'\n", queuedCount,
-					rd_kafka_topic_name(pData->pTopic));
-
-			/* Trigger callbacks a last time before shutdown */
-			const int callbacksCalled = rd_kafka_poll(pData->rk, 0); /* call callbacks */
-			DBGPRINTF("omkafka: onDestroy kafka outqueue length: %d, "
-				"callbacks called %d\n", rd_kafka_outq_len(pData->rk),
-				callbacksCalled);
 			}
 		} else {
 			break;
@@ -1098,8 +1103,7 @@ openKafka(instanceData *const __restrict__ pData)
 	/* main conf */
 	rd_kafka_conf_t *const conf = rd_kafka_conf_new();
 	if(conf == NULL) {
-		LogError(0, RS_RET_KAFKA_ERROR,
-			"omkafka: error creating kafka conf obj: %s\n",
+		LogError(0, RS_RET_KAFKA_ERROR, "omkafka: error creating kafka conf obj: %s\n",
 			rd_kafka_err2str(rd_kafka_last_error()));
 		ABORT_FINALIZE(RS_RET_KAFKA_ERROR);
 	}
@@ -1108,7 +1112,8 @@ openKafka(instanceData *const __restrict__ pData)
 	/* enable kafka debug output */
 	if(rd_kafka_conf_set(conf, "debug", RD_KAFKA_DEBUG_CONTEXTS,
 		errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-		ABORT_FINALIZE(RS_RET_PARAM_ERROR);
+		LogError(0, RS_RET_KAFKA_ERROR, "omkafka: error setting kafka debug option: %s\n", errstr);
+		/* DO NOT ABORT IN THIS CASE! */
 	}
 #endif
 
@@ -1120,8 +1125,12 @@ openKafka(instanceData *const __restrict__ pData)
 			pData->confParams[i].val, errstr, sizeof(errstr))
 	 	   != RD_KAFKA_CONF_OK) {
 			if(pData->bReportErrs) {
-				LogError(0, RS_RET_PARAM_ERROR, "error in kafka "
+				LogError(0, RS_RET_PARAM_ERROR, "error setting custom configuration "
 					"parameter '%s=%s': %s",
+					pData->confParams[i].name,
+					pData->confParams[i].val, errstr);
+			} else {
+				DBGPRINTF("omkafka: error setting custom configuration parameter '%s=%s': %s",
 					pData->confParams[i].name,
 					pData->confParams[i].val, errstr);
 			}
@@ -1442,7 +1451,7 @@ CODESTARTfreeInstance
 	pthread_rwlock_wrlock(&pData->rkLock);
 	closeKafka(pData);
 	if(pData->dynaTopic && pData->dynCache != NULL) {
-		d_free(pData->dynCache);
+		free(pData->dynCache);
 		pData->dynCache = NULL;
 	}
 	/* Persist failed messages */

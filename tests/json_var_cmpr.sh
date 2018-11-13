@@ -3,7 +3,7 @@
 # This file is part of the rsyslog project, released under ASL 2.0
 echo =============================================================================================
 echo \[json_var_case.sh\]: test for referencing local and global variables properly in comparisons
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/mmjsonparse/.libs/mmjsonparse")
@@ -34,5 +34,5 @@ echo doing shutdown
 shutdown_when_empty
 echo wait on shutdown
 wait_shutdown
-. $srcdir/diag.sh content-check  "json prop:abc  local prop:def  global prop:ghi"
+content_check  "json prop:abc  local prop:def  global prop:ghi"
 exit_test

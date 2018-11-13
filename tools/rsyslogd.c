@@ -22,7 +22,6 @@
  * limitations under the License.
  */
 #include "config.h"
-#include "rsyslog.h"
 
 #include <signal.h>
 #include <stdlib.h>
@@ -39,6 +38,7 @@
 #	include <systemd/sd-daemon.h>
 #endif
 
+#include "rsyslog.h"
 #include "wti.h"
 #include "ratelimit.h"
 #include "parser.h"
@@ -58,8 +58,20 @@
 #include "rsconf.h"
 #include "cfsysline.h"
 #include "datetime.h"
+#include "operatingstate.h"
 #include "dirty.h"
 #include "janitor.h"
+
+/* some global vars we need to differentiate between environments,
+ * for TZ-related things see
+ * https://github.com/rsyslog/rsyslog/issues/2994
+ */
+static int runningInContainer = 0;
+#ifdef OS_LINUX
+static int emitTZWarning = 0;
+#else
+static int emitTZWarning = 1;
+#endif
 
 #if defined(_AIX)
 /* AIXPORT : start
@@ -338,6 +350,7 @@ prepareBackground(const int parentPipeFD)
 {
 	DBGPRINTF("rsyslogd: in child, finalizing initialization\n");
 
+	dbgTimeoutToStderr = 0; /* we loose stderr when backgrounding! */
 	int r = setsid();
 	if(r == -1) {
 		char err[1024];
@@ -414,22 +427,23 @@ forkRsyslog(void)
 		perror("error creating rsyslog \"fork pipe\" - terminating");
 		exit(1);
 	}
-	/* AIXPORT : src support start */
-#if defined(_AIX)
-	if(!src_exists)
-	{
-#endif
-	/* AIXPORT : src support end */
-	cpid = fork();
-	if(cpid == -1) {
-		perror("error forking rsyslogd process - terminating");
-		exit(1);
+	#if defined(_AIX)
+	if(!src_exists) {
+	#endif
+		cpid = fork();
+		if(cpid == -1) {
+			perror("error forking rsyslogd process - terminating");
+			exit(1);
+		}
+	#if defined(_AIX)
+	} else {
+		/* note: I added this hoping it is right - but I am not really
+		 * sure. Maybe we should just terminate in that case.
+		 * rgerhards, 2018-10-30
+		 */
+		cpid = -1;
 	}
-	/* AIXPORT : src support start */
-#if defined(_AIX)
-	}
-#endif
-	/* AIXPORT : src support end */
+	#endif
 
 	if(cpid == 0) {
 		prepareBackground(pipefd[1]);
@@ -596,8 +610,6 @@ rsyslogd_InitGlobalClasses(void)
 	CHKiRet(objUse(datetime, CORE_COMPONENT));
 	pErrObj = "ruleset";
 	CHKiRet(objUse(ruleset,  CORE_COMPONENT));
-	/*pErrObj = "conf";
-	CHKiRet(objUse(conf,     CORE_COMPONENT));*/
 	pErrObj = "prop";
 	CHKiRet(objUse(prop,     CORE_COMPONENT));
 	pErrObj = "parser";
@@ -1162,7 +1174,7 @@ bufOptAdd(char opt, char *arg)
 	DEFiRet;
 	bufOpt_t *pBuf;
 
-	if((pBuf = MALLOC(sizeof(bufOpt_t))) == NULL)
+	if((pBuf = malloc(sizeof(bufOpt_t))) == NULL)
 		ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
 
 	pBuf->optchar = opt;
@@ -1383,8 +1395,12 @@ initAll(int argc, char **argv)
 		const char *const tz =
 			(access("/etc/localtime", R_OK) == 0) ? "TZ=/etc/localtime" : "TZ=UTC";
 		putenv((char*)tz);
-		LogMsg(0, RS_RET_NO_TZ_SET, LOG_WARNING, "environment variable TZ is not "
-			"set, auto correcting this to %s\n", tz);
+		if(emitTZWarning) {
+			LogMsg(0, RS_RET_NO_TZ_SET, LOG_WARNING, "environment variable TZ is not "
+				"set, auto correcting this to %s", tz);
+		} else {
+			dbgprintf("environment variable TZ is not set, auto correcting this to %s\n", tz);
+		}
 	}
 
 	/* END core initializations - we now come back to carrying out command line options*/
@@ -1642,7 +1658,6 @@ finalize_it:
 		exit(1);
 	}
 
-	ENDfunc
 }
 
 
@@ -1724,9 +1739,7 @@ finalize_it:
  */
 DEFFUNC_llExecFunc(doHUPActions)
 {
-	BEGINfunc
 	actionCallHUPHdlr((action_t*) pData);
-	ENDfunc
 	return RS_RET_OK; /* we ignore errors, we can not do anything either way */
 }
 
@@ -1827,8 +1840,25 @@ wait_timeout(void)
 		FD_ZERO(&rfds);
 		FD_SET(SRC_FD, &rfds);
 	}
-	if(!src_exists)
-		select(1, NULL, NULL, NULL, &tvSelectTimeout);
+	if(!src_exists) {
+		/* it looks like select() is NOT interrupted by HUP, even though
+		 * SA_RESTART is not given in the signal setup. As this code is
+		 * not expected to be used in production (when running as a
+		 * service under src control), we simply make a kind of
+		 * "somewhat-busy-wait" algorithm. We compute our own
+		 * timeout value, which we count down to zero. We do this
+		 * in useful subsecond steps.
+		 */
+		const int wait_period = 500000; /* wait period in microseconds */
+		int timeout = janitorInterval * 60 * (1000000 / wait_period);
+		do {
+			if(bFinished || bHadHUP) {
+				break;
+			}
+			srSleep(0, wait_period);
+			timeout--;
+		} while(timeout > 0);
+	}
 	else if(select(SRC_FD + 1, (fd_set *)&rfds, NULL, NULL, &tvSelectTimeout))
 	{
 		if(FD_ISSET(SRC_FD, &rfds))
@@ -1838,9 +1868,10 @@ wait_timeout(void)
 			if (errno != EINTR)
 			{
 				fprintf(stderr,"%s: ERROR: '%d' recvfrom\n", progname,errno);
-				exit(1);
-			} else  /* punt on short read */
-				continue;
+				exit(1); //TODO: this needs to be handled gracefully
+			} else { /* punt on short read */
+				return;
+			}
 
 			switch(srcpacket.subreq.action)
 			{
@@ -1887,7 +1918,6 @@ mainloop(void)
 {
 	time_t tTime;
 
-	BEGINfunc
 
 	do {
 		processImInternal();
@@ -1920,7 +1950,6 @@ mainloop(void)
 		}
 
 	} while(!bFinished); /* end do ... while() */
-	ENDfunc
 }
 
 /* Finalize and destruct all actions.
@@ -2000,8 +2029,7 @@ deinitAll(void)
 	 * modules. As such, they are not yet cleared.  */
 	unregCfSysLineHdlrs();
 
-	/*dbgPrintAllDebugInfo();
-	/ * this is the last spot where this can be done - below output modules are unloaded! */
+	/* this is the last spot where this can be done - below output modules are unloaded! */
 
 	parserClassExit();
 	rsconfClassExit();
@@ -2016,6 +2044,7 @@ deinitAll(void)
 	rsrtExit(); /* runtime MUST always be deinitialized LAST (except for debug system) */
 	DBGPRINTF("Clean shutdown completed, bye\n");
 
+	errmsgExit();
 	/* dbgClassExit MUST be the last one, because it de-inits the debug system */
 	dbgClassExit();
 
@@ -2059,6 +2088,8 @@ main(int argc, char **argv)
 			"terminate rsyslog\n", VERSION);
 		PidFile = strdup("NONE"); /* disables pid file writing */
 		glblPermitCtlC = 1;
+		runningInContainer = 1;
+		emitTZWarning = 1;
 	} else {
 		/* "dynamic defaults" - non-container case */
 		PidFile = strdup(PATH_PIDFILE);
@@ -2089,5 +2120,6 @@ main(int argc, char **argv)
 #ifdef ENABLE_LIBLOGGING_STDLOG
 	stdlog_close(stdlog_hdl);
 #endif
+	osf_close();
 	return 0;
 }

@@ -25,7 +25,6 @@
  */
 #include "config.h"
 
-#include "rsyslog.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -35,12 +34,14 @@
 #include <pwd.h>
 #include <grp.h>
 
+#include "rsyslog.h"
 #include "cfsysline.h"
 #include "obj.h"
 #include "conf.h"
 #include "errmsg.h"
 #include "srUtils.h"
 #include "unicode-helper.h"
+#include "parserif.h"
 
 
 /* static data */
@@ -476,9 +477,9 @@ getWord(uchar **pp, cstr_t **ppStrB)
 	DEFiRet;
 	uchar *p;
 
-	ASSERT(pp != NULL);
-	ASSERT(*pp != NULL);
-	ASSERT(ppStrB != NULL);
+	assert(pp != NULL);
+	assert(*pp != NULL);
+	assert(ppStrB != NULL);
 
 	CHKiRet(cstrConstruct(ppStrB));
 
@@ -520,8 +521,8 @@ static rsRetVal doGetWord(uchar **pp, rsRetVal (*pSetHdlr)(void*, uchar*), void 
 	cstr_t *pStrB = NULL;
 	uchar *pNewVal;
 
-	ASSERT(pp != NULL);
-	ASSERT(*pp != NULL);
+	assert(pp != NULL);
+	assert(*pp != NULL);
 
 	CHKiRet(getWord(pp, &pStrB));
 	CHKiRet(cstrConvSzStrAndDestruct(&pStrB, &pNewVal, 0));
@@ -564,8 +565,8 @@ doSyslogName(uchar **pp, rsRetVal (*pSetHdlr)(void*, int),
 	cstr_t *pStrB;
 	int iNewVal;
 
-	ASSERT(pp != NULL);
-	ASSERT(*pp != NULL);
+	assert(pp != NULL);
+	assert(*pp != NULL);
 
 	CHKiRet(getWord(pp, &pStrB)); /* get word */
 	iNewVal = decodeSyslogName(cstrGetSzStrNoNULL(pStrB), pNameTable);
@@ -605,7 +606,7 @@ doGoneAway(__attribute__((unused)) uchar **pp,
 	   __attribute__((unused)) rsRetVal (*pSetHdlr)(void*, int),
 	   __attribute__((unused)) void *pVal)
 {
-	LogError(0, RS_RET_CMD_GONE_AWAY, "config directive is no longer supported -- ignored");
+	parser_warnmsg("config directive is no longer supported -- ignored");
 	return RS_RET_CMD_GONE_AWAY;
 }
 
@@ -629,7 +630,7 @@ doSeverity(uchar **pp, rsRetVal (*pSetHdlr)(void*, int), void *pVal)
  */
 static rsRetVal cslchDestruct(void *pThis)
 {
-	ASSERT(pThis != NULL);
+	assert(pThis != NULL);
 	free(pThis);
 	
 	return RS_RET_OK;

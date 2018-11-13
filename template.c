@@ -268,81 +268,6 @@ finalize_it:
 }
 
 
-/* This functions converts a template into an array of strings.
- * For further general details, see the very similar funtion
- * tpltoString().
- * Instead of a string, an array of string pointers is returned by
- * thus function. The caller is repsonsible for destroying that array as
- * well as all of its elements. The array is of fixed size. It's end
- * is indicated by a NULL pointer.
- * rgerhards, 2009-04-03
- */
-rsRetVal
-tplToArray(struct template *pTpl, smsg_t *pMsg, uchar*** ppArr, struct syslogTime *ttNow)
-{
-	DEFiRet;
-	struct templateEntry *pTpe;
-	uchar **pArr;
-	int iArr;
-	rs_size_t propLen;
-	unsigned short bMustBeFreed;
-	uchar *pVal;
-
-	assert(pTpl != NULL);
-	assert(pMsg != NULL);
-	assert(ppArr != NULL);
-
-	if(pTpl->bHaveSubtree) {
-		/* Note: this mode is untested, as there is no official plugin
-		 *       using array passing, so I simply could not test it.
-		 */
-		CHKmalloc(pArr = calloc(2, sizeof(uchar*)));
-		getJSONPropVal(pMsg, &pTpl->subtree, &pVal, &propLen, &bMustBeFreed);
-		if(bMustBeFreed) { /* if it must be freed, it is our own private copy... */
-			pArr[0] = pVal; /* ... so we can use it! */
-		} else {
-			CHKmalloc(pArr[0] = (uchar*)strdup((char*) pVal));
-		}
-		FINALIZE;
-	}
-
-	/* loop through the template. We obtain one value, create a
-	 * private copy (if necessary), add it to the string array
-	 * and then on to the next until we have processed everything.
-	 */
-	CHKmalloc(pArr = calloc(pTpl->tpenElements + 1, sizeof(uchar*)));
-	iArr = 0;
-
-	pTpe = pTpl->pEntryRoot;
-	while(pTpe != NULL) {
-		if(pTpe->eEntryType == CONSTANT) {
-			CHKmalloc(pArr[iArr] = (uchar*)strdup((char*) pTpe->data.constant.pConstant));
-		} else 	if(pTpe->eEntryType == FIELD) {
-			pVal = (uchar*) MsgGetProp(pMsg, pTpe, &pTpe->data.field.msgProp,
-						   &propLen, &bMustBeFreed, ttNow);
-			if(bMustBeFreed) { /* if it must be freed, it is our own private copy... */
-				pArr[iArr] = pVal; /* ... so we can use it! */
-			} else {
-				CHKmalloc(pArr[iArr] = (uchar*)strdup((char*) pVal));
-			}
-		}
-		iArr++;
-		pTpe = pTpe->pNext;
-	}
-
-finalize_it:
-	*ppArr = (iRet == RS_RET_OK) ? pArr : NULL;
-	if(iRet == RS_RET_OK) {
-		*ppArr = pArr;
-	} else {
-		*ppArr = NULL;
-		free(pArr);
-	}
-
-	RETiRet;
-}
-
-
 /* This functions converts a template into a json object.
  * For further general details, see the very similar funtion
  * tpltoString().
@@ -1100,7 +1025,7 @@ do_Parameter(uchar **pp, struct template *pTpl)
 				/* We get here ONLY if the regex end was found */
 				longitud = regex_end - p;
 				/* Malloc for the regex string */
-				regex_char = (unsigned char *) MALLOC(longitud + 1);
+				regex_char = (unsigned char *) malloc(longitud + 1);
 				if(regex_char == NULL) {
 					dbgprintf("Could not allocate memory for template parameter!\n");
 					pTpe->data.field.has_regex = 0;
@@ -1312,7 +1237,7 @@ struct template *tplAddLine(rsconf_t *conf, const char* pName, uchar** ppRestOfC
 	
 	DBGPRINTF("tplAddLine processing template '%s'\n", pName);
 	pTpl->iLenName = strlen(pName);
-	pTpl->pszName = (char*) MALLOC(pTpl->iLenName + 1);
+	pTpl->pszName = (char*) malloc(pTpl->iLenName + 1);
 	if(pTpl->pszName == NULL) {
 		dbgprintf("tplAddLine could not alloc memory for template name!");
 		pTpl->iLenName = 0;
@@ -2188,7 +2113,6 @@ void tplDeleteAll(rsconf_t *conf)
 {
 	struct template *pTpl, *pTplDel;
 	struct templateEntry *pTpe, *pTpeDel;
-	BEGINfunc
 
 	pTpl = conf->templates.root;
 	while(pTpl != NULL) {
@@ -2230,7 +2154,6 @@ void tplDeleteAll(rsconf_t *conf)
 			msgPropDescrDestruct(&pTplDel->subtree);
 		free(pTplDel);
 	}
-	ENDfunc
 }
 
 
@@ -2242,7 +2165,6 @@ void tplDeleteNew(rsconf_t *conf)
 	struct template *pTpl, *pTplDel;
 	struct templateEntry *pTpe, *pTpeDel;
 
-	BEGINfunc
 
 	if(conf->templates.root == NULL || conf->templates.lastStatic == NULL)
 		return;
@@ -2251,19 +2173,14 @@ void tplDeleteNew(rsconf_t *conf)
 	conf->templates.lastStatic->pNext = NULL;
 	conf->templates.last = conf->templates.lastStatic;
 	while(pTpl != NULL) {
-		/* dbgprintf("Delete Template: Name='%s'\n ", pTpl->pszName == NULL? "NULL" : pTpl->pszName);*/
 		pTpe = pTpl->pEntryRoot;
 		while(pTpe != NULL) {
 			pTpeDel = pTpe;
 			pTpe = pTpe->pNext;
-			/*dbgprintf("\tDelete Entry(%x): type %d, ", (unsigned) pTpeDel, pTpeDel->eEntryType);*/
 			switch(pTpeDel->eEntryType) {
 			case UNDEFINED:
-				/*dbgprintf("(UNDEFINED)");*/
 				break;
 			case CONSTANT:
-				/*dbgprintf("(CONSTANT), value: '%s'",
-					pTpeDel->data.constant.pConstant);*/
 				free(pTpeDel->data.constant.pConstant);
 				break;
 			case FIELD:
@@ -2278,7 +2195,6 @@ void tplDeleteNew(rsconf_t *conf)
 				msgPropDescrDestruct(&pTpeDel->data.field.msgProp);
 				break;
 			}
-			/*dbgprintf("\n");*/
 			free(pTpeDel);
 		}
 		pTplDel = pTpl;
@@ -2288,7 +2204,6 @@ void tplDeleteNew(rsconf_t *conf)
 			msgPropDescrDestruct(&pTplDel->subtree);
 		free(pTplDel);
 	}
-	ENDfunc
 }
 
 /* Store the pointer to the last hardcoded teplate */

@@ -4,14 +4,14 @@
 # This file is part of the rsyslog project, released  under GPLv3
 
 uname
-if [ `uname` = "FreeBSD" ] ; then
+if [ $(uname) = "FreeBSD" ] ; then
    echo "This test currently does not work on FreeBSD."
    exit 77
 fi
 
 echo ===============================================================================
 echo \[udp-msgreduc-orgmsg-vg.sh\]: testing msg reduction via udp, with org message
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $ModLoad ../plugins/imudp/.libs/imudp
@@ -23,7 +23,6 @@ $template outfmt,"%msg:F,58:2%\n"
 *.*       action(type="omfile" file=`echo $RSYSLOG_OUT_LOG` template="outfmt")
 '
 startup_vg
-. $srcdir/diag.sh wait-startup
 tcpflood -t 127.0.0.1 -m 4 -r -Tudp -M "\"<133>2011-03-01T11:22:12Z host tag msgh ...\""
 tcpflood -t 127.0.0.1 -m 1 -r -Tudp -M "\"<133>2011-03-01T11:22:12Z host tag msgh ...x\""
 shutdown_when_empty # shut down rsyslogd when done processing messages

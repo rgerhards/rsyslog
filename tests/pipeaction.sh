@@ -7,7 +7,7 @@ echo ===========================================================================
 echo \[pipeaction.sh\]: testing pipe output action
 
 uname
-if [ `uname` = "SunOS" ] ; then
+if [ $(uname) = "SunOS" ] ; then
    echo "Solaris: FIX ME"
    exit 77
 fi
@@ -15,13 +15,13 @@ fi
 
 # create the pipe and start a background process that copies data from 
 # it to the "regular" work file
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $MainMsgQueueTimeoutShutdown 10000
 
 # set spool locations and switch queue to disk-only mode
-$WorkDirectory test-spool
+$WorkDirectory '$RSYSLOG_DYNNAME'.spool
 $MainMsgQueueFilename mainq
 $MainMsgQueueType disk
 

@@ -29,7 +29,6 @@
 #define _XPG4_2
 #endif
 #include "config.h"
-#include "rsyslog.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -45,6 +44,7 @@
 #ifdef HAVE_LIBSYSTEMD
 #	include <systemd/sd-daemon.h>
 #endif
+#include "rsyslog.h"
 #include "dirty.h"
 #include "cfsysline.h"
 #include "unicode-helper.h"
@@ -314,7 +314,7 @@ createInstance(instanceConf_t **pinst)
 {
 	instanceConf_t *inst;
 	DEFiRet;
-	CHKmalloc(inst = MALLOC(sizeof(instanceConf_t)));
+	CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
 	inst->sockName = NULL;
 	inst->pLogHostName = NULL;
 	inst->pszBindRuleset = NULL;
@@ -1077,7 +1077,7 @@ static rsRetVal readSocket(lstn_t *pLstn)
 	if((size_t) iMaxLine < sizeof(bufRcv) - 1) {
 		pRcv = bufRcv;
 	} else {
-		CHKmalloc(pRcv = (uchar*) MALLOC(iMaxLine + 1));
+		CHKmalloc(pRcv = (uchar*) malloc(iMaxLine + 1));
 	}
 
 	memset(&msgh, 0, sizeof(msgh));

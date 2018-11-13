@@ -2,7 +2,7 @@
 # This file is part of the rsyslog project, released under ASL 2.0
 echo ===============================================================================
 echo \[mysql-act-mt.sh\]: test for mysql with multithread actionq
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/ommysql/.libs/ommysql")
@@ -18,12 +18,12 @@ module(load="../plugins/ommysql/.libs/ommysql")
 	)
 } 
 '
-mysql --user=rsyslog --password=testbench < testsuites/mysql-truncate.sql
+mysql --user=rsyslog --password=testbench < ${srcdir}/testsuites/mysql-truncate.sql
 startup
 injectmsg  0 150000
 shutdown_when_empty
 wait_shutdown 
 # note "-s" is requried to suppress the select "field header"
-mysql -s --user=rsyslog --password=testbench < testsuites/mysql-select-msg.sql > $RSYSLOG_OUT_LOG
+mysql -s --user=rsyslog --password=testbench < ${srcdir}/testsuites/mysql-select-msg.sql > $RSYSLOG_OUT_LOG
 seq_check  0 149999
 exit_test

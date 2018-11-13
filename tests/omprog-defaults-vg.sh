@@ -5,7 +5,7 @@
 # problems using valgrind. Note it is not necessary to repeat the
 # rest of checks (this simplifies the maintenance of the tests).
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/omprog/.libs/omprog")
@@ -15,17 +15,15 @@ template(name="outfmt" type="string" string="%msg%\n")
 :msg, contains, "msgnum:" {
     action(
         type="omprog"
-	binary=`echo $srcdir/testsuites/omprog-defaults-bin.sh param1 param2 param3`
+        binary=`echo $srcdir/testsuites/omprog-defaults-bin.sh p1 p2 p3`
         template="outfmt"
         name="omprog_action"
     )
 }
 '
 startup_vg
-. $srcdir/diag.sh wait-startup
 injectmsg 0 10
-. $srcdir/diag.sh wait-queueempty
 shutdown_when_empty
 wait_shutdown_vg
-. $srcdir/diag.sh check-exit-vg
+check_exit_vg
 exit_test

@@ -238,7 +238,7 @@ BEGINdoAction_NoStrings
 	instanceData *pData;
 CODESTARTdoAction
 	pData = pWrkrData->pData;
-	getTAG(pMsg, &pszTag, &lenTAG);
+	getTAG(pMsg, &pszTag, &lenTAG, LOCK_MUTEX);
 	if(strncmp((char*)pszTag, (char*)pData->pszTagID, pData->lenTagID)) {
 		DBGPRINTF("tag '%s' not matching, mmsnmptrapd ignoring this message\n",
 			  pszTag);
@@ -297,7 +297,7 @@ buildSeverityMapping(instanceData *const pData)
 					"range 0..7 (was string '%s')\n", sevCode, pszSevCode);
 			ABORT_FINALIZE(RS_RET_ERR);
 		}
-		CHKmalloc(node = MALLOC(sizeof(struct severMap_s)));
+		CHKmalloc(node = malloc(sizeof(struct severMap_s)));
 		CHKmalloc(node->name = ustrdup(pszSev));
 		node->code = sevCode;
 		/* we enqueue at the top, so the two lines below do all we need! */
@@ -343,11 +343,11 @@ CODE_STD_STRING_REQUESTparseSelectorAct(1)
 	} else {
 		int lenTag = ustrlen(cs.pszTagName);
 		/* new tag value (with colon at the end) */
-		CHKmalloc(pData->pszTagName = MALLOC(lenTag + 2));
+		CHKmalloc(pData->pszTagName = malloc(lenTag + 2));
 		memcpy(pData->pszTagName, cs.pszTagName, lenTag);
 		memcpy(pData->pszTagName+lenTag, ":", 2);
 		/* tag ID for comparisions */
-		CHKmalloc(pData->pszTagID = MALLOC(lenTag + 2));
+		CHKmalloc(pData->pszTagID = malloc(lenTag + 2));
 		memcpy(pData->pszTagID, cs.pszTagName, lenTag);
 		memcpy(pData->pszTagID+lenTag, "/", 2);
 		free(cs.pszTagName); /* no longer needed */

@@ -10,7 +10,7 @@
 # This file is part of the rsyslog project, released  under GPLv3
 echo ===============================================================================
 echo "[da-mainmsg-q.sh]: testing main message queue in DA mode (going to disk)"
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $ModLoad ../plugins/imtcp/.libs/imtcp
@@ -18,7 +18,7 @@ $MainMsgQueueTimeoutShutdown 10000
 $InputTCPServerRun '$TCPFLOOD_PORT'
 
 # set spool locations and switch queue to disk assisted mode
-$WorkDirectory test-spool
+$WorkDirectory '$RSYSLOG_DYNNAME'.spool
 $MainMsgQueueSize 200 # this *should* trigger moving on to DA mode...
 # note: we must set QueueSize sufficiently high, so that 70% (light delay mark)
 # is high enough above HighWatermark!
@@ -36,12 +36,12 @@ startup
 # part1: send first 50 messages (in memory, only)
 #tcpflood 127.0.0.1 '$TCPFLOOD_PORT' 1 50
 injectmsg 0 50
-. $srcdir/diag.sh wait-queueempty # let queue drain for this test case
+wait_queueempty # let queue drain for this test case
 
 # part 2: send bunch of messages. This should trigger DA mode
 #injectmsg 50 20000
 injectmsg 50 2000
-ls -l test-spool	 # for manual review
+ls -l ${RSYSLOG_DYNNAME}.spool	 # for manual review
 
 # send another handful
 injectmsg 2050 50

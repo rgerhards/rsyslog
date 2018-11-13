@@ -1,7 +1,7 @@
 #!/bin/bash
 # addd 2016-07-11 by RGerhards, released under ASL 2.0
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/imtcp/.libs/imtcp")
@@ -12,8 +12,8 @@ $rulesetparser rsyslog.rfc5424
 local4.debug action(type="omfile" template="outfmt" file=`echo $RSYSLOG_OUT_LOG`)
 '
 startup
-echo '<167>1 2003-03-01T01:00:00.000Z hostname1/hostname2 tcpflood - tag [tcpflood@32473 MSGNUM="0"] data' > rsyslog.input
-tcpflood -B -I rsyslog.input
+echo '<167>1 2003-03-01T01:00:00.000Z hostname1/hostname2 tcpflood - tag [tcpflood@32473 MSGNUM="0"] data' > $RSYSLOG_DYNNAME.input
+tcpflood -B -I $RSYSLOG_DYNNAME.input
 shutdown_when_empty
 wait_shutdown
 echo "hostname1/hostname2" | cmp - $RSYSLOG_OUT_LOG

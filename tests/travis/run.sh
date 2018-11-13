@@ -1,3 +1,4 @@
+#!/bin/bash
 # this script runs the travis CI testbench. It's easier and more
 # powerful this way than using .travis.yml (plus recommended by travis support)
 #
@@ -86,6 +87,7 @@ else
 	--enable-libdbi \
 	--enable-omhttpfs \
 	--enable-elasticsearch \
+	--enable-omhttp \
 	--enable-ommongodb \
 	--enable-omtcl \
 	--enable-mmdblookup \

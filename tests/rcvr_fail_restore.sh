@@ -1,10 +1,10 @@
 #!/bin/bash
 # Copyright (C) 2011 by Rainer Gerhards
 # This file is part of the rsyslog project, released  under GPLv3
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 
 uname
-if [ `uname` = "FreeBSD" ] ; then
+if [ $(uname) = "FreeBSD" ] ; then
    echo "This test currently does not work on FreeBSD."
    exit 77
 fi
@@ -40,7 +40,7 @@ $ModLoad ../plugins/imtcp/.libs/imtcp
 # this listener is for message generation by the test framework!
 $InputTCPServerRun '$TCPFLOOD_PORT'
 
-$WorkDirectory test-spool
+$WorkDirectory '$RSYSLOG_DYNNAME'.spool
 $MainMsgQueueSize 2000
 $MainMsgQueueLowWaterMark 800
 $MainMsgQueueHighWaterMark 1000
@@ -63,8 +63,8 @@ startup 2
 
 # now inject the messages into instance 2. It will connect to instance 1,
 # and that instance will record the data.
-. $srcdir/diag.sh injectmsg2  1 1000
-. $srcdir/diag.sh wait-queueempty
+injectmsg2  1 1000
+wait_queueempty
 ./msleep 1000 # let things settle down a bit
 
 #
@@ -76,10 +76,10 @@ echo step 2
 shutdown_when_empty
 wait_shutdown
 
-. $srcdir/diag.sh injectmsg2  1001 10000
+injectmsg2  1001 10000
 ./msleep 3000 # make sure some retries happen (retry interval is set to 3 second)
-. $srcdir/diag.sh get-mainqueuesize 2
-ls -l test-spool
+get_mainqueuesize 2
+ls -l ${RSYSLOG_DYNNAME}.spool
 
 #
 # Step 3: restart receiver, wait that the sender drains its queue
@@ -88,9 +88,9 @@ echo step 3
 #export RSYSLOG_DEBUGLOG="log2"
 startup
 echo waiting for sender to drain queue [may need a short while]
-. $srcdir/diag.sh wait-queueempty 2
-ls -l test-spool
-OLDFILESIZE=$(stat -c%s test-spool/mainq.00000001)
+wait_queueempty 2
+ls -l ${RSYSLOG_DYNNAME}.spool
+OLDFILESIZE=$(stat -c%s ${RSYSLOG_DYNNAME}.spool/mainq.00000001)
 echo file size to expect is $OLDFILESIZE
 
 
@@ -99,15 +99,15 @@ echo file size to expect is $OLDFILESIZE
 # (but one file continous to exist).
 #
 echo step 4
-. $srcdir/diag.sh injectmsg2  11001 10
-. $srcdir/diag.sh wait-queueempty 2
+injectmsg2  11001 10
+wait_queueempty 2
 
 # at this point, the queue file shall not have grown. Note
 # that we MUST NOT shut down the instance right now, because it
 # would clean up the queue files! So we need to do our checks
 # first (here!).
-ls -l test-spool
-NEWFILESIZE=$(stat -c%s test-spool/mainq.00000001)
+ls -l ${RSYSLOG_DYNNAME}.spool
+NEWFILESIZE=$(stat -c%s ${RSYSLOG_DYNNAME}.spool/mainq.00000001)
 if [ $NEWFILESIZE != $OLDFILESIZE ]
 then
    echo file sizes do not match, expected $OLDFILESIZE, actual $NEWFILESIZE
@@ -132,11 +132,11 @@ echo "*** done primary test *** now checking if DA can be restarted"
 shutdown_when_empty
 wait_shutdown
 
-. $srcdir/diag.sh injectmsg2  11011 10000
+injectmsg2  11011 10000
 sleep 1 # we need to wait, otherwise we may be so fast that the receiver
 # comes up before we have finally suspended the action
-. $srcdir/diag.sh get-mainqueuesize 2
-ls -l test-spool
+get_mainqueuesize 2
+ls -l ${RSYSLOG_DYNNAME}.spool
 
 #
 # Step 6: restart receiver, wait that the sender drains its queue
@@ -144,8 +144,8 @@ ls -l test-spool
 echo step 6
 startup
 echo waiting for sender to drain queue [may need a short while]
-. $srcdir/diag.sh wait-queueempty 2
-ls -l test-spool
+wait_queueempty 2
+ls -l ${RSYSLOG_DYNNAME}.spool
 
 #
 # Queue file size checks done. Now it is time to terminate the system

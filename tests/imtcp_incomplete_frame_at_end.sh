@@ -2,7 +2,7 @@
 # Copyright (C) 2016 by Rainer Gerhardds
 # This file is part of the rsyslog project, released  under ASL 2.0
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 module(load="../plugins/imtcp/.libs/imtcp")
@@ -16,9 +16,9 @@ template(name="outfmt" type="list") {
 			         file=`echo $RSYSLOG_OUT_LOG`)
 '
 startup
-echo -n "<165>1 2003-08-24T05:14:15.000003-07:00 192.0.2.1 tcpflood 8710 - - lastmsg" >tmp.in
-tcpflood -I tmp.in
-rm tmp.in
+echo -n "<165>1 2003-08-24T05:14:15.000003-07:00 192.0.2.1 tcpflood 8710 - - lastmsg" >$RSYSLOG_DYNNAME.tmp
+tcpflood -I $RSYSLOG_DYNNAME.tmp
+rm $RSYSLOG_DYNNAME.tmp
 ./msleep 500
 shutdown_when_empty # shut down rsyslogd when done processing messages
 wait_shutdown       # and wait for it to terminate

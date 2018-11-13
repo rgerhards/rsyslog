@@ -15,7 +15,7 @@ fi
 export TCPFLOOD_EXTRA_OPTS="-b1 -W1"
 
 # uncomment for debugging support:
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 # start up the instances
 #export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
 export RSYSLOG_DEBUGLOG="log"
@@ -26,11 +26,10 @@ $ModLoad ../plugins/imudp/.libs/imudp
 $UDPServerRun 2514
 
 $template outfmt,"%msg:F,58:2%\n"
-$template dynfile,"rsyslog.out.log" # trick to use relative path names!
+$template dynfile,"'$RSYSLOG_OUT_LOG'"
 :msg, contains, "msgnum:" ?dynfile;outfmt
 '
 startup
-. $srcdir/diag.sh wait-startup
 export RSYSLOG_DEBUGLOG="log2"
 #valgrind="valgrind"
 generate_conf 2
@@ -51,7 +50,6 @@ $ActionOMUDPSpoofSourcePortEnd 514
 *.*	:omudpspoof:
 ' 2
 startup 2
-. $srcdir/diag.sh wait-startup 2
 # may be needed by TLS (once we do it): sleep 30
 
 # now inject the messages into instance 2. It will connect to instance 1,

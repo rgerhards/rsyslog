@@ -21,7 +21,7 @@
  * File begun on 2007-12-21 by RGerhards (extracted from syslogd.c[which was
  * licensed under BSD at the time of the rsyslog fork])
  *
- * Copyright 2007-2016 Adiscon GmbH.
+ * Copyright 2007-2018 Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -52,6 +52,7 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <sys/types.h>
+#include <signal.h>
 #include <sys/socket.h>
 #if HAVE_FCNTL_H
 #include <fcntl.h>
@@ -282,7 +283,6 @@ TCPSessGetNxtSess(tcpsrv_t *pThis, int iCurr)
 {
 	register int i;
 
-	BEGINfunc
 	ISOBJ_TYPE_assert(pThis, tcpsrv);
 	assert(pThis->pSessions != NULL);
 	for(i = iCurr + 1 ; i < pThis->iSessMax ; ++i) {
@@ -290,7 +290,6 @@ TCPSessGetNxtSess(tcpsrv_t *pThis, int iCurr)
 			break;
 	}
 
-	ENDfunc
 	return((i < pThis->iSessMax) ? i : -1);
 }
 
@@ -382,20 +381,11 @@ initTCPListener(tcpsrv_t *pThis, tcpLstnPortList_t *pPortEntry)
 	ISOBJ_TYPE_assert(pThis, tcpsrv);
 	assert(pPortEntry != NULL);
 
-	if(!ustrcmp(pPortEntry->pszPort, UCHAR_CONSTANT("0")))
-		TCPLstnPort = UCHAR_CONSTANT("514");
-		/* use default - we can not do service db update, because there is
-		 * no IANA-assignment for syslog/tcp. In the long term, we might
-		 * re-use RFC 3195 port of 601, but that would probably break to
-		 * many existing configurations.
-		 * rgerhards, 2007-06-28
-		 */
-	else
-		TCPLstnPort = pPortEntry->pszPort;
+	TCPLstnPort = pPortEntry->pszPort;
 
 	// pPortEntry->pszAddr = NULL ==> bind to all interfaces
 	CHKiRet(netstrm.LstnInit(pThis->pNS, (void*)pPortEntry, addTcpLstn, TCPLstnPort,
-	pPortEntry->pszAddr, pThis->iSessMax));
+	pPortEntry->pszAddr, pThis->iSessMax, pThis->pszLstnPortFileName));
 
 finalize_it:
 	RETiRet;
@@ -678,6 +668,11 @@ static void * ATTR_NONNULL(1)
 wrkr(void *const myself)
 {
 	struct wrkrInfo_s *const me = (struct wrkrInfo_s*) myself;
+
+	/* block signals for this thread */
+	sigset_t sigSet;
+	sigfillset(&sigSet);
+	pthread_sigmask(SIG_SETMASK, &sigSet, NULL);
 	
 	pthread_mutex_lock(&wrkrMut);
 	while(1) {
@@ -1214,6 +1209,16 @@ SetGnutlsPriorityString(tcpsrv_t *pThis, uchar *iVal)
 }
 
 static rsRetVal
+SetLstnPortFileName(tcpsrv_t *pThis, uchar *iVal)
+{
+	DEFiRet;
+	DBGPRINTF("tcpsrv: LstnPortFileName set to %s\n",
+		(iVal == NULL) ? "(null)" : (const char*) iVal);
+	pThis->pszLstnPortFileName = iVal;
+	RETiRet;
+}
+
+static rsRetVal
 SetOnMsgReceive(tcpsrv_t *pThis, rsRetVal (*OnMsgReceive)(tcps_sess_t*, uchar*, int))
 {
 	DEFiRet;
@@ -1481,6 +1486,7 @@ CODESTARTobjQueryInterface(tcpsrv)
 	pIf->SetKeepAliveProbes = SetKeepAliveProbes;
 	pIf->SetKeepAliveTime = SetKeepAliveTime;
 	pIf->SetGnutlsPriorityString = SetGnutlsPriorityString;
+	pIf->SetLstnPortFileName = SetLstnPortFileName;
 	pIf->SetUsrP = SetUsrP;
 	pIf->SetInputName = SetInputName;
 	pIf->SetOrigin = SetOrigin;

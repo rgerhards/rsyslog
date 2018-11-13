@@ -2,7 +2,7 @@
 # test many concurrent tcp connections
 
 uname
-if [ `uname` = "FreeBSD" ] ; then
+if [ $(uname) = "FreeBSD" ] ; then
    echo "This test currently does not work on FreeBSD."
    exit 77
 fi
@@ -10,12 +10,12 @@ fi
 echo \[manytcp.sh\]: test concurrent tcp connections
 
 uname
-if [ `uname` = "SunOS" ] ; then
+if [ $(uname) = "SunOS" ] ; then
    echo "Solaris: FIX ME"
    exit 77
 fi
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $ModLoad ../plugins/imtcp/.libs/imtcp

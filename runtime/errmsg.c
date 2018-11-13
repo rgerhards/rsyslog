@@ -42,12 +42,11 @@
 #include "obj.h"
 #include "msg.h"
 #include "errmsg.h"
+#include "operatingstate.h"
 #include "srUtils.h"
 #include "stringbuf.h"
 
 /* static data */
-DEFobjStaticHelpers
-
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
 #endif
@@ -93,6 +92,7 @@ doLogMsg(const int iErrno, const int iErrCode,  const int severity, const char *
 	char errStr[1024];
 	
 	dbgprintf("Called LogMsg, msg: %s\n", msg);
+	osf_write(OSF_TAG_MSG, msg);
 
 	if(iErrno != 0) {
 		rs_strerror_r(iErrno, errStr, sizeof(errStr));
@@ -146,13 +146,12 @@ LogError(const int iErrno, const int iErrCode, const char *fmt, ... )
 {
 	va_list ap;
 	char buf[2048];
-	size_t lenBuf;
+	int lenBuf;
 	
 	va_start(ap, fmt);
 	lenBuf = vsnprintf(buf, sizeof(buf), fmt, ap);
-	if(lenBuf >= sizeof(buf)) {
-		/* if our buffer was too small, we simply truncate. */
-		lenBuf--;
+	if(lenBuf < 0) {
+		strncpy(buf, "error message lost due to problem with vsnprintf", sizeof(buf));
 	}
 	va_end(ap);
 	buf[sizeof(buf) - 1] = '\0'; /* just to be on the safe side... */
@@ -175,13 +174,12 @@ LogMsg(const int iErrno, const int iErrCode, const int severity, const char *fmt
 {
 	va_list ap;
 	char buf[2048];
-	size_t lenBuf;
+	int lenBuf;
 	
 	va_start(ap, fmt);
 	lenBuf = vsnprintf(buf, sizeof(buf), fmt, ap);
-	if(lenBuf >= sizeof(buf)) {
-		/* if our buffer was too small, we simply truncate. */
-		lenBuf--;
+	if(lenBuf < 0) {
+		strncpy(buf, "error message lost due to problem with vsnprintf", sizeof(buf));
 	}
 	va_end(ap);
 	buf[sizeof(buf) - 1] = '\0'; /* just to be on the safe side... */
@@ -278,42 +276,10 @@ errmsgDoHUP(void)
 }
 
 
-/* queryInterface function
- * rgerhards, 2008-03-05
- */
-BEGINobjQueryInterface(errmsg)
-CODESTARTobjQueryInterface(errmsg)
-	if(pIf->ifVersion != errmsgCURR_IF_VERSION) { /* check for current version, increment on each change */
-		ABORT_FINALIZE(RS_RET_INTERFACE_NOT_SUPPORTED);
-	}
-
-	/* ok, we have the right interface, so let's fill it
-	 * Please note that we may also do some backwards-compatibility
-	 * work here (if we can support an older interface version - that,
-	 * of course, also affects the "if" above).
-	 */
-	pIf->LogError = LogError;
-	pIf->LogMsg = LogMsg;
-finalize_it:
-ENDobjQueryInterface(errmsg)
-
-
-/* Initialize the errmsg class. Must be called as the very first method
- * before anything else is called inside this class.
- * rgerhards, 2008-02-19
- */
-BEGINAbstractObjClassInit(errmsg, 1, OBJ_IS_CORE_MODULE) /* class, version */
-	/* request objects we use */
-
-	/* set our own handlers */
-ENDObjClassInit(errmsg)
-
-/* Exit the class.
- * rgerhards, 2008-04-17
- */
-BEGINObjClassExit(errmsg, OBJ_IS_CORE_MODULE) /* class, version */
-	/* release objects we no longer need */
+void
+errmsgExit(void)
+{
 	if(fdOversizeMsgLog != -1) {
 		close(fdOversizeMsgLog);
 	}
-ENDObjClassExit(errmsg)
+}

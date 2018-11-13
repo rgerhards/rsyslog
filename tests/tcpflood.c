@@ -150,7 +150,6 @@ char *test_rs_strerror_r(int errnum, char *buf, size_t buflen) {
 	return buf;
 }
 
-#define EXIT_FAILURE 1
 #define INVALID_SOCKET -1
 /* Name of input file, must match $IncludeConfig in test suite .conf files */
 #define NETTEST_INPUT_CONF_FILE "nettest.input.conf"
@@ -211,7 +210,6 @@ static gnutls_certificate_credentials_t tlscred;
 /* Main OpenSSL CTX pointer */
 static SSL_CTX *ctx;
 static SSL **sslArray;
-// static DH *pDH;
 #endif
 
 /* variables for managing multi-threaded operations */
@@ -370,7 +368,7 @@ int openConnections(void)
 	if(bShowProgress)
 		if(write(1, "      open connections", sizeof("      open connections")-1)){}
 #	if defined(ENABLE_OPENSSL)
-	sslArray = calloc(numConnections, sizeof(sslArray));
+	sslArray = calloc(numConnections, sizeof(SSL *));
 #	elif defined(ENABLE_GNUTLS)
 	sessArray = calloc(numConnections, sizeof(gnutls_session_t));
 #	endif
@@ -683,10 +681,10 @@ int sendMessages(struct instdata *inst)
 			#endif
 		}
 		if(lenSend != lenBuf) {
-			printf("\r%5.5d\n", i);
+			printf("\r%5.5u\n", i);
 			fflush(stdout);
 			test_rs_strerror_r(error_number, errStr, sizeof(errStr));
-			printf("send() failed \"%s\" at socket %d, index %d, msgNum %lld\n",
+			printf("send() failed \"%s\" at socket %d, index %u, msgNum %lld\n",
 				   errStr, sockArray[socknum], i, inst->numSent);
 			fflush(stderr);
 
@@ -694,7 +692,7 @@ int sendMessages(struct instdata *inst)
 		}
 		if(i % show_progress_interval == 0) {
 			if(bShowProgress)
-				printf("\r%8.8d", i);
+				printf("\r%8.8u", i);
 		}
 		if(!runMultithreaded && bRandConnDrop) {
 			/* if we need to randomly drop connections, see if we
@@ -729,7 +727,7 @@ int sendMessages(struct instdata *inst)
 		lenSend = sendTLS(socknum, sendBuf, offsSendBuf);
 	}
 	if(!bSilent)
-		printf("\r%8.8d %s sent\n", i, statusText);
+		printf("\r%8.8u %s sent\n", i, statusText);
 
 	return 0;
 }
@@ -765,6 +763,7 @@ prepareGenerators()
 	int i;
 	long long msgsThrd;
 	long long starting = 0;
+	pthread_attr_t thrd_attr;
 
 	if(runMultithreaded) {
 		bSilent = 1;
@@ -772,6 +771,9 @@ prepareGenerators()
 	} else {
 		numThrds = 1;
 	}
+
+	pthread_attr_init(&thrd_attr);
+	pthread_attr_setstacksize(&thrd_attr, 4096*1024);
 
 	runningThreads = 0;
 	doRun = 0;
@@ -790,7 +792,7 @@ prepareGenerators()
 		instarray[i].numMsgs = msgsThrd;
 		instarray[i].numSent = 0;
 		instarray[i].idx = i;
-		pthread_create(&(instarray[i].thread), NULL, thrdStarter, instarray + i);
+		pthread_create(&(instarray[i].thread), &thrd_attr, thrdStarter, instarray + i);
 		/*printf("started thread %x\n", (unsigned) instarray[i].thread);*/
 		starting += msgsThrd;
 	}
@@ -856,9 +858,9 @@ endTiming(struct timeval *tvStart, struct runstats *stats)
 
 	if(!bSilent || bStatsRecords) {
 		if(bCSVoutput) {
-			printf("%ld.%3.3ld\n", runtime / 1000, runtime % 1000);
+			printf("%lu.%3.3ld\n", runtime / 1000, runtime % 1000);
 		} else {
-			printf("runtime: %ld.%3.3ld\n", runtime / 1000, runtime % 1000);
+			printf("runtime: %lu.%3.3ld\n", runtime / 1000, runtime % 1000);
 		}
 	}
 }
@@ -1265,7 +1267,6 @@ static void
 closeTLSSess(int i)
 {
 	int r;
-	printf("closeTLSSess: closing SSL Session ...\n");
 	r = SSL_shutdown(sslArray[i]);
 	SSL_free(sslArray[i]);
 }
@@ -1401,7 +1402,6 @@ setTargetPorts(const char *const port_arg)
 
 	char *saveptr;
 	char *ports = strdup(port_arg);
-	printf("ports: %s\n", ports);
 	char *port = strtok_r(ports, ":", &saveptr);
 	while(port != NULL) {
 		if(i == sizeof(targetPort)/sizeof(int)) {
@@ -1608,6 +1608,11 @@ int main(int argc, char *argv[])
 	}
 
 	if(transport == TP_TLS) {
+		if(tlsKeyFile == NULL || tlsCertFile == NULL) {
+			printf("error: transport TLS is specified (-Ttls), -z and -Z must also "
+				"be specified\n");
+			exit(1);
+		}
 		initTLS();
 	} else if(transport == TP_RELP_PLAIN) {
 		#ifdef ENABLE_RELP

@@ -1,6 +1,6 @@
 #!/bin/bash
 # This file is part of the rsyslog project, released under ASL 2.0 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 template(name="outfmt" type="string" string="%$!src_geoip%\n")
@@ -19,5 +19,5 @@ startup
 tcpflood -m 1 -j "202.106.0.20\ "
 shutdown_when_empty
 wait_shutdown
-. $srcdir/diag.sh content-check '{ "city_name": "Beijing" }'
+content_check '{ "city_name": "Beijing" }'
 exit_test

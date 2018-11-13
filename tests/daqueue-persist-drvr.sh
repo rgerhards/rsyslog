@@ -4,10 +4,9 @@
 # fast shutdown and then re-start the engine to process the 
 # remaining data.
 # added 2009-05-27 by Rgerhards
-# This file is part of the rsyslog project, released  under GPLv3
+# This file is part of the rsyslog project, released  under ASL 2.0
 # uncomment for debugging support:
-echo \[daqueue-persist-drvr.sh\]: testing memory daqueue persisting to disk, mode $1
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $ModLoad ../plugins/imtcp/.libs/imtcp
@@ -18,36 +17,36 @@ $InputTCPServerRun '$TCPFLOOD_PORT'
 $ModLoad ../plugins/omtesting/.libs/omtesting
 
 # set spool locations and switch queue to disk-only mode
-$WorkDirectory test-spool
+$WorkDirectory '$RSYSLOG_DYNNAME'.spool
 $MainMsgQueueFilename mainq
-$IncludeConfig work-queuemode.conf
+$IncludeConfig '${RSYSLOG_DYNNAME}'work-queuemode.conf
 
 $template outfmt,"%msg:F,58:2%\n"
 template(name="dynfile" type="string" string=`echo $RSYSLOG_OUT_LOG`) # trick to use relative path names!
 :msg, contains, "msgnum:" ?dynfile;outfmt
 
-$IncludeConfig work-delay.conf
+$IncludeConfig '${RSYSLOG_DYNNAME}'work-delay.conf
 '
 
 #export RSYSLOG_DEBUG="debug nologfuncflow nostdout noprintmutexaction"
 #export RSYSLOG_DEBUGLOG="log"
 
 # prepare config
-echo \$MainMsgQueueType $1 > work-queuemode.conf
-echo "*.*     :omtesting:sleep 0 1000" > work-delay.conf
+echo \$MainMsgQueueType $1 > ${RSYSLOG_DYNNAME}work-queuemode.conf
+echo "*.*     :omtesting:sleep 0 1000" > ${RSYSLOG_DYNNAME}work-delay.conf
 
 # inject 10000 msgs, so that DO hit the high watermark
 startup
 injectmsg 0 10000
-. $srcdir/diag.sh shutdown-immediate
+shutdown_immediate
 wait_shutdown
-. $srcdir/diag.sh check-mainq-spool
+check_mainq_spool
 
 echo "Enter phase 2, rsyslogd restart"
 
 # restart engine and have rest processed
 #remove delay
-echo "#" > work-delay.conf
+echo "#" > ${RSYSLOG_DYNNAME}work-delay.conf
 startup
 shutdown_when_empty # shut down rsyslogd when done processing messages
 wait_shutdown

@@ -36,7 +36,6 @@
  * limitations under the License.
  */
 #include "config.h"
-#include "rsyslog.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -53,7 +52,7 @@
 #	include <pthread.h>
 #endif
 
-
+#include "rsyslog.h"
 #include "conf.h"
 #include "syslogd-types.h"
 #include "srUtils.h"
@@ -455,14 +454,14 @@ finalize_it:
  * as the index of the to-be-deleted entry. This index may
  * point to an unallocated entry, in whcih case the
  * function immediately returns. Parameter bFreeEntry is 1
- * if the entry should be d_free()ed and 0 if not.
+ * if the entry should be free()ed and 0 if not.
  */
 static rsRetVal
 dynaFileDelCacheEntry(instanceData *__restrict__ const pData, const int iEntry, const int bFreeEntry)
 {
 	dynaFileCacheEntry **pCache = pData->dynCache;
 	DEFiRet;
-	ASSERT(pCache != NULL);
+	assert(pCache != NULL);
 
 	if(pCache[iEntry] == NULL)
 		FINALIZE;
@@ -471,7 +470,7 @@ dynaFileDelCacheEntry(instanceData *__restrict__ const pData, const int iEntry, 
 		pCache[iEntry]->pName == NULL ? UCHAR_CONSTANT("[OPEN FAILED]") : pCache[iEntry]->pName);
 
 	if(pCache[iEntry]->pName != NULL) {
-		d_free(pCache[iEntry]->pName);
+		free(pCache[iEntry]->pName);
 		pCache[iEntry]->pName = NULL;
 	}
 
@@ -484,7 +483,7 @@ dynaFileDelCacheEntry(instanceData *__restrict__ const pData, const int iEntry, 
 	}
 
 	if(bFreeEntry) {
-		d_free(pCache[iEntry]);
+		free(pCache[iEntry]);
 		pCache[iEntry] = NULL;
 	}
 
@@ -501,14 +500,12 @@ static void
 dynaFileFreeCacheEntries(instanceData *__restrict__ const pData)
 {
 	register int i;
-	ASSERT(pData != NULL);
+	assert(pData != NULL);
 
-	BEGINfunc;
 	for(i = 0 ; i < pData->iCurrCacheSize ; ++i) {
 		dynaFileDelCacheEntry(pData, i, 1);
 	}
 	pData->iCurrElt = -1; /* invalidate current element */
-	ENDfunc;
 }
 
 
@@ -516,13 +513,11 @@ dynaFileFreeCacheEntries(instanceData *__restrict__ const pData)
  */
 static void dynaFileFreeCache(instanceData *__restrict__ const pData)
 {
-	ASSERT(pData != NULL);
+	assert(pData != NULL);
 
-	BEGINfunc;
 	dynaFileFreeCacheEntries(pData);
 	if(pData->dynCache != NULL)
-		d_free(pData->dynCache);
-	ENDfunc;
+		free(pData->dynCache);
 }
 
 
@@ -679,8 +674,8 @@ prepareDynFile(instanceData *__restrict__ const pData, const uchar *__restrict__
 	dynaFileCacheEntry **pCache;
 	DEFiRet;
 
-	ASSERT(pData != NULL);
-	ASSERT(newFileName != NULL);
+	assert(pData != NULL);
+	assert(newFileName != NULL);
 
 	pCache = pData->dynCache;
 
@@ -792,8 +787,8 @@ static  rsRetVal
 doWrite(instanceData *__restrict__ const pData, uchar *__restrict__ const pszBuf, const int lenBuf)
 {
 	DEFiRet;
-	ASSERT(pData != NULL);
-	ASSERT(pszBuf != NULL);
+	assert(pData != NULL);
+	assert(pszBuf != NULL);
 
 	DBGPRINTF("omfile: write to stream, pData->pStrm %p, lenBuf %d, strt data %.128s\n",
 		  pData->pStrm, lenBuf, pszBuf);
@@ -1324,7 +1319,7 @@ CODESTARTnewActInst
 
 	if(pData->fname == NULL || *pData->fname == '\0') {
 		parser_errmsg("omfile: either the \"file\" or "
-				"\"dynfile\" parameter must be given");
+				"\"dynafile\" parameter must be given");
 		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
 	}
 
@@ -1336,7 +1331,7 @@ CODESTARTnewActInst
 		}
 	}
 	if(allWhiteSpace) {
-		parser_errmsg("omfile: \"file\" or \"dynfile\" parameter "
+		parser_errmsg("omfile: \"file\" or \"dynafile\" parameter "
 			"consist only of whitespace - this is not permitted");
 		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
 	}

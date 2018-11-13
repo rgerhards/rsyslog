@@ -1,6 +1,6 @@
 #!/bin/bash
 # added 2018-02-10 by Rainer Gerhards; Released under ASL 2.0
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 template(name="outfmt" type="list" option.jsonf="on") {
@@ -14,5 +14,6 @@ startup
 injectmsg 0 1
 shutdown_when_empty
 wait_shutdown
-. $srcdir/diag.sh content-cmp '{"message":" msgnum:00000000:", "@version": "1"}'
+export EXPECTED='{"message":" msgnum:00000000:", "@version": "1"}'
+cmp_exact $RSYSLOG_OUT_LOG
 exit_test

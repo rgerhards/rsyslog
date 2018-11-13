@@ -5,7 +5,7 @@
 # instead provide the defined return value (0)
 # requires faketime
 echo \[timegenerated-dateordinal-invld\]: check invalid dates with ordinal format
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 
 . $srcdir/faketime_common.sh
 
@@ -33,7 +33,7 @@ echo "001" | cmp - $RSYSLOG_OUT_LOG
 if [ ! $? -eq 0 ]; then
   echo "invalid timestamps generated, $RSYSLOG_OUT_LOG is:"
   cat $RSYSLOG_OUT_LOG
-  date -d @`cat $RSYSLOG_OUT_LOG`
+  date -d @$(cat $RSYSLOG_OUT_LOG)
   exit 1
 fi;
 
@@ -48,7 +48,7 @@ echo "001" | cmp - $RSYSLOG_OUT_LOG
 if [ ! $? -eq 0 ]; then
   echo "invalid timestamps generated, $RSYSLOG_OUT_LOG is:"
   cat $RSYSLOG_OUT_LOG
-  date -d @`cat $RSYSLOG_OUT_LOG`
+  date -d @$(cat $RSYSLOG_OUT_LOG)
   exit 1
 fi;
 
@@ -63,7 +63,7 @@ echo "001" | cmp - $RSYSLOG_OUT_LOG
 if [ ! $? -eq 0 ]; then
   echo "invalid timestamps generated, $RSYSLOG_OUT_LOG is:"
   cat $RSYSLOG_OUT_LOG
-  date -d @`cat $RSYSLOG_OUT_LOG`
+  date -d @$(cat $RSYSLOG_OUT_LOG)
   exit 1
 fi;
 
@@ -78,7 +78,7 @@ echo "001" | cmp - $RSYSLOG_OUT_LOG
 if [ ! $? -eq 0 ]; then
   echo "invalid timestamps generated, $RSYSLOG_OUT_LOG is:"
   cat $RSYSLOG_OUT_LOG
-  date -d @`cat $RSYSLOG_OUT_LOG`
+  date -d @$(cat $RSYSLOG_OUT_LOG)
   exit 1
 fi;
 

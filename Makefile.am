@@ -179,6 +179,10 @@ if ENABLE_ELASTICSEARCH
 SUBDIRS += plugins/omelasticsearch
 endif
 
+if ENABLE_OMHTTP
+SUBDIRS += contrib/omhttp
+endif
+
 if ENABLE_MMSNMPTRAPD
 SUBDIRS += plugins/mmsnmptrapd
 endif
@@ -318,7 +322,6 @@ DISTCHECK_CONFIGURE_FLAGS+= \
 	--enable-testbench \
 	--enable-valgrind
 # currently not supported in make distcheck:
-# --enable-mysql-tests
 # --enable-pgsql-tests 
 # --enable-extended-tests --> should probably never be enabled due to runtime
 
@@ -428,6 +431,9 @@ endif
 if ENABLE_MYSQL
 DISTCHECK_CONFIGURE_FLAGS+= --enable-mysql
 endif
+if ENABLE_MYSQL_TESTS
+DISTCHECK_CONFIGURE_FLAGS+= --enable-mysql-tests
+endif
 
 if ENABLE_ELASTICSEARCH
 DISTCHECK_CONFIGURE_FLAGS+= --enable-elasticsearch
@@ -459,6 +465,9 @@ DISTCHECK_CONFIGURE_FLAGS+= --enable-imjournal
 endif
 if ENABLE_OMJOURNAL
 DISTCHECK_CONFIGURE_FLAGS+= --enable-omjournal
+endif
+if ENABLE_JOURNAL_TESTS
+DISTCHECK_CONFIGURE_FLAGS+= --enable-journal-tests
 endif
 
 if ENABLE_IMCZMQ

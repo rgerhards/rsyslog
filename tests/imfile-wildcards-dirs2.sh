@@ -1,13 +1,14 @@
 #!/bin/bash
 # This is part of the rsyslog testbench, licensed under GPLv3
+. ${srcdir:=.}/diag.sh init
 export IMFILEINPUTFILES="10"
 export IMFILEINPUTFILESSTEPS="5"
 #export IMFILEINPUTFILESALL=$(($IMFILEINPUTFILES * $IMFILEINPUTFILESSTEPS))
-export IMFILECHECKTIMEOUT="5"
-. $srcdir/diag.sh init
+export IMFILECHECKTIMEOUT="20"
+
 generate_conf
 add_conf '
-$WorkDirectory test-spool
+$WorkDirectory '$RSYSLOG_DYNNAME'.spool
 
 /* Filter out busy debug output, comment out if needed */
 global(
@@ -20,7 +21,7 @@ module(	load="../plugins/imfile/.libs/imfile"
 	PollingInterval="1")
 
 input(type="imfile"
-	File="./rsyslog.input.*/*.logfile"
+	File="./'$RSYSLOG_DYNNAME'.input.*/*.logfile"
 	Tag="file:"
 	Severity="error"
 	Facility="local7"
@@ -30,9 +31,7 @@ input(type="imfile"
 template(name="outfmt" type="list") {
   constant(value="HEADER ")
   property(name="msg" format="json")
-  constant(value="'
-add_conf "'"
-add_conf ', ")
+  constant(value=", ")
   property(name="$!metadata!filename")
   constant(value="\n")
 }
@@ -53,26 +52,32 @@ startup
 # sleep a little to give rsyslog a chance to begin processing
 sleep 1
 
-for j in `seq 1 $IMFILEINPUTFILESSTEPS`;
+for j in $(seq 1 $IMFILEINPUTFILESSTEPS);
 do
 	echo "Loop Num $j"
 
-	for i in `seq 1 $IMFILEINPUTFILES`;
+	for i in $(seq 1 $IMFILEINPUTFILES);
 	do
-		mkdir rsyslog.input.dir$i
-		./inputfilegen -m 1 > rsyslog.input.dir$i/file.logfile
+		mkdir $RSYSLOG_DYNNAME.input.dir$i
+		touch $RSYSLOG_DYNNAME.input.dir$i/file.logfile
+		./inputfilegen -m 1 > $RSYSLOG_DYNNAME.input.dir$i/file.logfile
 	done
-	ls -d rsyslog.input.*
+	ls -d $RSYSLOG_DYNNAME.input.*
 
 	# Check correct amount of input files each time
 	let IMFILEINPUTFILESALL=$(($IMFILEINPUTFILES * $j))
-	. $srcdir/diag.sh content-check-with-count "HEADER msgnum:00000000:" $IMFILEINPUTFILESALL $IMFILECHECKTIMEOUT
+	content_check_with_count "HEADER msgnum:00000000:" $IMFILEINPUTFILESALL $IMFILECHECKTIMEOUT
 	
 	# Delete all but first!
-	for i in `seq 1 $IMFILEINPUTFILES`;
+	for i in $(seq 1 $IMFILEINPUTFILES);
 	do
-		rm -rf rsyslog.input.dir$i/
+		rm -rf $RSYSLOG_DYNNAME.input.dir$i/
 	done
+	
+	# Helps in testbench parallel mode. 
+	#	Otherwise sometimes directories are not marked deleted in imfile before they get created again.
+	#	This is properly a real issue in imfile when FILE IO is high. 
+	./msleep 1000
 done
 
 # sleep a little to give rsyslog a chance for processing

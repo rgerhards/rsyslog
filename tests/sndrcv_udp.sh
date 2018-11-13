@@ -14,7 +14,7 @@ fi
 export TCPFLOOD_EXTRA_OPTS="-b1 -W1"
 
 # uncomment for debugging support:
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 # start up the instances
 #export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
 export RSYSLOG_DEBUGLOG="log"
@@ -30,7 +30,6 @@ $template dynfile,"'$RSYSLOG_OUT_LOG'" # trick to use relative path names!
 :msg, contains, "msgnum:" ?dynfile;outfmt
 '
 startup
-. $srcdir/diag.sh wait-startup
 export RSYSLOG_DEBUGLOG="log2"
 #valgrind="valgrind"
 generate_conf 2
@@ -43,7 +42,6 @@ $InputTCPServerRun '$TCPFLOOD_PORT'
 *.*	@127.0.0.1:'$PORT_RCVR'
 ' 2
 startup 2
-. $srcdir/diag.sh wait-startup 2
 # may be needed by TLS (once we do it): sleep 30
 
 # now inject the messages into instance 2. It will connect to instance 1,

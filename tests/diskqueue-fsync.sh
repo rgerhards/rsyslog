@@ -9,19 +9,19 @@
 echo \[diskqueue-fsync.sh\]: testing queue disk-only mode, fsync case
 
 uname
-if [ `uname` = "SunOS" ] ; then
+if [ $(uname) = "SunOS" ] ; then
    echo "This test currently does not work on all flavors of Solaris."
    exit 77
 fi
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
 generate_conf
 add_conf '
 $ModLoad ../plugins/imtcp/.libs/imtcp
 $InputTCPServerRun '$TCPFLOOD_PORT'
 
 # set spool locations and switch queue to disk-only mode
-$WorkDirectory test-spool
+$WorkDirectory '$RSYSLOG_DYNNAME'.spool
 $MainMsgQueueSyncQueueFiles on
 $MainMsgQueueTimeoutShutdown 10000
 $MainMsgQueueFilename mainq

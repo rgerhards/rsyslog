@@ -5,7 +5,17 @@
 # parameters, with the external program returning an error on certain
 # transaction commits.
 
-. $srcdir/diag.sh init
+. ${srcdir:=.}/diag.sh init
+
+uname
+if [ $(uname) = "SunOS" ] ; then
+    # On Solaris, this test causes rsyslog to hang. This is presumably due
+    # to issue #2356 in the rsyslog core, which doesn't seem completely
+    # corrected. TODO: re-enable this test when the issue is corrected.
+    echo "Solaris: FIX ME"
+    exit 77
+fi
+
 generate_conf
 add_conf '
 module(load="../plugins/omprog/.libs/omprog")
@@ -27,20 +37,8 @@ template(name="outfmt" type="string" string="%msg%\n")
     )
 }
 '
-
-uname
-if [ `uname` = "SunOS" ] ; then
-    # On Solaris, this test causes rsyslog to hang. This is presumably due
-    # to issue #2356 in the rsyslog core, which doesn't seem completely
-    # corrected. TODO: re-enable this test when the issue is corrected.
-    echo "Solaris: FIX ME"
-    exit 77
-fi
-
 startup
-. $srcdir/diag.sh wait-startup
 injectmsg 0 10
-. $srcdir/diag.sh wait-queueempty
 shutdown_when_empty
 wait_shutdown
 
