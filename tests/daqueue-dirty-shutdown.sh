@@ -51,8 +51,7 @@ echo spool files immediately after shutdown \(but before kill\):
 ls ${RSYSLOG_DYNNAME}.spool
 
 
-. $srcdir/diag.sh kill-immediate   # do not give it sufficient time to shutdown
-wait_shutdown
+kill_immediate   # do not give it sufficient time to shutdown
 rm -f $RSYSLOG_PIDBASE.pid # as we kill, rsyslog does not itself cleanup the pid file
 
 echo spool files after kill:

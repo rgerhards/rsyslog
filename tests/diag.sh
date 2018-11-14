@@ -718,6 +718,14 @@ shutdown_immediate() {
 }
 
 
+# kill rsyslog unconditionally
+# we do not wait for the actual termination
+# $1 is the instance
+kill_immediate() {
+		kill -9 $(cat $RSYSLOG_PIDBASE${1:-}.pid)
+}
+
+
 # actually, we wait for rsyslog.pid to be deleted.
 # $1 is the instance
 wait_shutdown() {
@@ -1956,10 +1964,6 @@ case $1 in
 		;;
    'getpid')
 		pid=$(cat $RSYSLOG_PIDBASE$2.pid)
-		;;
-   'kill-immediate') # kill rsyslog unconditionally
-		kill -9 $(cat $RSYSLOG_PIDBASE.pid)
-		# note: we do not wait for the actual termination!
 		;;
     'injectmsg-litteral') # inject litteral-payload  via our inject interface (imdiag)
 		echo injecting msg payload from: $2
