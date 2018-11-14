@@ -188,13 +188,17 @@ wtiCancelThrd(wti_t *pThis, const uchar *const cancelobj)
 			fprintf(stderr, "rsyslog debug: %s: need to do hard cancellation\n",
 				cancelobj);
 		}
-		pthread_cancel(pThis->thrdID);
-		pthread_kill(pThis->thrdID, SIGTTIN);
-		DBGPRINTF("cooperative worker termination failed, using cancellation...\n");
 		DBGOPRINT((obj_t*) pThis, "canceling worker thread\n");
 		pthread_cancel(pThis->thrdID);
+		pthread_kill(pThis->thrdID, SIGTTIN);
+
 		/* now wait until the thread terminates... */
-		while(wtiGetState(pThis)) {
+		while(1) {
+			const int state = wtiGetState(pThis);
+			dbgprintf("wating on worker termination, state %d\n", state);
+			if(state == WRKTHRD_STOPPED || state == WRKTHRD_WAIT_JOIN) {
+				break;
+			}
 			srSleep(0, 10000);
 		}
 	}
