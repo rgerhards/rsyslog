@@ -39,7 +39,6 @@
  #include "unicode-helper.h"
  #include "module-template.h"
  #include "rainerscript.h"
- #include "ruleset.h"
  #include "rsconf.h"
  #include "dirty.h"
  #include "msg.h"
@@ -51,7 +50,6 @@ MODULE_CNFNAME("impcap")
 
 /* static data */
 DEF_IMOD_STATIC_DATA
-DEFobjCurrIf(ruleset)
 
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
 
@@ -59,8 +57,6 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __a
 
 struct instanceConf_s {
   uchar *interface;
-  uchar *pszBindRuleset;
-  ruleset_t *pBindRuleset;
   struct instanceConf_s *next;
 };
 
@@ -71,11 +67,10 @@ struct modConfData_s {
 };
 
 static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current load process */
-//static modConfData_t *runModConf = NULL;/* modConf ptr to use for the current running process */
 
 /* input instance parameters */
 static struct cnfparamdescr inppdescr[] = {
-	{ "dummy_variable2", eCmdHdlrPositiveInt, CNFPARAM_REQUIRED }
+	{ "interface", eCmdHdlrString, CNFPARAM_REQUIRED }
 };
 static struct cnfparamblk inppblk =
 	{ CNFPARAMBLK_VERSION,
@@ -93,8 +88,6 @@ static struct cnfparamblk modpblk =
 	  modpdescr
 	};
 
-#include "im-helper.h"
-
 /* create input instance, set default parameters, and
  * add it to the list of instances.
  */
@@ -107,7 +100,7 @@ createInstance(instanceConf_t **pinst)
 	inst->next = NULL;
   inst->interface = NULL;
 
-	/* node created, let's add to config */
+	/* node created, let's add to global config */
 	if(loadModConf->tail == NULL) {
 		loadModConf->tail = loadModConf->root = inst;
 	} else {
@@ -129,6 +122,12 @@ BEGINnewInpInst
 CODESTARTnewInpInst
   pvals = nvlstGetParams(lst, &inppblk, NULL);
 
+  if(pvals == NULL) {
+    LogError(0, RS_RET_MISSING_CNFPARAMS,
+              "impcap: required parameter are missing\n");
+    ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
+  }
+
   CHKiRet(createInstance(&inst));
 
   for(i = 0 ; i < inppblk.nParams ; ++i) {
@@ -136,6 +135,9 @@ CODESTARTnewInpInst
       continue;
     if(!strcmp(inppblk.descr[i].name, "interface")) {
       inst->interface = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
+    }
+    else {
+      dbgprintf("impcap: non-handled param %s in beginCnfLoad\n", inppblk.descr[i].name);
     }
   }
 
@@ -166,13 +168,6 @@ ENDsetModCnf
 
 /* config v2 system */
 
-/* function to generate error message if framework does not find requested ruleset */
-static inline void
-std_checkRuleset_genErrMsg(__attribute__((unused)) modConfData_t *modConf, instanceConf_t *inst)
-{
-	LogError(0, NO_ERRCODE, "impcap: ruleset not found for instance %s", inst->interface);
-}
-
 BEGINbeginCnfLoad
 CODESTARTbeginCnfLoad
   loadModConf = pModConf;
@@ -187,11 +182,7 @@ CODESTARTendCnfLoad
 ENDendCnfLoad
 
 BEGINcheckCnf
-  instanceConf_t *inst;
 CODESTARTcheckCnf
-  for(inst = pModConf->root ; inst != NULL ; inst = inst->next) {
-    std_checkRuleset(pModConf, inst);
-  }
   if(pModConf->root == NULL) {
     LogError(0, RS_RET_NO_LISTNERS , "impcap: module loaded, but "
         "no interface defined - no input will be gathered");
@@ -223,7 +214,6 @@ ENDafterRun
 
 BEGINmodExit
 CODESTARTmodExit
-objRelease(ruleset, CORE_COMPONENT);
 ENDmodExit
 
 
@@ -247,5 +237,4 @@ ENDqueryEtryPt
 BEGINmodInit()
 CODESTARTmodInit
   *ipIFVersProvided = CURR_MOD_IF_VERSION;
-  CHKiRet(objUse(ruleset, CORE_COMPONENT));
 ENDmodInit
