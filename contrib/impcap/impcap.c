@@ -33,6 +33,7 @@
  #include <unistd.h>
  #include <stdarg.h>
  #include <ctype.h>
+ #include <pcap.h>
 
  #include "rsyslog.h"
  #include "errmsg.h"

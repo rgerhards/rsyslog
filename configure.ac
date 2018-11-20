@@ -238,7 +238,7 @@ AC_TRY_COMPILE([
 	AC_MSG_RESULT(yes)
 	,
 	# note: we use 1024 here, which should be far more than needed by any system. If that's too low, we simply
-	# life with the need to change it. Most of the code doesn't need it anyways, but there are a few places 
+	# life with the need to change it. Most of the code doesn't need it anyways, but there are a few places
 	# where it actually is needed and it makes no sense to change them.
 	AC_DEFINE(MAXHOSTNAMELEN, 1024, [Define with a value if your <sys/param.h> does not define MAXHOSTNAMELEN])
 	AC_MSG_RESULT(no; defined as 64)
@@ -362,13 +362,13 @@ AC_ARG_ENABLE(fmhash-xxhash,
 AM_CONDITIONAL(ENABLE_FMHASH, [test "x$enable_fmhash" = "xyes" || test "x$enable_fmhash_xxhash" = "xyes"])
 
 AM_CONDITIONAL(ENABLE_FMHASH_XXHASH, test x$enable_fmhash_xxhash = xyes)
-if test "$enable_fmhash_xxhash" = "yes"; then  
+if test "$enable_fmhash_xxhash" = "yes"; then
 	AC_CHECK_LIB([xxhash], [XXH64], [
 		AC_CHECK_HEADER([xxhash.h], [
 			AC_DEFINE(USE_HASH_XXHASH, 1,
 				  [Using XXHASH for hash64.])
 			HASH_XXHASH_LIBS="-lxxhash"
-			AC_SUBST(HASH_XXHASH_LIBS)], 
+			AC_SUBST(HASH_XXHASH_LIBS)],
 			[AC_MSG_ERROR([Unable to add XXHASH support for hash64.])])
 	])
 fi
@@ -389,7 +389,7 @@ case "${os_type}" in
 solaris) GSSLIB=gss ;;
 *)       GSSLIB=gssapi_krb5 ;;
 esac
-  
+
 if test $enable_gssapi_krb5 = yes; then
 	AC_CHECK_LIB($GSSLIB, gss_acquire_cred, [
 		AC_CHECK_HEADER(gssapi/gssapi.h, [
@@ -429,7 +429,7 @@ then
 		[
 		  PTHREADS_LIBS="-lpthread"
 		  if test "$unamestr" = "AIX"; then
-			  PTHREADS_CFLAGS="-lpthreads" 
+			  PTHREADS_CFLAGS="-lpthreads"
 		  else
 			  case "${os_type}" in
 			  solaris) PTHREADS_CFLAGS="-pthreads -std=c99" ;;
@@ -675,7 +675,7 @@ AC_ARG_ENABLE(debug_symbols,
 )
 
 
-# total debugless: highest performance, but no way at all to enable debug 
+# total debugless: highest performance, but no way at all to enable debug
 # logging
 AC_ARG_ENABLE(debugless,
         [AS_HELP_STRING([--enable-debugless],[Enable runtime instrumentation mode @<:@default=no@:>@])],
@@ -936,7 +936,7 @@ AM_CONDITIONAL(ENABLE_OMHTTP, test x$enable_omhttp = xyes)
 
 
 # capability to enable elasticsearch testbench tests. This requries that an ES test
-# environment is present on the local (127.0.0.1) machine. 
+# environment is present on the local (127.0.0.1) machine.
 # we support a "minimal" mode to take care of travis where we cannot run all tests
 # due to runtime constraints
 AC_ARG_ENABLE(elasticsearch_tests,
@@ -2259,7 +2259,16 @@ AC_ARG_ENABLE(impcap,
          esac],
         [enable_impcap=no]
 )
+
+if test "x$enable_impcap" = "xyes"; then
+				AC_CHECK_HEADERS([pcap.h],
+				[AC_MSG_NOTICE([pcap found])],
+				AC_MSG_ERROR([libpcap library and headers not found])
+				)
+fi
 AM_CONDITIONAL(ENABLE_IMPCAP, test x$enable_impcap = xyes)
+
+
 
 
 # This provides a work-around to use "make distcheck" without
