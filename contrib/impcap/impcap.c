@@ -55,57 +55,51 @@ DEF_IMOD_STATIC_DATA
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
 
 /* network structures protocols*/
-struct ethHead{
+struct eth_header_s {
   uint8_t destMac[6];
   uint8_t srcMac[6];
   uint16_t ethType;
 };
 
-
-struct IPv4Header
-{
-	uint8_t		Ver:4;
+struct IPv4_header_s {
+	uint8_t		version:4;
 	uint8_t 	IHL:4;
 	uint8_t 	DSCP_ECN;
-	uint16_t 	TolalLEN;
-	uint16_t 	ID;
-	uint16_t 	Flag_Segment;
+	uint16_t 	totalLen;
+	uint16_t 	id;
+	uint16_t 	fragSegment;
 	uint8_t 	TTL;
-	uint8_t 	Protocol;
-	uint16_t 	Checksum;
-	uint8_t 	SrcIP[4];
-	uint8_t 	DstIP[4];
+	uint8_t 	protocol;
+	uint16_t 	checksum;
+	uint8_t 	srcIP[4];
+	uint8_t 	dstIP[4];
 };
 
-struct IPv6Header
-{
+struct IPv6_header_s {
 	uint8_t 	version:4;
-	uint8_t		traffic_class;
-	uint32_t 	label:20;
-	uint16_t	paylaod_len;
-	uint8_t		next_header;	
-	uint8_t		hop_limit;
-	uint8_t		SrcAd[16];
-	uint8_t		DstAd[16];
+	uint8_t		trafficClass;
+	uint32_t 	flowLabel:20;
+	uint16_t	payloadLen;
+	uint8_t		nextHeader;
+	uint8_t		hopLimit;
+	uint8_t		srcAddr[16];
+	uint8_t		dstAddr[16];
 };
 
-struct TCPHeader
-{
-	uint16_t	SrcPort;
-	uint16_t	Dstport;
-	uint32_t	SeqNO;
-	uint32_t	AckNO;
+struct TCP_header_s {
+	uint16_t	srcPort;
+	uint16_t	dstport;
+	uint32_t	seqNO;
+	uint32_t	ackNO;
 };
 
-struct arpHead{
+struct arp_header_s {
 	uint16_t hType; /*hardware type*/
 	uint16_t pType; /*protocol type*/
-	uint8_t haddrLen; /*hardware address length */
-	uint8_t paddrLen; /*protocol address length*/
+	uint8_t hAddrLen; /*hardware address length */
+	uint8_t pAddrLen; /*protocol address length*/
 	uint16_t operation; /*operation*/
 };
-
-
 
 /* conf structures */
 
