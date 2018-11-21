@@ -62,6 +62,41 @@ struct ethHead{
 };
 
 
+struct IPv4Header
+{
+	uint8_t		Ver:4;
+	uint8_t 	IHL:4;
+	uint8_t 	DSCP_ECN;
+	uint16_t 	TolalLEN;
+	uint16_t 	ID;
+	uint16_t 	Flag_Segment;
+	uint8_t 	TTL;
+	uint8_t 	Protocol;
+	uint16_t 	Checksum;
+	uint8_t 	SrcIP[4];
+	uint8_t 	DstIP[4];
+};
+
+struct IPv6Header
+{
+	uint8_t 	version:4;
+	uint8_t		traffic_class;
+	uint32_t 	label:20;
+	uint16_t	paylaod_len;
+	uint8_t		next_header;	
+	uint8_t		hop_limit;
+	uint8_t		SrcAd[16];
+	uint8_t		DstAd[16];
+};
+
+struct TCPHeader
+{
+	uint16_t	SrcPort;
+	uint16_t	Dstport;
+	uint32_t	SeqNO;
+	uint32_t	AckNO;
+};
+
 struct arpHead{
 	uint16_t hType; /*hardware type*/
 	uint16_t pType; /*protocol type*/
