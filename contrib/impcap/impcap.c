@@ -54,6 +54,16 @@ DEF_IMOD_STATIC_DATA
 
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
 
+/* network structures protocols*/
+
+struct arpHead{
+	uint16_t hType; /*hardware type*/
+	uint16_t pType; /*protocol type*/
+	uint8_t haddrLen; /*hardware address length */
+	uint8_t paddrLen; /*protocol address length*/
+	uint16_t operation; /*operation*/
+}
+
 /* conf structures */
 
 struct instanceConf_s {
