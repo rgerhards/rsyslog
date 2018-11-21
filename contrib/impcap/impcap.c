@@ -53,7 +53,10 @@ MODULE_CNFNAME("impcap")
 DEF_IMOD_STATIC_DATA
 
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
-
+#define ETH_TYPE_IPV4 0x0800
+#define ETH_TYPE_IPV6 0x86DD
+#define ETH_TYPE_ARP 0x0806
+#define ETH_TYPE_RARP 0x8035
 /* network structures protocols*/
 struct eth_header_s {
   uint8_t destMac[6];
@@ -82,8 +85,8 @@ struct IPv6_header_s {
 	uint16_t	payloadLen;
 	uint8_t		nextHeader;
 	uint8_t		hopLimit;
-	uint8_t		srcAddr[16];
-	uint8_t		dstAddr[16];
+	uint16_t	srcAddr[8];
+	uint16_t	dstAddr[8];
 };
 
 struct TCP_header_s {
@@ -335,4 +338,92 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
 
 finalize_it:
   return;
+}
+void handle_ethhead(const uchar *packet,smsg_t *pMsg)
+{
+	struct eth_header_s* eth = (struct eth_header_s*)(packet);
+	char macString[20];
+	snprintf(macString, 18,"%X:%X:%X:%X:%X:%X",
+                	(eth->destMac)[0],
+                	(eth->destMac)[1],
+                	(eth->destMac)[2],
+                	(eth->destMac)[3],
+                	(eth->destMac)[4],
+                	(eth->destMac)[5]);
+	MsgAddMetadata(pMsg, "destination Mac", macString);
+	snprintf(macString, 18,"%X:%X:%X:%X:%X:%X",
+                	(eth->srcMac)[0],
+                	(eth->srcMac)[1],
+                	(eth->srcMac)[2],
+                	(eth->srcMac)[3],
+                	(eth->srcMac)[4],
+                	(eth->srcMac)[5]);
+	MsgAddMetadata(pMsg, "source Mac", macString);
+	MsgAddMetadata(pMsg, "ethernet type", eth->ethType);
+	next_type = eth->ethtype;
+	if(next_type==ETH_TYPE_IPV4):
+		handle_ipv4head((*packet+sizeof(struct eth_header_s)),*pMsg);
+	else if(next_type==ETH_TYPE_IPV6):
+		handle_ipv6head((*packet+sizeof(struct eth_header_s)),*pMsg);
+	else if(next_type==ETH_TYPE_ARP):
+		handle_arphead((*packet+sizeof(struct eth_header_s)),*pMsg);
+
+}
+
+void handle_ipv4head(const uchar *packet,smsg_t *pMsg)
+{
+	ipv4 = (struct IPv4_header_s*)(packet);
+	MsgAddMetadata(pMsg, "Internet Header Length", ipv4->IHL);
+	MsgAddMetadata(pMsg, "Length of entire IP Packet", ipv4->totalLen);
+	MsgAddMetadata(pMsg, "Protocol", ipv4->protocol);
+	char ipString[20];
+	snprintf(ipString, 16,"%X,%X,%X,%X",
+                	(ipv4->srcIP)[0],
+                	(ipv4->srcIP)[1],
+                	(ipv4->srcIP)[2],
+                	(ipv4->srcIP)[3]);
+	MsgAddMetadata(pMsg, "source IP", ipString);
+	snprintf(ipString, 16,"%X,%X,%X,%X",
+                	(ipv4->dstIP)[0],
+                	(ipv4->dstIP)[1],
+                	(ipv4->dstIP)[2],
+                	(ipv4->dstIP)[3]);
+	MsgAddMetadata(pMsg, "destination IP", ipString);
+}
+
+void handle_ipv6head(const uchar *packet,smsg_t *pMsg)
+{
+	ipv6 = (struct IPv6_header_s*)(packet);
+	MsgAddMetadata(pMsg, "IPv6 trafficClass", ipv6->trafficClass);
+	MsgAddMetadata(pMsg, "IPv6 flowLabel", ipv6->flowLabel);
+	MsgAddMetadata(pMsg, "IPv6 Payload Length", ipv6->payloadLen);
+	MsgAddMetadata(pMsg, "IPv6 Next Header", ipv6->nextHeader);
+	char addressString[50]
+	snprintf(addressString, 40,"%X:%X:%X:%X:%X:%X:%X:%X",
+                	(ipv6->srcAddr)[0],
+                	(ipv6->srcAddr)[1],
+                	(ipv6->srcAddr)[2],
+                	(ipv6->srcAddr)[3],
+			(ipv6->srcAddr)[4],
+                	(ipv6->srcAddr)[5],
+                	(ipv6->srcAddr)[6],
+                	(ipv6->srcAddr)[7]);
+	MsgAddMetadata(pMsg, "source address", addressString);
+	snprintf(addressString, 40,"%X:%X:%X:%X:%X:%X:%X:%X",
+                	(ipv6->dstAddr)[0],
+                	(ipv6->dstAddr)[1],
+                	(ipv6->dstAddr)[2],
+                	(ipv6->dstAddr)[3],
+			(ipv6->dstAddr)[4],
+                	(ipv6->dstAddr)[5],
+                	(ipv6->dstAddr)[6],
+                	(ipv6->dstAddr)[7]);
+	MsgAddMetadata(pMsg, "destination address", addressString);
+}
+
+void handle_arphead(const uchar *packet,smsg_t *pMsg)
+{
+	arp = (struct arp_header_s*)(packet);
+	MsgAddMetadata(pMsg, "protocol type", arp->pType);
+	MsgAddMetadata(pMsg, "operation", arp->operation);
 }
