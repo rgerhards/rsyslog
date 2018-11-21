@@ -55,6 +55,12 @@ DEF_IMOD_STATIC_DATA
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
 
 /* network structures protocols*/
+struct ethHead{
+  uint8_t destMac[6];
+  uint8_t srcMac[6];
+  uint16_t ethType;
+};
+
 
 struct arpHead{
 	uint16_t hType; /*hardware type*/
@@ -63,6 +69,8 @@ struct arpHead{
 	uint8_t paddrLen; /*protocol address length*/
 	uint16_t operation; /*operation*/
 };
+
+
 
 /* conf structures */
 
