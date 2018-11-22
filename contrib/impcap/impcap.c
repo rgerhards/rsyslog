@@ -64,7 +64,7 @@ struct eth_header_s {
   uint16_t ethType;
 };
 
-struct IPv4_header_s {
+struct ipv4_header_s {
 	uint8_t		version:4;
 	uint8_t 	IHL:4;
 	uint8_t 	DSCP_ECN;
@@ -78,7 +78,7 @@ struct IPv4_header_s {
 	uint8_t 	dstIP[4];
 };
 
-struct IPv6_header_s {
+struct ipv6_header_s {
 	uint8_t 	version:4;
 	uint8_t		trafficClass;
 	uint32_t 	flowLabel:20;
@@ -142,7 +142,11 @@ static struct cnfparamblk modpblk =
 
 /* --- prototypes --- */
 void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet);
-void run();
+void handle_eth_header(const uchar *packet, smsg_t *pMsg);
+void handle_ipv4_header(const uchar *packet,smsg_t *pMsg);
+void handle_ipv6_header(const uchar *packet, smsg_t *pMsg);
+void handle_arp_header(const uchar *packet, smsg_t *pMsg);
+
 /* create input instance, set default parameters, and
  * add it to the list of instances.
  */
@@ -332,98 +336,106 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
   DEFiRet;
 
   msgConstruct(&pMsg);
-  MsgSetRawMsg(pMsg, "impcap packet", 14);
+
+  // handle_eth_header(packet, pMsg);
 
   submitMsg2(pMsg);
 
 finalize_it:
   return;
 }
-void handle_ethhead(const uchar *packet,smsg_t *pMsg)
-{
-	struct eth_header_s* eth = (struct eth_header_s*)(packet);
-	char macString[20];
-	snprintf(macString, 18,"%X:%X:%X:%X:%X:%X",
-                	(eth->destMac)[0],
-                	(eth->destMac)[1],
-                	(eth->destMac)[2],
-                	(eth->destMac)[3],
-                	(eth->destMac)[4],
-                	(eth->destMac)[5]);
-	MsgAddMetadata(pMsg, "destination Mac", macString);
-	snprintf(macString, 18,"%X:%X:%X:%X:%X:%X",
-                	(eth->srcMac)[0],
-                	(eth->srcMac)[1],
-                	(eth->srcMac)[2],
-                	(eth->srcMac)[3],
-                	(eth->srcMac)[4],
-                	(eth->srcMac)[5]);
-	MsgAddMetadata(pMsg, "source Mac", macString);
-	MsgAddMetadata(pMsg, "ethernet type", eth->ethType);
-	next_type = eth->ethtype;
-	if(next_type==ETH_TYPE_IPV4):
-		handle_ipv4head((*packet+sizeof(struct eth_header_s)),*pMsg);
-	else if(next_type==ETH_TYPE_IPV6):
-		handle_ipv6head((*packet+sizeof(struct eth_header_s)),*pMsg);
-	else if(next_type==ETH_TYPE_ARP):
-		handle_arphead((*packet+sizeof(struct eth_header_s)),*pMsg);
 
+void handle_eth_header(const uchar *packet, smsg_t *pMsg) {
+	struct eth_header_s *eth_header = (struct eth_header_s*)(packet);
+	char string[20];
+	snprintf(string, 18,"%2X:%2X:%2X:%2X:%2X:%2X",
+                	(eth_header->destMac)[0],
+                	(eth_header->destMac)[1],
+                	(eth_header->destMac)[2],
+                	(eth_header->destMac)[3],
+                	(eth_header->destMac)[4],
+                	(eth_header->destMac)[5]);
+	msgAddMetadata(pMsg, "destination Mac", string);
+	snprintf(string, 18,"%2X:%2X:%2X:%2X:%2X:%2X",
+                	(eth_header->srcMac)[0],
+                	(eth_header->srcMac)[1],
+                	(eth_header->srcMac)[2],
+                	(eth_header->srcMac)[3],
+                	(eth_header->srcMac)[4],
+                	(eth_header->srcMac)[5]);
+	msgAddMetadata(pMsg, "source Mac", string);
+
+	uint16_t next_type = eth_header->ethType;
+	if(next_type==ETH_TYPE_IPV4) {
+    msgAddMetadata(pMsg, "ethernet type", "IPV4");
+    handle_ipv4_header(packet + sizeof(struct eth_header_s), pMsg);
+  }
+	else if(next_type==ETH_TYPE_IPV6) {
+    msgAddMetadata(pMsg, "ethernet type", "IPV6");
+    handle_ipv6_header(packet + sizeof(struct eth_header_s), pMsg);
+  }
+	else if(next_type==ETH_TYPE_ARP) {
+    msgAddMetadata(pMsg, "ethernet type", "ARP");
+    handle_arp_header(packet + sizeof(struct eth_header_s), pMsg);
+  }
 }
 
-void handle_ipv4head(const uchar *packet,smsg_t *pMsg)
-{
-	ipv4 = (struct IPv4_header_s*)(packet);
-	MsgAddMetadata(pMsg, "Internet Header Length", ipv4->IHL);
-	MsgAddMetadata(pMsg, "Length of entire IP Packet", ipv4->totalLen);
-	MsgAddMetadata(pMsg, "Protocol", ipv4->protocol);
-	char ipString[20];
-	snprintf(ipString, 16,"%X,%X,%X,%X",
-                	(ipv4->srcIP)[0],
-                	(ipv4->srcIP)[1],
-                	(ipv4->srcIP)[2],
-                	(ipv4->srcIP)[3]);
-	MsgAddMetadata(pMsg, "source IP", ipString);
-	snprintf(ipString, 16,"%X,%X,%X,%X",
-                	(ipv4->dstIP)[0],
-                	(ipv4->dstIP)[1],
-                	(ipv4->dstIP)[2],
-                	(ipv4->dstIP)[3]);
-	MsgAddMetadata(pMsg, "destination IP", ipString);
+void handle_ipv4_header(const uchar *packet,smsg_t *pMsg) {
+	struct ipv4_header_s *ipv4_header = (struct ipv4_header_s *)packet;
+	//msgAddMetadata(pMsg, "Internet Header Length", ipv4->IHL);
+	//msgAddMetadata(pMsg, "Length of entire IP Packet", ipv4->totalLen);
+	char string[20];
+	snprintf(string, 16, "%d.%d.%d.%d",
+                	(ipv4_header->srcIP)[0],
+                	(ipv4_header->srcIP)[1],
+                	(ipv4_header->srcIP)[2],
+                	(ipv4_header->srcIP)[3]);
+	msgAddMetadata(pMsg, "IPv4 source", string);
+	snprintf(string, 16, "%d.%d.%d.%d",
+                	(ipv4_header->dstIP)[0],
+                	(ipv4_header->dstIP)[1],
+                	(ipv4_header->dstIP)[2],
+                	(ipv4_header->dstIP)[3]);
+	msgAddMetadata(pMsg, "IPv4 destination", string);
+  snprintf(string, 4, "%d", ipv4_header->protocol);
+  msgAddMetadata(pMsg, "IPv4 protocol", string);
 }
 
-void handle_ipv6head(const uchar *packet,smsg_t *pMsg)
-{
-	ipv6 = (struct IPv6_header_s*)(packet);
-	MsgAddMetadata(pMsg, "IPv6 trafficClass", ipv6->trafficClass);
-	MsgAddMetadata(pMsg, "IPv6 flowLabel", ipv6->flowLabel);
-	MsgAddMetadata(pMsg, "IPv6 Payload Length", ipv6->payloadLen);
-	MsgAddMetadata(pMsg, "IPv6 Next Header", ipv6->nextHeader);
-	char addressString[50]
-	snprintf(addressString, 40,"%X:%X:%X:%X:%X:%X:%X:%X",
-                	(ipv6->srcAddr)[0],
-                	(ipv6->srcAddr)[1],
-                	(ipv6->srcAddr)[2],
-                	(ipv6->srcAddr)[3],
-			(ipv6->srcAddr)[4],
-                	(ipv6->srcAddr)[5],
-                	(ipv6->srcAddr)[6],
-                	(ipv6->srcAddr)[7]);
-	MsgAddMetadata(pMsg, "source address", addressString);
-	snprintf(addressString, 40,"%X:%X:%X:%X:%X:%X:%X:%X",
-                	(ipv6->dstAddr)[0],
-                	(ipv6->dstAddr)[1],
-                	(ipv6->dstAddr)[2],
-                	(ipv6->dstAddr)[3],
-			(ipv6->dstAddr)[4],
-                	(ipv6->dstAddr)[5],
-                	(ipv6->dstAddr)[6],
-                	(ipv6->dstAddr)[7]);
-	MsgAddMetadata(pMsg, "destination address", addressString);
+void handle_ipv6_header(const uchar *packet, smsg_t *pMsg) {
+	struct ipv6_header_s *ipv6_header = (struct ipv6_header_s *)packet;
+	// MsgAddMetadata(pMsg, "IPv6 trafficClass", ipv6->trafficClass);
+	// MsgAddMetadata(pMsg, "IPv6 flowLabel", ipv6->flowLabel);
+	// MsgAddMetadata(pMsg, "IPv6 Payload Length", ipv6->payloadLen);
+	// MsgAddMetadata(pMsg, "IPv6 Next Header", ipv6->nextHeader);
+	char string[50];
+	snprintf(string, 40,"%X:%X:%X:%X:%X:%X:%X:%X",
+                	(ipv6_header->srcAddr)[0],
+                	(ipv6_header->srcAddr)[1],
+                	(ipv6_header->srcAddr)[2],
+                	(ipv6_header->srcAddr)[3],
+			            (ipv6_header->srcAddr)[4],
+                	(ipv6_header->srcAddr)[5],
+                	(ipv6_header->srcAddr)[6],
+                	(ipv6_header->srcAddr)[7]);
+	msgAddMetadata(pMsg, "IPv6 source", string);
+	snprintf(string, 40,"%X:%X:%X:%X:%X:%X:%X:%X",
+                	(ipv6_header->dstAddr)[0],
+                	(ipv6_header->dstAddr)[1],
+                	(ipv6_header->dstAddr)[2],
+                	(ipv6_header->dstAddr)[3],
+			            (ipv6_header->dstAddr)[4],
+                	(ipv6_header->dstAddr)[5],
+                	(ipv6_header->dstAddr)[6],
+                	(ipv6_header->dstAddr)[7]);
+	msgAddMetadata(pMsg, "IPv6 destination", string);
 }
 
-void handle_arphead(const uchar *packet,smsg_t *pMsg)
-{
-	arp = (struct arp_header_s*)(packet);
-	MsgAddMetadata(pMsg, "protocol type", arp->pType);
-	MsgAddMetadata(pMsg, "operation", arp->operation);
+void handle_arp_header(const uchar *packet, smsg_t *pMsg) {
+	struct arp_header_s *arp = (struct arp_header_s *)packet;
+	// msgAddMetadata(pMsg, "ARP protocol type", arp->pType);
+
+  if(arp->operation == 1)
+    msgAddMetadata(pMsg, "ARP operation", "request");
+  else
+    msgAddMetadata(pMsg, "ARP operation", "reply");
 }
