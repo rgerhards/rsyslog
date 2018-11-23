@@ -86,7 +86,7 @@ struct svar* creatsvar_char(char* value)
 	struct svar *psvar;
 	if((psvar = malloc(sizeof(struct svar))) != NULL) 
 	{
-		psvar->d.estr = es_str2cstr(value);
+		psvar->d.estr = es_str2cstr(value, NULL);
 		psvar->datatype = 'S';
 	}
 	return psvar;
