@@ -118,6 +118,28 @@ struct modConfData_s {
   uint16_t snap_length;
 };
 
+struct svar* creatsvar_char(char* value)
+{
+	struct svar *psvar;
+	if((psvar = malloc(sizeof(struct svar))) != NULL) 
+	{
+		psvar->d.estr = es_str2cstr(value);
+		psvar->datatype = 'S';
+	}
+	return psvar;
+}
+
+struct svar* creatsvar_int(int value)
+{
+	struct svar *psvar;
+	if((psvar = malloc(sizeof(struct svar))) != NULL) 
+	{
+		psvar->d.n = value;
+		psvar->datatype = 'N';
+	}
+	return psvar;
+}
+
 static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current load process */
 
 /* input instance parameters */
