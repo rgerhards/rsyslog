@@ -44,6 +44,19 @@
  #include "dirty.h"
  #include "msg.h"
 
+ #include <netinet/ether.h>
+ // #include <netinet/in.h>
+ #include <netinet/ip.h>
+ #include <netinet/ip6.h>
+ #include <net/ethernet.h>
+ #include <netinet/if_ether.h>  /* arp structure */
+ #include <arpa/inet.h>   /* IP address extraction */
+
+ typedef struct ether_header    eth_header_t;
+ typedef struct ip              ipv4_header_t;
+ typedef struct ether_arp       arp_header_t;
+ typedef struct ip6_hdr        ipv6_header_t;
+ #define ip6_addr_sub16 __in6_u.__u6_addr16
 
 MODULE_TYPE_INPUT
 MODULE_TYPE_NOKEEP
@@ -53,56 +66,6 @@ MODULE_CNFNAME("impcap")
 DEF_IMOD_STATIC_DATA
 
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
-#define ETH_TYPE_IPV4 0x0800
-#define ETH_TYPE_IPV6 0x86DD
-#define ETH_TYPE_ARP 0x0806
-#define ETH_TYPE_RARP 0x8035
-/* network structures protocols*/
-struct eth_header_s {
-  uint8_t destMac[6];
-  uint8_t srcMac[6];
-  uint16_t ethType;
-};
-
-struct ipv4_header_s {
-	uint8_t		version:4;
-	uint8_t 	IHL:4;
-	uint8_t 	DSCP_ECN;
-	uint16_t 	totalLen;
-	uint16_t 	id;
-	uint16_t 	fragSegment;
-	uint8_t 	TTL;
-	uint8_t 	protocol;
-	uint16_t 	checksum;
-	uint8_t 	srcIP[4];
-	uint8_t 	dstIP[4];
-};
-
-struct ipv6_header_s {
-	uint8_t 	version:4;
-	uint8_t		trafficClass;
-	uint32_t 	flowLabel:20;
-	uint16_t	payloadLen;
-	uint8_t		nextHeader;
-	uint8_t		hopLimit;
-	uint16_t	srcAddr[8];
-	uint16_t	dstAddr[8];
-};
-
-struct TCP_header_s {
-	uint16_t	srcPort;
-	uint16_t	dstport;
-	uint32_t	seqNO;
-	uint32_t	ackNO;
-};
-
-struct arp_header_s {
-	uint16_t hType; /*hardware type*/
-	uint16_t pType; /*protocol type*/
-	uint8_t hAddrLen; /*hardware address length */
-	uint8_t pAddrLen; /*protocol address length*/
-	uint16_t operation; /*operation*/
-};
 
 /* conf structures */
 
@@ -165,7 +128,7 @@ static struct cnfparamblk modpblk =
 /* --- prototypes --- */
 void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet);
 void handle_eth_header(const uchar *packet, smsg_t *pMsg);
-void handle_ipv4_header(const uchar *packet,smsg_t *pMsg);
+void handle_ipv4_header(const uchar *packet, smsg_t *pMsg);
 void handle_ipv6_header(const uchar *packet, smsg_t *pMsg);
 void handle_arp_header(const uchar *packet, smsg_t *pMsg);
 
@@ -354,110 +317,171 @@ ENDmodInit
 
 /* callback for packet received from pcap_loop */
 void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
+  DBGPRINTF("impcap : entered handle_packet\n");
+
   smsg_t *pMsg;
   DEFiRet;
+  char tag[20];
+  int length;
 
   msgConstruct(&pMsg);
 
-  // handle_eth_header(packet, pMsg);
+  // /* ----- DEBUG REMOVE ----- */
+  // /* give the raw packet to rsyslog */
+  // char rawMsg[1600] = {0};
+  // for(int i = 0; i < pkthdr->len; ++i) {
+  //   char hexPart[4];
+  //
+  //   snprintf(hexPart, 4, " %02X", packet[i]);
+  //   strncat(rawMsg, hexPart, 4);
+  // }
+  // DBGPRINTF("raw message is %s\n", rawMsg);
+  // DBGPRINTF("message length is %d\n", pkthdr->len);
+  // DBGPRINTF("min length is %d\n", ETHER_MIN_LEN);
+  // DBGPRINTF("max length is %d\n", ETHER_MAX_LEN);
+  //
+  // MsgSetRawMsg(pMsg, rawMsg, 1600);
+  // /* ----- DEBUG REMOVE ----- */
+
+  if(pkthdr->len >= 40 && pkthdr->len <= 1514) {
+    handle_eth_header(packet, pMsg);
+  }
+  else {
+    DBGPRINTF("bad packet length, discarded\n");
+    msgDestruct(pMsg);
+    return;
+  }
 
   submitMsg2(pMsg);
-
-finalize_it:
-  return;
 }
 
 void handle_eth_header(const uchar *packet, smsg_t *pMsg) {
-	struct eth_header_s *eth_header = (struct eth_header_s*)(packet);
-	char string[20];
-	snprintf(string, 18,"%2X:%2X:%2X:%2X:%2X:%2X",
-                	(eth_header->destMac)[0],
-                	(eth_header->destMac)[1],
-                	(eth_header->destMac)[2],
-                	(eth_header->destMac)[3],
-                	(eth_header->destMac)[4],
-                	(eth_header->destMac)[5]);
-	msgAddMetadata(pMsg, "destination Mac", string);
-	snprintf(string, 18,"%2X:%2X:%2X:%2X:%2X:%2X",
-                	(eth_header->srcMac)[0],
-                	(eth_header->srcMac)[1],
-                	(eth_header->srcMac)[2],
-                	(eth_header->srcMac)[3],
-                	(eth_header->srcMac)[4],
-                	(eth_header->srcMac)[5]);
-	msgAddMetadata(pMsg, "source Mac", string);
+  DBGPRINTF("entered handle_eth_header\n");
 
-	uint16_t next_type = eth_header->ethType;
-	if(next_type==ETH_TYPE_IPV4) {
-    msgAddMetadata(pMsg, "ethernet type", "IPV4");
-    handle_ipv4_header(packet + sizeof(struct eth_header_s), pMsg);
-  }
-	else if(next_type==ETH_TYPE_IPV6) {
-    msgAddMetadata(pMsg, "ethernet type", "IPV6");
-    handle_ipv6_header(packet + sizeof(struct eth_header_s), pMsg);
-  }
-	else if(next_type==ETH_TYPE_ARP) {
-    msgAddMetadata(pMsg, "ethernet type", "ARP");
-    handle_arp_header(packet + sizeof(struct eth_header_s), pMsg);
+  eth_header_t *eth_header = (eth_header_t *)packet;
+
+  char *ethMacSrc = ether_ntoa((struct eth_addr *)eth_header->ether_shost);
+  char *ethMacDst = ether_ntoa((struct eth_addr *)eth_header->ether_dhost);
+  uint16_t ethType = ntohs(eth_header->ether_type);
+  char errMsg[50];
+
+  DBGPRINTF("MAC destination : %s\n", ethMacDst);
+  DBGPRINTF("MAC source : %s\n", ethMacSrc);
+  DBGPRINTF("ether type : %04X\n", ethType);
+
+  msgAddMetadata(pMsg, "ETH_src", ethMacSrc);
+	msgAddMetadata(pMsg, "ETH_dst", ethMacDst);
+
+  switch(ethType) {
+    case ETHERTYPE_IP:
+        msgAddMetadata(pMsg, "ETH_type", "IPV4");
+        handle_ipv4_header((uchar *)(packet + sizeof(eth_header_t)), pMsg);
+        break;
+    case ETHERTYPE_IPV6:
+        msgAddMetadata(pMsg, "ETH_type", "IPV6");
+        handle_ipv6_header((uchar *)(packet + sizeof(eth_header_t)), pMsg);
+        break;
+    case ETHERTYPE_ARP:
+        msgAddMetadata(pMsg, "ETH_type", "ARP");
+        handle_arp_header((uchar *)(packet + sizeof(eth_header_t)), pMsg);
+        break;
+    case ETHERTYPE_REVARP:
+      msgAddMetadata(pMsg, "ETH_type", "RARP");
+      break;
+    case ETHERTYPE_PUP:
+      msgAddMetadata(pMsg, "ETH_type", "PUP");
+      break;
+    case ETHERTYPE_SPRITE:
+      msgAddMetadata(pMsg, "ETH_type", "SPRITE");
+      break;
+    case ETHERTYPE_AT:
+      msgAddMetadata(pMsg, "ETH_type", "AT");
+      break;
+    case ETHERTYPE_AARP:
+      msgAddMetadata(pMsg, "ETH_type", "AARP");
+      break;
+    case ETHERTYPE_VLAN:
+      msgAddMetadata(pMsg, "ETH_type", "VLAN");
+      break;
+    case ETHERTYPE_IPX:
+      msgAddMetadata(pMsg, "ETH_type", "IPX");
+      break;
+    case ETHERTYPE_LOOPBACK:
+      msgAddMetadata(pMsg, "ETH_type", "LOOPBACK");
+      break;
+    default:
+      snprintf(errMsg, 50, "ETH type unknown: 0x%X", ethType);
+      DBGPRINTF("no match to ethernet type\n");
+      msgAddMetadata(pMsg, "ETH_err", errMsg);
   }
 }
 
-void handle_ipv4_header(const uchar *packet,smsg_t *pMsg) {
-	struct ipv4_header_s *ipv4_header = (struct ipv4_header_s *)packet;
-	//msgAddMetadata(pMsg, "Internet Header Length", ipv4->IHL);
-	//msgAddMetadata(pMsg, "Length of entire IP Packet", ipv4->totalLen);
-	char string[20];
-	snprintf(string, 16, "%d.%d.%d.%d",
-                	(ipv4_header->srcIP)[0],
-                	(ipv4_header->srcIP)[1],
-                	(ipv4_header->srcIP)[2],
-                	(ipv4_header->srcIP)[3]);
-	msgAddMetadata(pMsg, "IPv4 source", string);
-	snprintf(string, 16, "%d.%d.%d.%d",
-                	(ipv4_header->dstIP)[0],
-                	(ipv4_header->dstIP)[1],
-                	(ipv4_header->dstIP)[2],
-                	(ipv4_header->dstIP)[3]);
-	msgAddMetadata(pMsg, "IPv4 destination", string);
-  snprintf(string, 4, "%d", ipv4_header->protocol);
-  msgAddMetadata(pMsg, "IPv4 protocol", string);
+void handle_ipv4_header(const uchar *packet, smsg_t *pMsg) {
+  DBGPRINTF("handle_ipv4_header\n");
+
+	ipv4_header_t *ipv4_header = (ipv4_header_t *)packet;
+
+  char addrSrc[20], addrDst[20], hdrLen[2];
+
+  inet_ntop(AF_INET, (void *)&ipv4_header->ip_src, addrSrc, 20);
+  inet_ntop(AF_INET, (void *)&ipv4_header->ip_dst, addrDst, 20);
+  snprintf(hdrLen, 2, "%d", ipv4_header->ip_hl);
+
+  DBGPRINTF("IP destination : %s\n", addrDst);
+  DBGPRINTF("IP source : %s\n", addrSrc);
+  DBGPRINTF("IHL : %s\n", hdrLen);
+
+  msgAddMetadata(pMsg, "IP_dest", addrDst);
+  msgAddMetadata(pMsg, "IP_src", addrSrc);
+  msgAddMetadata(pMsg, "IP_ihl", hdrLen);
 }
 
 void handle_ipv6_header(const uchar *packet, smsg_t *pMsg) {
-	struct ipv6_header_s *ipv6_header = (struct ipv6_header_s *)packet;
-	// MsgAddMetadata(pMsg, "IPv6 trafficClass", ipv6->trafficClass);
-	// MsgAddMetadata(pMsg, "IPv6 flowLabel", ipv6->flowLabel);
-	// MsgAddMetadata(pMsg, "IPv6 Payload Length", ipv6->payloadLen);
-	// MsgAddMetadata(pMsg, "IPv6 Next Header", ipv6->nextHeader);
-	char string[50];
-	snprintf(string, 40,"%X:%X:%X:%X:%X:%X:%X:%X",
-                	(ipv6_header->srcAddr)[0],
-                	(ipv6_header->srcAddr)[1],
-                	(ipv6_header->srcAddr)[2],
-                	(ipv6_header->srcAddr)[3],
-			            (ipv6_header->srcAddr)[4],
-                	(ipv6_header->srcAddr)[5],
-                	(ipv6_header->srcAddr)[6],
-                	(ipv6_header->srcAddr)[7]);
-	msgAddMetadata(pMsg, "IPv6 source", string);
-	snprintf(string, 40,"%X:%X:%X:%X:%X:%X:%X:%X",
-                	(ipv6_header->dstAddr)[0],
-                	(ipv6_header->dstAddr)[1],
-                	(ipv6_header->dstAddr)[2],
-                	(ipv6_header->dstAddr)[3],
-			            (ipv6_header->dstAddr)[4],
-                	(ipv6_header->dstAddr)[5],
-                	(ipv6_header->dstAddr)[6],
-                	(ipv6_header->dstAddr)[7]);
-	msgAddMetadata(pMsg, "IPv6 destination", string);
+  DBGPRINTF("handle_ipv6_header\n");
+
+	ipv6_header_t *ipv6_header = (ipv6_header_t *)packet;
+
+  char addrSrc[40], addrDst[40];
+
+  inet_ntop(AF_INET6, (void *)&ipv6_header->ip6_src, addrSrc, 40);
+  inet_ntop(AF_INET6, (void *)&ipv6_header->ip6_dst, addrDst, 40);
+  DBGPRINTF("IP6 source : %s\n", addrSrc);
+  DBGPRINTF("IP6 destination : %s\n", addrDst);
+
+  msgAddMetadata(pMsg, "IP6_dest", addrDst);
+  msgAddMetadata(pMsg, "IP6_src", addrSrc);
 }
 
 void handle_arp_header(const uchar *packet, smsg_t *pMsg) {
-	struct arp_header_s *arp = (struct arp_header_s *)packet;
-	// msgAddMetadata(pMsg, "ARP protocol type", arp->pType);
+  DBGPRINTF("handle_arp_header\n");
+	arp_header_t *arp_header = (arp_header_t *)packet;
 
-  if(arp->operation == 1)
-    msgAddMetadata(pMsg, "ARP operation", "request");
-  else
-    msgAddMetadata(pMsg, "ARP operation", "reply");
+  char hwType[5], pType[5], op[5], pAddrSrc[20], pAddrDst[20];
+  snprintf(hwType, 5, "%04X", ntohs(arp_header->arp_hrd));
+  snprintf(pType, 5, "%04X", ntohs(arp_header->arp_pro));
+  snprintf(op, 5, "%04X", ntohs(arp_header->arp_op));
+
+  DBGPRINTF("ARP hardware type : %s\n", hwType);
+  DBGPRINTF("ARP proto type : %s\n", pType);
+  DBGPRINTF("ARP operation : %s\n", op);
+
+  msgAddMetadata(pMsg, "ARP_hwType", hwType);
+  msgAddMetadata(pMsg, "ARP_pType", pType);
+  msgAddMetadata(pMsg, "ARP_op", op);
+
+  if(ntohs(arp_header->arp_hrd) == 1) { /* ethernet addresses */
+    char *hwAddrSrc = ether_ntoa((struct eth_addr *)arp_header->arp_sha);
+    char *hwAddrDst = ether_ntoa((struct eth_addr *)arp_header->arp_tha);
+
+    msgAddMetadata(pMsg, "ARP_hwSrc", hwAddrSrc);
+    msgAddMetadata(pMsg, "ARP_hwDst", hwAddrDst);
+  }
+
+  if(ntohs(arp_header->arp_pro) == ETHERTYPE_IP) {
+    inet_ntop(AF_INET, (void *)&arp_header->arp_spa, pAddrSrc, 20);
+    inet_ntop(AF_INET, (void *)&arp_header->arp_tpa, pAddrDst, 20);
+
+    msgAddMetadata(pMsg, "ARP_pSrc", pAddrSrc);
+    msgAddMetadata(pMsg, "ARP_pDst", pAddrDst);
+  }
 }
