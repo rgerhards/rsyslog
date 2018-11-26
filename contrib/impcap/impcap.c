@@ -84,7 +84,7 @@ struct modConfData_s {
 struct svar* creatsvar_char(char* value)
 {
 	struct svar *psvar;
-	if((psvar = malloc(sizeof(struct svar))) != NULL) 
+	if((psvar = malloc(sizeof(struct svar))) != NULL)
 	{
 		psvar->d.estr = es_str2cstr(value, NULL);
 		psvar->datatype = 'S';
@@ -95,7 +95,7 @@ struct svar* creatsvar_char(char* value)
 struct svar* creatsvar_int(int value)
 {
 	struct svar *psvar;
-	if((psvar = malloc(sizeof(struct svar))) != NULL) 
+	if((psvar = malloc(sizeof(struct svar))) != NULL)
 	{
 		psvar->d.n = value;
 		psvar->datatype = 'N';
@@ -127,10 +127,10 @@ static struct cnfparamblk modpblk =
 
 /* --- prototypes --- */
 void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet);
-void handle_eth_header(const uchar *packet, smsg_t *pMsg);
-void handle_ipv4_header(const uchar *packet, smsg_t *pMsg);
-void handle_ipv6_header(const uchar *packet, smsg_t *pMsg);
-void handle_arp_header(const uchar *packet, smsg_t *pMsg);
+void handle_eth_header(const uchar *packet, size_t pktSize, smsg_t *pMsg);
+void handle_ipv4_header(const uchar *packet, size_t pktSize, smsg_t *pMsg);
+void handle_ipv6_header(const uchar *packet, size_t pktSize, smsg_t *pMsg);
+void handle_arp_header(const uchar *packet, size_t pktSize, smsg_t *pMsg);
 
 /* create input instance, set default parameters, and
  * add it to the list of instances.
@@ -344,19 +344,24 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
   // /* ----- DEBUG REMOVE ----- */
 
   if(pkthdr->len >= 40 && pkthdr->len <= 1514) {
-    handle_eth_header(packet, pMsg);
+    handle_eth_header(packet, pkthdr->len, pMsg);
   }
   else {
     DBGPRINTF("bad packet length, discarded\n");
-    msgDestruct(pMsg);
+    msgDestruct(&pMsg);
     return;
   }
 
   submitMsg2(pMsg);
 }
 
-void handle_eth_header(const uchar *packet, smsg_t *pMsg) {
+void handle_eth_header(const uchar *packet, size_t pktSize, smsg_t *pMsg) {
   DBGPRINTF("entered handle_eth_header\n");
+
+  if (pktSize <= 14) {  /* too short for eth header + data */
+    DBGPRINTF("ETH packet too small : %d\n", pktSize);
+    return;
+  }
 
   eth_header_t *eth_header = (eth_header_t *)packet;
 
@@ -375,15 +380,15 @@ void handle_eth_header(const uchar *packet, smsg_t *pMsg) {
   switch(ethType) {
     case ETHERTYPE_IP:
         msgAddMetadata(pMsg, "ETH_type", "IPV4");
-        handle_ipv4_header((uchar *)(packet + sizeof(eth_header_t)), pMsg);
+        handle_ipv4_header((uchar *)(packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), pMsg);
         break;
     case ETHERTYPE_IPV6:
         msgAddMetadata(pMsg, "ETH_type", "IPV6");
-        handle_ipv6_header((uchar *)(packet + sizeof(eth_header_t)), pMsg);
+        handle_ipv6_header((uchar *)(packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), pMsg);
         break;
     case ETHERTYPE_ARP:
         msgAddMetadata(pMsg, "ETH_type", "ARP");
-        handle_arp_header((uchar *)(packet + sizeof(eth_header_t)), pMsg);
+        handle_arp_header((uchar *)(packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), pMsg);
         break;
     case ETHERTYPE_REVARP:
       msgAddMetadata(pMsg, "ETH_type", "RARP");
@@ -416,8 +421,13 @@ void handle_eth_header(const uchar *packet, smsg_t *pMsg) {
   }
 }
 
-void handle_ipv4_header(const uchar *packet, smsg_t *pMsg) {
+void handle_ipv4_header(const uchar *packet, size_t pktSize, smsg_t *pMsg) {
   DBGPRINTF("handle_ipv4_header\n");
+
+  if(pktSize <= 20) { /* too small for IPv4 header + data (header might be longer)*/
+    DBGPRINTF("IPv4 packet too small : %d\n", pktSize);
+    return;
+  }
 
 	ipv4_header_t *ipv4_header = (ipv4_header_t *)packet;
 
@@ -436,8 +446,13 @@ void handle_ipv4_header(const uchar *packet, smsg_t *pMsg) {
   msgAddMetadata(pMsg, "IP_ihl", hdrLen);
 }
 
-void handle_ipv6_header(const uchar *packet, smsg_t *pMsg) {
+void handle_ipv6_header(const uchar *packet, size_t pktSize, smsg_t *pMsg) {
   DBGPRINTF("handle_ipv6_header\n");
+
+  if(pktSize <= 40) { /* too small for IPv6 header + data (header might be longer)*/
+    DBGPRINTF("IPv6 packet too small : %d\n", pktSize);
+    return;
+  }
 
 	ipv6_header_t *ipv6_header = (ipv6_header_t *)packet;
 
@@ -452,8 +467,14 @@ void handle_ipv6_header(const uchar *packet, smsg_t *pMsg) {
   msgAddMetadata(pMsg, "IP6_src", addrSrc);
 }
 
-void handle_arp_header(const uchar *packet, smsg_t *pMsg) {
+void handle_arp_header(const uchar *packet, size_t pktSize, smsg_t *pMsg) {
   DBGPRINTF("handle_arp_header\n");
+
+  if(pktSize <= 27) { /* too small for ARP header*/
+    DBGPRINTF("ARP packet too small : %d\n", pktSize);
+    return;
+  }
+
 	arp_header_t *arp_header = (arp_header_t *)packet;
 
   char hwType[5], pType[5], op[5], pAddrSrc[20], pAddrDst[20];
