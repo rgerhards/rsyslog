@@ -36,6 +36,7 @@ typedef struct udphdr         udp_header_t;
 
 #define JSON_LOOKUP_NAME "!impcap"
 #define IP_PROTO_NUM 256
+#define ETH_PROTO_NUM 0x9000  /* initializing 36000+ values for just 11... there MUST be a better way... */
 
 /* --- handlers prototypes --- */
 void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet);
@@ -47,5 +48,6 @@ void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *
 void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparent);
 
 /* --- init prototypes --- */
+void init_eth_proto_handlers();
 void init_ip_proto_handlers();
 #endif

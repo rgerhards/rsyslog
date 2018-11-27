@@ -1,6 +1,7 @@
 #include "packets.h"
 
 void (*ipProtoHandlers[IP_PROTO_NUM]) (const uchar *packet, size_t pktSize, struct json_object *jparent);
+void (*ethProtoHandlers[ETH_PROTO_NUM]) (const uchar *packet, size_t pktSize, struct json_object *jparent);
 
 /* ---message handling functions --- */
 
@@ -56,54 +57,7 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
 
   json_object_object_add(jparent, "ETH", jown);
 
-  switch(ethType) {
-    case ETHERTYPE_IP:
-        handle_ipv4_header((uchar *)(packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jown);
-        break;
-    case ETHERTYPE_IPV6:
-        handle_ipv6_header((uchar *)(packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jown);
-        break;
-    case ETHERTYPE_ARP:
-        handle_arp_header((uchar *)(packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jown);
-        break;
-  //   case ETHERTYPE_REVARP:
-	// json_object_object_add(jparent, "ETH_type", jvar);
-  //     	//msgAddMetadata(pMsg, "ETH_type", "RARP");
-  //     	break;
-  //   case ETHERTYPE_PUP:
-	// json_object_object_add(jparent, "ETH_type", jvar);
-  //     	//msgAddMetadata(pMsg, "ETH_type", "PUP");
-  //     	break;
-  //   case ETHERTYPE_SPRITE:
-	// json_object_object_add(jparent, "ETH_type", jvar);
-  //     	//msgAddMetadata(pMsg, "ETH_type", "SPRITE");
-  //     	break;
-  //   case ETHERTYPE_AT:
-	// json_object_object_add(jparent, "ETH_type", jvar);
-  //     	//msgAddMetadata(pMsg, "ETH_type", "AT");
-  //     	break;
-  //   case ETHERTYPE_AARP:
-	// json_object_object_add(jparent, "ETH_type", jvar);
-  //     	//msgAddMetadata(pMsg, "ETH_type", "AARP");
-  //     	break;
-  //   case ETHERTYPE_VLAN:
-	// json_object_object_add(jparent, "ETH_type", jvar);
-  //     	//msgAddMetadata(pMsg, "ETH_type", "VLAN");
-  //     	break;
-  //   case ETHERTYPE_IPX:
-	// json_object_object_add(jparent, "ETH_type", jvar);
-  //     	//msgAddMetadata(pMsg, "ETH_type", "IPX");
-  //     	break;
-  //   case ETHERTYPE_LOOPBACK:
-	// json_object_object_add(jparent, "ETH_type", jvar);
-  //     	//msgAddMetadata(pMsg, "ETH_type", "LOOPBACK");
-  //     	break;
-    default:
-      	snprintf(errMsg, 50, "ETH type unknown: 0x%X", ethType);
-      	DBGPRINTF("no match to ethernet type\n");
-	json_object_object_add(jparent, "ETH_err", json_object_new_string((char*)errMsg));
-      	//msgAddMetadata(pMsg, "ETH_err", errMsg);
-  }
+  (*ethProtoHandlers[ethType])((packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jown);
 }
 
 void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
@@ -136,87 +90,6 @@ void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object 
 
   DBGPRINTF("protocol: %d\n", ipv4_header->ip_p);
   (*ipProtoHandlers[ipv4_header->ip_p])((packet + hdrLen), (pktSize - hdrLen), jown);
-
-  /*switch(ipv4_header->ip_p) {
-    case IPPROTO_IP:
-          msgAddMetadata(pMsg, "IP_proto", "IP");
-          break;
-    case IPPROTO_ICMP:
-          msgAddMetadata(pMsg, "IP_proto", "ICMP");
-          handle_icmp_header((packet + hdrLen), (pktSize - hdrLen), pMsg);
-          break;
-    case IPPROTO_IGMP:
-          msgAddMetadata(pMsg, "IP_proto", "IGMP");
-          break;
-    case IPPROTO_IPIP:
-          msgAddMetadata(pMsg, "IP_proto", "IPIP");
-          break;
-    case IPPROTO_TCP:
-          msgAddMetadata(pMsg, "IP_proto", "TCP");
-          break;
-    case IPPROTO_EGP:
-          msgAddMetadata(pMsg, "IP_proto", "EGP");
-          break;
-    case IPPROTO_PUP:
-          msgAddMetadata(pMsg, "IP_proto", "PUP");
-          break;
-    case IPPROTO_UDP:
-          msgAddMetadata(pMsg, "IP_proto", "UDP");
-          break;
-    case IPPROTO_IDP:
-          msgAddMetadata(pMsg, "IP_proto", "IDP");
-          break;
-    case IPPROTO_TP:
-          msgAddMetadata(pMsg, "IP_proto", "TP");
-          break;
-    case IPPROTO_DCCP:
-          msgAddMetadata(pMsg, "IP_proto", "DCCP");
-          break;
-    case IPPROTO_IPV6:
-          msgAddMetadata(pMsg, "IP_proto", "IPV6");
-          break;
-    case IPPROTO_RSVP:
-          msgAddMetadata(pMsg, "IP_proto", "RSVP");
-          break;
-    case IPPROTO_GRE:
-          msgAddMetadata(pMsg, "IP_proto", "GRE");
-          break;
-    case IPPROTO_ESP:
-          msgAddMetadata(pMsg, "IP_proto", "ESP");
-          break;
-    case IPPROTO_AH:
-          msgAddMetadata(pMsg, "IP_proto", "AH");
-          break;
-    case IPPROTO_MTP:
-          msgAddMetadata(pMsg, "IP_proto", "MTP");
-          break;
-    case IPPROTO_BEETPH:
-          msgAddMetadata(pMsg, "IP_proto", "BEETPH");
-          break;
-    case IPPROTO_ENCAP:
-          msgAddMetadata(pMsg, "IP_proto", "ENCAP");
-          break;
-    case IPPROTO_PIM:
-          msgAddMetadata(pMsg, "IP_proto", "PIM");
-          break;
-    case IPPROTO_COMP:
-          msgAddMetadata(pMsg, "IP_proto", "COMP");
-          break;
-    case IPPROTO_SCTP:
-          msgAddMetadata(pMsg, "IP_proto", "SCTP");
-          break;
-    case IPPROTO_UDPLITE:
-          msgAddMetadata(pMsg, "IP_proto", "UDPLITE");
-          break;
-    case IPPROTO_MPLS:
-          msgAddMetadata(pMsg, "IP_proto", "MPLS");
-          break;
-    case IPPROTO_RAW:
-          msgAddMetadata(pMsg, "IP_proto", "RAW");
-          break;
-    default:
-          DBGPRINTF("no match to IP type\n");
-  }*/
 }
 
 void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
@@ -314,12 +187,27 @@ void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparen
   DBGPRINTF("protocol not handled\n");
 }
 
+/* TODO: add user parameters to select handled protocols */
+void init_eth_proto_handlers() {
+  DBGPRINTF("begining init eth handlers\n");
+  // set all to blank function
+  for(int i = 0; i < ETH_PROTO_NUM; ++i) {
+    ethProtoHandlers[i] = dont_handle;
+  }
+
+  ethProtoHandlers[ETHERTYPE_IP] = handle_ipv4_header;
+  ethProtoHandlers[ETHERTYPE_ARP] = handle_arp_header;
+  ethProtoHandlers[ETHERTYPE_IPV6] = handle_ipv6_header;
+
+}
+
+/* TODO: add user parameters to select handled protocols */
 void init_ip_proto_handlers() {
-  DBGPRINTF("begining init handlers\n");
+  DBGPRINTF("begining init ip handlers\n");
   // set all to blank function
   for(int i = 0; i < IP_PROTO_NUM; ++i) {
     ipProtoHandlers[i] = dont_handle;
   }
 
-  ipProtoHandlers[1] = handle_icmp_header;
+  ipProtoHandlers[IPPROTO_ICMP] = handle_icmp_header;
 }
