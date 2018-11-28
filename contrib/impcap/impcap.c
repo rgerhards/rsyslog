@@ -43,10 +43,9 @@
  #include "module-template.h"
  #include "rainerscript.h"
  #include "rsconf.h"
- #include "dirty.h"
- #include "msg.h"
 
  #include "packets.h"
+
 
 MODULE_TYPE_INPUT
 MODULE_TYPE_NOKEEP
@@ -70,8 +69,6 @@ struct modConfData_s {
   instanceConf_t *root, *tail;
   uint16_t snap_length;
 };
-
-
 
 static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current load process */
 
@@ -160,6 +157,11 @@ BEGINsetModCnf
   struct cnfparamvals *pvals = NULL;
   int i;
 CODESTARTsetModCnf
+
+  /* TODO: find a better place for this */
+  init_ip_proto_handlers();
+  init_eth_proto_handlers();
+
   pvals = nvlstGetParams(lst, &modpblk, NULL);
 
   for(i = 0 ; i < modpblk.nParams ; ++i) {

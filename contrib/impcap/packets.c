@@ -1,5 +1,8 @@
 #include "packets.h"
 
+void (*ipProtoHandlers[IP_PROTO_NUM]) (const uchar *packet, size_t pktSize, struct json_object *jparent);
+void (*ethProtoHandlers[ETH_PROTO_NUM]) (const uchar *packet, size_t pktSize, struct json_object *jparent);
+
 /* ---message handling functions --- */
 
 /* callback for packet received from pcap_loop */
@@ -12,48 +15,20 @@
 */
 void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
   DBGPRINTF("impcap : entered handle_packet\n");
-
   smsg_t *pMsg;
-  DEFiRet;
-  char tag[20];
-  int length;
 
-  msgConstruct(&pMsg);
-
-	struct json_object *jchild = json_object_new_object();
-	struct json_object *jparent = json_object_new_object();
-	//jval = json_object_new_string((char*)"a");
-
-
-
-  // /* ----- DEBUG REMOVE ----- */
-  // /* give the raw packet to rsyslog */
-  // char rawMsg[1600] = {0};
-  // for(int i = 0; i < pkthdr->len; ++i) {
-  //   char hexPart[4];
-  //
-  //   snprintf(hexPart, 4, " %02X", packet[i]);
-  //   strncat(rawMsg, hexPart, 4);
-  // }
-  // DBGPRINTF("raw message is %s\n", rawMsg);
-  // DBGPRINTF("message length is %d\n", pkthdr->len);
-  // DBGPRINTF("min length is %d\n", ETHER_MIN_LEN);
-  // DBGPRINTF("max length is %d\n", ETHER_MAX_LEN);
-  //
-  // MsgSetRawMsg(pMsg, rawMsg, 1600);
-  // /* ----- DEBUG REMOVE ----- */
-
-  if(pkthdr->len >= 40 && pkthdr->len <= 1514) {
-    handle_eth_header(packet,pkthdr->len, jchild);
-    json_object_object_add(jparent, "eth", jchild);
-  }
-  else {
+  if(pkthdr->len < 40 || pkthdr->len > 1514) {
     DBGPRINTF("bad packet length, discarded\n");
-    msgDestruct(&pMsg);
     return;
   }
 
-  msgAddJSON(pMsg, "!impcap", jparent, 0, 0);
+  msgConstruct(&pMsg);
+
+	struct json_object *jown = json_object_new_object();
+
+  handle_eth_header(packet, pkthdr->len, jown);
+
+  msgAddJSON(pMsg, JSON_LOOKUP_NAME, jown, 0, 0);
   submitMsg2(pMsg);
 }
 
@@ -63,9 +38,8 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
     DBGPRINTF("ETH packet too small : %d\n", pktSize);
     return;
   }
-  struct json_object *jchild = json_object_new_object();
-  struct json_object *jvar;
-  
+  struct json_object *jown = json_object_new_object();
+
   eth_header_t *eth_header = (eth_header_t *)packet;
 
   char *ethMacSrc = ether_ntoa((struct eth_addr *)eth_header->ether_shost);
@@ -77,90 +51,17 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
   DBGPRINTF("MAC source : %s\n", ethMacSrc);
   DBGPRINTF("ether type : %04X\n", ethType);
 
-  jvar = json_object_new_string((char*)ethMacSrc);
-  json_object_object_add(jparent, "ETH_src", jvar);
-  jvar = json_object_new_string((char*)ethMacDst);
-  json_object_object_add(jparent, "ETH_dst", jvar);
-  //msgAddMetadata(pMsg, "ETH_src", ethMacSrc);
-  //msgAddMetadata(pMsg, "ETH_dst", ethMacDst);
+  json_object_object_add(jown, "ETH_src", json_object_new_string((char*)ethMacSrc));
+  json_object_object_add(jown, "ETH_dst", json_object_new_string((char*)ethMacDst));
+  json_object_object_add(jown, "ETH_type", json_object_new_int(ethType));
 
-  //msgSetJSONFromVar(pMsg,"ETH_src",creatsvar_char(ethMacSrc),0);
-  //msgSetJSONFromVar(pMsg,"ETH_dst",creatsvar_char(ethMacDst),0);
+  json_object_object_add(jparent, "ETH", jown);
 
-  switch(ethType) {
-    case ETHERTYPE_IP:
-	jvar = json_object_new_string((char*)"IPV4");
-	json_object_object_add(jparent, "ETH_type", jvar);
-        //msgAddMetadata(pMsg, "ETH_type", "IPV4");
-        handle_ipv4_header((uchar *)(packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jchild);
-	json_object_object_add(jparent, "IPV4", jchild);
-        break;
-    case ETHERTYPE_IPV6:
-	jvar = json_object_new_string((char*)"IPV6");
-	json_object_object_add(jparent, "ETH_type", jvar);
-        //msgAddMetadata(pMsg, "ETH_type", "IPV6");
-        handle_ipv6_header((uchar *)(packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jchild);
-	json_object_object_add(jparent, "IPV6", jchild);
-        break;
-    case ETHERTYPE_ARP:
-	jvar = json_object_new_string((char*)"ARP");
-	json_object_object_add(jparent, "ETH_type", jvar);
-        //msgAddMetadata(pMsg, "ETH_type", "ARP");
-        handle_arp_header((uchar *)(packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jchild);
-	json_object_object_add(jparent, "ARP", jchild);
-        break;
-    case ETHERTYPE_REVARP:
-	jvar = json_object_new_string((char*)"RARP");
-	json_object_object_add(jparent, "ETH_type", jvar);
-      	//msgAddMetadata(pMsg, "ETH_type", "RARP");
-      	break;
-    case ETHERTYPE_PUP:
-	jvar = json_object_new_string((char*)"PUP");
-	json_object_object_add(jparent, "ETH_type", jvar);
-      	//msgAddMetadata(pMsg, "ETH_type", "PUP");
-      	break;
-    case ETHERTYPE_SPRITE:
-	jvar = json_object_new_string((char*)"SPRITE");
-	json_object_object_add(jparent, "ETH_type", jvar);
-      	//msgAddMetadata(pMsg, "ETH_type", "SPRITE");
-      	break;
-    case ETHERTYPE_AT:
-	jvar = json_object_new_string((char*)"AT");
-	json_object_object_add(jparent, "ETH_type", jvar);
-      	//msgAddMetadata(pMsg, "ETH_type", "AT");
-      	break;
-    case ETHERTYPE_AARP:
-	jvar = json_object_new_string((char*)"AARP");
-	json_object_object_add(jparent, "ETH_type", jvar);
-      	//msgAddMetadata(pMsg, "ETH_type", "AARP");
-      	break;
-    case ETHERTYPE_VLAN:
-	jvar = json_object_new_string((char*)"VLAN");
-	json_object_object_add(jparent, "ETH_type", jvar);
-      	//msgAddMetadata(pMsg, "ETH_type", "VLAN");
-      	break;
-    case ETHERTYPE_IPX:
-	jvar = json_object_new_string((char*)"IPX");
-	json_object_object_add(jparent, "ETH_type", jvar);
-      	//msgAddMetadata(pMsg, "ETH_type", "IPX");
-      	break;
-    case ETHERTYPE_LOOPBACK:
-	jvar = json_object_new_string((char*)"LOOPBACK");
-	json_object_object_add(jparent, "ETH_type", jvar);
-      	//msgAddMetadata(pMsg, "ETH_type", "LOOPBACK");
-      	break;
-    default:
-      	snprintf(errMsg, 50, "ETH type unknown: 0x%X", ethType);
-      	DBGPRINTF("no match to ethernet type\n");
-	jvar = json_object_new_string((char*)errMsg);
-	json_object_object_add(jparent, "ETH_err", jvar);
-      	//msgAddMetadata(pMsg, "ETH_err", errMsg);
-  }
+  (*ethProtoHandlers[ethType])((packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jown);
 }
 
 void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  struct json_object *jchild = json_object_new_object();
-  struct json_object *jvar;
+  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_ipv4_header\n");
 
   if(pktSize <= 20) { /* too small for IPv4 header + data (header might be longer)*/
@@ -177,105 +78,46 @@ void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object 
   inet_ntop(AF_INET, (void *)&ipv4_header->ip_dst, addrDst, 20);
   snprintf(hdrLenStr, 2, "%d", ipv4_header->ip_hl);
 
-  /*switch(ipv4_header->ip_p) {
-    case IPPROTO_IP:
-          msgAddMetadata(pMsg, "IP_proto", "IP");
-          break;
-    case IPPROTO_ICMP:
-          msgAddMetadata(pMsg, "IP_proto", "ICMP");
-          handle_icmp_header((packet + hdrLen), (pktSize - hdrLen), pMsg);
-          break;
-    case IPPROTO_IGMP:
-          msgAddMetadata(pMsg, "IP_proto", "IGMP");
-          break;
-    case IPPROTO_IPIP:
-          msgAddMetadata(pMsg, "IP_proto", "IPIP");
-          break;
-    case IPPROTO_TCP:
-          msgAddMetadata(pMsg, "IP_proto", "TCP");
-          break;
-    case IPPROTO_EGP:
-          msgAddMetadata(pMsg, "IP_proto", "EGP");
-          break;
-    case IPPROTO_PUP:
-          msgAddMetadata(pMsg, "IP_proto", "PUP");
-          break;
-    case IPPROTO_UDP:
-          msgAddMetadata(pMsg, "IP_proto", "UDP");
-          break;
-    case IPPROTO_IDP:
-          msgAddMetadata(pMsg, "IP_proto", "IDP");
-          break;
-    case IPPROTO_TP:
-          msgAddMetadata(pMsg, "IP_proto", "TP");
-          break;
-    case IPPROTO_DCCP:
-          msgAddMetadata(pMsg, "IP_proto", "DCCP");
-          break;
-    case IPPROTO_IPV6:
-          msgAddMetadata(pMsg, "IP_proto", "IPV6");
-          break;
-    case IPPROTO_RSVP:
-          msgAddMetadata(pMsg, "IP_proto", "RSVP");
-          break;
-    case IPPROTO_GRE:
-          msgAddMetadata(pMsg, "IP_proto", "GRE");
-          break;
-    case IPPROTO_ESP:
-          msgAddMetadata(pMsg, "IP_proto", "ESP");
-          break;
-    case IPPROTO_AH:
-          msgAddMetadata(pMsg, "IP_proto", "AH");
-          break;
-    case IPPROTO_MTP:
-          msgAddMetadata(pMsg, "IP_proto", "MTP");
-          break;
-    case IPPROTO_BEETPH:
-          msgAddMetadata(pMsg, "IP_proto", "BEETPH");
-          break;
-    case IPPROTO_ENCAP:
-          msgAddMetadata(pMsg, "IP_proto", "ENCAP");
-          break;
-    case IPPROTO_PIM:
-          msgAddMetadata(pMsg, "IP_proto", "PIM");
-          break;
-    case IPPROTO_COMP:
-          msgAddMetadata(pMsg, "IP_proto", "COMP");
-          break;
-    case IPPROTO_SCTP:
-          msgAddMetadata(pMsg, "IP_proto", "SCTP");
-          break;
-    case IPPROTO_UDPLITE:
-          msgAddMetadata(pMsg, "IP_proto", "UDPLITE");
-          break;
-    case IPPROTO_MPLS:
-          msgAddMetadata(pMsg, "IP_proto", "MPLS");
-          break;
-    case IPPROTO_RAW:
-          msgAddMetadata(pMsg, "IP_proto", "RAW");
-          break;
-    default:
-          DBGPRINTF("no match to IP type\n");
-  }*/
-
   DBGPRINTF("IP destination : %s\n", addrDst);
   DBGPRINTF("IP source : %s\n", addrSrc);
   DBGPRINTF("IHL : %s\n", hdrLenStr);
 
-  jvar = json_object_new_string((char*)addrDst);
-  json_object_object_add(jparent, "IP_dest", jvar);
-  jvar = json_object_new_string((char*)addrSrc);
-  json_object_object_add(jparent, "IP_src", jvar);
-  jvar = json_object_new_string((char*)hdrLenStr);
-  json_object_object_add(jparent, "IP_ihl", jvar);
-  //msgAddMetadata(pMsg, "IP_dest", addrDst);
-  //msgAddMetadata(pMsg, "IP_src", addrSrc);
-  //msgAddMetadata(pMsg, "IP_ihl", hdrLenStr);
+  json_object_object_add(jown, "IP_dest", json_object_new_string((char*)addrDst));
+  json_object_object_add(jown, "IP_src", json_object_new_string((char*)addrSrc));
+  json_object_object_add(jown, "IP_ihl", json_object_new_int(ipv4_header->ip_hl));
+  json_object_object_add(jparent, "IPV4", jown);
+
+
+  DBGPRINTF("protocol: %d\n", ipv4_header->ip_p);
+  (*ipProtoHandlers[ipv4_header->ip_p])((packet + hdrLen), (pktSize - hdrLen), jown);
+}
+
+void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  struct json_object *jown = json_object_new_object();
+  DBGPRINTF("handle_icmp_header\n");
+
+  if(pktSize < 8) {
+    DBGPRINTF("ICMP packet too small : %d\n", pktSize);
+    return;
+  }
+
+  icmp_header_t *icmp_header = (icmp_header_t *)packet;
+  char typeStr[4], codeStr[4];
+
+  snprintf(typeStr, 4, "%d", icmp_header->type);
+  snprintf(codeStr, 4, "%d", icmp_header->code);
+
+  DBGPRINTF("ICMP type : %s\n", typeStr);
+  DBGPRINTF("ICMP code : %s\n", codeStr);
+
+  json_object_object_add(jown, "ICMP_type", json_object_new_int(icmp_header->type));
+  json_object_object_add(jown, "ICMP_code", json_object_new_int(icmp_header->code));
+  json_object_object_add(jparent, "ICMP", jown);
+
 }
 
 void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  struct json_object *jchild = json_object_new_object();
-  struct json_object *jvar;
+  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_ipv6_header\n");
 
   if(pktSize <= 40) { /* too small for IPv6 header + data (header might be longer)*/
@@ -292,17 +134,14 @@ void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object 
   DBGPRINTF("IP6 source : %s\n", addrSrc);
   DBGPRINTF("IP6 destination : %s\n", addrDst);
 
-  jvar = json_object_new_string((char*)addrDst);
-  json_object_object_add(jparent, "IP6_dest", jvar);
-  jvar = json_object_new_string((char*)addrSrc);
-  json_object_object_add(jparent, "IP6_src", jvar);
-  //msgAddMetadata(pMsg, "IP6_dest", addrDst);
-  //msgAddMetadata(pMsg, "IP6_src", addrSrc);
+  json_object_object_add(jown, "IP6_dest", json_object_new_string((char*)addrDst));
+  json_object_object_add(jown, "IP6_src", json_object_new_string((char*)addrSrc));
+  json_object_object_add(jparent, "IPV6", jown);
+
 }
 
 void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  struct json_object *jchild = json_object_new_object();
-  struct json_object *jvar;
+  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_arp_header\n");
 
   if(pktSize <= 27) { /* too small for ARP header*/
@@ -321,37 +160,54 @@ void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *
   DBGPRINTF("ARP proto type : %s\n", pType);
   DBGPRINTF("ARP operation : %s\n", op);
 
-  jvar = json_object_new_string((char*)hwType);
-  json_object_object_add(jparent, "ARP_hwType", jvar);
-  jvar = json_object_new_string((char*)pType);
-  json_object_object_add(jparent, "ARP_pType", jvar);
-  jvar = json_object_new_string((char*)op);
-  json_object_object_add(jparent, "ARP_op", jvar);
-  //msgAddMetadata(pMsg, "ARP_hwType", hwType);
-  //msgAddMetadata(pMsg, "ARP_pType", pType);
-  //msgAddMetadata(pMsg, "ARP_op", op);
+  json_object_object_add(jown, "ARP_hwType", json_object_new_int(ntohs(arp_header->arp_hrd)));
+  json_object_object_add(jown, "ARP_pType", json_object_new_int(ntohs(arp_header->arp_pro)));
+  json_object_object_add(jown, "ARP_op", json_object_new_int(ntohs(arp_header->arp_op)));
 
   if(ntohs(arp_header->arp_hrd) == 1) { /* ethernet addresses */
     char *hwAddrSrc = ether_ntoa((struct eth_addr *)arp_header->arp_sha);
     char *hwAddrDst = ether_ntoa((struct eth_addr *)arp_header->arp_tha);
 
-    jvar = json_object_new_string((char*)hwAddrSrc);
-    json_object_object_add(jparent, "ARP_hwSrc", jvar);
-    jvar = json_object_new_string((char*)hwAddrDst);
-    json_object_object_add(jparent, "ARP_hwDst", jvar);
-    //msgAddMetadata(pMsg, "ARP_hwSrc", hwAddrSrc);
-    //msgAddMetadata(pMsg, "ARP_hwDst", hwAddrDst);
+    json_object_object_add(jown, "ARP_hwSrc", json_object_new_string((char*)hwAddrSrc));
+    json_object_object_add(jown, "ARP_hwDst", json_object_new_string((char*)hwAddrDst));
   }
 
   if(ntohs(arp_header->arp_pro) == ETHERTYPE_IP) {
     inet_ntop(AF_INET, (void *)&arp_header->arp_spa, pAddrSrc, 20);
     inet_ntop(AF_INET, (void *)&arp_header->arp_tpa, pAddrDst, 20);
 
-    jvar = json_object_new_string((char*)pAddrSrc);
-    json_object_object_add(jparent, "ARP_pSrc", jvar);
-    jvar = json_object_new_string((char*)pAddrDst);
-    json_object_object_add(jparent, "ARP_pDst", jvar);
-    //msgAddMetadata(pMsg, "ARP_pSrc", pAddrSrc);
-    //msgAddMetadata(pMsg, "ARP_pDst", pAddrDst);
+    json_object_object_add(jown, "ARP_pSrc", json_object_new_string((char*)pAddrSrc));
+    json_object_object_add(jown, "ARP_pDst", json_object_new_string((char*)pAddrDst));
   }
+
+  json_object_object_add(jparent, "ARP", jown);
+}
+
+void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("protocol not handled\n");
+}
+
+/* TODO: add user parameters to select handled protocols */
+void init_eth_proto_handlers() {
+  DBGPRINTF("begining init eth handlers\n");
+  // set all to blank function
+  for(int i = 0; i < ETH_PROTO_NUM; ++i) {
+    ethProtoHandlers[i] = dont_handle;
+  }
+
+  ethProtoHandlers[ETHERTYPE_IP] = handle_ipv4_header;
+  ethProtoHandlers[ETHERTYPE_ARP] = handle_arp_header;
+  ethProtoHandlers[ETHERTYPE_IPV6] = handle_ipv6_header;
+
+}
+
+/* TODO: add user parameters to select handled protocols */
+void init_ip_proto_handlers() {
+  DBGPRINTF("begining init ip handlers\n");
+  // set all to blank function
+  for(int i = 0; i < IP_PROTO_NUM; ++i) {
+    ipProtoHandlers[i] = dont_handle;
+  }
+
+  ipProtoHandlers[IPPROTO_ICMP] = handle_icmp_header;
 }
