@@ -243,6 +243,57 @@ void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object 
 
 }
 
+void handle_tcp_header(const uchar *packet, size_t pktSize, struct json_object *jparent){
+  struct json_object *jown = json_object_new_object();
+  DBGPRINTF("handle_tcp_header\n");
+
+  if(pktSize < 20) {
+    DBGPRINTF("TCP packet too small : %d\n", pktSize);
+    return;
+  }
+
+  tcp_header_t *tcp_header = (tcp_header_t *)packet;
+  char sportStr[8], dportStr[8];
+
+  snprintf(sportStr, 8, "%d", tcp_header->th_sport);
+  snprintf(dportStr, 8, "%d", tcp_header->th_dport);
+
+  DBGPRINTF("TCP Source Port : %s\n", sportStr);
+  DBGPRINTF("TCP Destination Port : %s\n", dportStr);
+
+  json_object_object_add(jown, "TCP_Source_Port", json_object_new_int(tcp_header->th_sport));
+  json_object_object_add(jown, "TCP_Destination_Port", json_object_new_int(tcp_header->th_dport));
+  json_object_object_add(jparent, "TCP", jown);
+
+}
+
+void handle_udp_header(const uchar *packet, size_t pktSize, struct json_object *jparent){
+  struct json_object *jown = json_object_new_object();
+  DBGPRINTF("handle_udp_header\n");
+
+  if(pktSize < 8) {
+    DBGPRINTF("UDP packet too small : %d\n", pktSize);
+    return;
+  }
+
+  udp_header_t *udp_header = (udp_header_t *)packet;
+  char usport[8], udport[8], ulen[8];
+
+  snprintf(usport, 8, "%d", udp_header->uh_sport);
+  snprintf(udport, 8, "%d", udp_header->uh_dport);
+  snprintf(ulen, 8, "%d", udp_header->uh_ulen);
+
+  DBGPRINTF("UDP Source Port : %s\n", usport);
+  DBGPRINTF("UDP Destination Port : %s\n", udport);
+  DBGPRINTF("UDP Length : %s\n", ulen);
+
+  json_object_object_add(jown, "UDP_Source_Port", json_object_new_int(udp_header->uh_sport));
+  json_object_object_add(jown, "UDP_Destination_Port", json_object_new_int(udp_header->uh_dport));
+  json_object_object_add(jown, "UDP_Length", json_object_new_int(udp_header->uh_ulen));
+  json_object_object_add(jparent, "UDP", jown);
+
+}
+
 void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_ipv6_header\n");
