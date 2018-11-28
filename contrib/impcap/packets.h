@@ -49,6 +49,8 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
 void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void handle_tcp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void handle_udp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparent);
