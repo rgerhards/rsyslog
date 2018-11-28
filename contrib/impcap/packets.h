@@ -11,9 +11,15 @@
 #include "msg.h"
 #include "dirty.h"
 
+#ifdef __FreeBSD__
+  #include <sys/socket.h>
+#endif
 
-#include <netinet/ether.h>
-// #include <netinet/in.h>
+#ifndef __FreeBSD__
+  #include <netinet/ether.h>
+#endif
+
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <net/ethernet.h>
