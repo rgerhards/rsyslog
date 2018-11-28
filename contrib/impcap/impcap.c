@@ -160,6 +160,7 @@ CODESTARTsetModCnf
 
   /* TODO: find a better place for this */
   init_ip_proto_handlers();
+  init_eth_proto_handlers();
 
   pvals = nvlstGetParams(lst, &modpblk, NULL);
 
