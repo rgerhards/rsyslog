@@ -45,11 +45,6 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
   char *ethMacSrc = ether_ntoa((struct eth_addr *)eth_header->ether_shost);
   char *ethMacDst = ether_ntoa((struct eth_addr *)eth_header->ether_dhost);
   uint16_t ethType = ntohs(eth_header->ether_type);
-  char errMsg[50];
-
-  DBGPRINTF("MAC destination : %s\n", ethMacDst);
-  DBGPRINTF("MAC source : %s\n", ethMacSrc);
-  DBGPRINTF("ether type : %04X\n", ethType);
 
   json_object_object_add(jown, "ETH_src", json_object_new_string((char*)ethMacSrc));
   json_object_object_add(jown, "ETH_dst", json_object_new_string((char*)ethMacDst));
@@ -71,24 +66,17 @@ void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object 
 
 	ipv4_header_t *ipv4_header = (ipv4_header_t *)packet;
 
-  char addrSrc[20], addrDst[20], hdrLenStr[2], proto[8];
+  char addrSrc[20], addrDst[20];
   uint8_t hdrLen = 4*ipv4_header->ip_hl;  /* 4 x length in words */
 
   inet_ntop(AF_INET, (void *)&ipv4_header->ip_src, addrSrc, 20);
   inet_ntop(AF_INET, (void *)&ipv4_header->ip_dst, addrDst, 20);
-  snprintf(hdrLenStr, 2, "%d", ipv4_header->ip_hl);
-
-  DBGPRINTF("IP destination : %s\n", addrDst);
-  DBGPRINTF("IP source : %s\n", addrSrc);
-  DBGPRINTF("IHL : %s\n", hdrLenStr);
 
   json_object_object_add(jown, "IP_dest", json_object_new_string((char*)addrDst));
   json_object_object_add(jown, "IP_src", json_object_new_string((char*)addrSrc));
   json_object_object_add(jown, "IP_ihl", json_object_new_int(ipv4_header->ip_hl));
   json_object_object_add(jparent, "IPV4", jown);
 
-
-  DBGPRINTF("protocol: %d\n", ipv4_header->ip_p);
   (*ipProtoHandlers[ipv4_header->ip_p])((packet + hdrLen), (pktSize - hdrLen), jown);
 }
 
@@ -102,13 +90,6 @@ void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object 
   }
 
   icmp_header_t *icmp_header = (icmp_header_t *)packet;
-  char typeStr[4], codeStr[4];
-
-  snprintf(typeStr, 4, "%d", icmp_header->type);
-  snprintf(codeStr, 4, "%d", icmp_header->code);
-
-  DBGPRINTF("ICMP type : %s\n", typeStr);
-  DBGPRINTF("ICMP code : %s\n", codeStr);
 
   json_object_object_add(jown, "ICMP_type", json_object_new_int(icmp_header->type));
   json_object_object_add(jown, "ICMP_code", json_object_new_int(icmp_header->code));
@@ -182,8 +163,6 @@ void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object 
 
   inet_ntop(AF_INET6, (void *)&ipv6_header->ip6_src, addrSrc, 40);
   inet_ntop(AF_INET6, (void *)&ipv6_header->ip6_dst, addrDst, 40);
-  DBGPRINTF("IP6 source : %s\n", addrSrc);
-  DBGPRINTF("IP6 destination : %s\n", addrDst);
 
   json_object_object_add(jown, "IP6_dest", json_object_new_string((char*)addrDst));
   json_object_object_add(jown, "IP6_src", json_object_new_string((char*)addrSrc));
@@ -192,7 +171,7 @@ void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object 
   if (ipv6_header->ip6_nxt == 58)
   {
 	handle_icmp_header(packet+sizeof(ipv6_header_t),pktSize-sizeof(ipv6_header_t),jown);
-  } 
+  }
 
 }
 
@@ -207,14 +186,7 @@ void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *
 
 	arp_header_t *arp_header = (arp_header_t *)packet;
 
-  char hwType[5], pType[5], op[5], pAddrSrc[20], pAddrDst[20];
-  snprintf(hwType, 5, "%04X", ntohs(arp_header->arp_hrd));
-  snprintf(pType, 5, "%04X", ntohs(arp_header->arp_pro));
-  snprintf(op, 5, "%04X", ntohs(arp_header->arp_op));
-
-  DBGPRINTF("ARP hardware type : %s\n", hwType);
-  DBGPRINTF("ARP proto type : %s\n", pType);
-  DBGPRINTF("ARP operation : %s\n", op);
+  char pAddrSrc[20], pAddrDst[20];
 
   json_object_object_add(jown, "ARP_hwType", json_object_new_int(ntohs(arp_header->arp_hrd)));
   json_object_object_add(jown, "ARP_pType", json_object_new_int(ntohs(arp_header->arp_pro)));
@@ -290,7 +262,7 @@ void init_eth_proto_handlers() {
 
   ethProtoHandlers[ETHERTYPE_IP] = handle_ipv4_header;
   ethProtoHandlers[ETHERTYPE_ARP] = handle_arp_header;
-  ethProtoHandlers[ETHERTYPE_RARP] = handle_rarp_hander;
+  ethProtoHandlers[ETHERTYPE_REVARP] = handle_rarp_header;
   ethProtoHandlers[ETHERTYPE_IPV6] = handle_ipv6_header;
 
 }
