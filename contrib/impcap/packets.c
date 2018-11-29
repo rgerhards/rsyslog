@@ -187,7 +187,12 @@ void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object 
 
   json_object_object_add(jown, "IP6_dest", json_object_new_string((char*)addrDst));
   json_object_object_add(jown, "IP6_src", json_object_new_string((char*)addrSrc));
+  json_object_object_add(jown, "IP6_next_header", json_object_new_int(ipv6_header->ip6_nxt));
   json_object_object_add(jparent, "IPV6", jown);
+  if (ipv6_header->ip6_nxt == 58)
+  {
+	handle_icmp_header(packet+sizeof(ipv6_header_t),pktSize-sizeof(ipv6_header_t),jown);
+  } 
 
 }
 
