@@ -53,6 +53,7 @@ void handle_tcp_header(const uchar *packet, size_t pktSize, struct json_object *
 void handle_udp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void handle_rarp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparent);
 
 /* --- init prototypes --- */
