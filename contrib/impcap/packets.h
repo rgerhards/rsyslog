@@ -55,6 +55,8 @@ void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object 
 void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void handle_rarp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void handle_ah_header(const uchar *packet,size_t pktSize, struct json_object *jparent);
+void handle_esp_header(const uchar *packet,size_t pktSize, struct json_object *jparent);
 
 /* --- init prototypes --- */
 void init_eth_proto_handlers();
