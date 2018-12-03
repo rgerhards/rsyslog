@@ -26,7 +26,7 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
 
 	struct json_object *jown = json_object_new_object();
 
-  handle_eth_header(packet, pkthdr->len, jown);
+  handle_eth_header(packet, pkthdr->caplen, jown);
 
   msgAddJSON(pMsg, JSON_LOOKUP_NAME, jown, 0, 0);
   submitMsg2(pMsg);
@@ -34,7 +34,8 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
 
 void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   DBGPRINTF("entered handle_eth_header\n");
-  if (pktSize <= 14) {  /* too short for eth header + data */
+  DBGPRINTF("packet size %d\n", pktSize);
+  if (pktSize < 14) {  /* too short for eth header + data */
     DBGPRINTF("ETH packet too small : %d\n", pktSize);
     return;
   }
@@ -55,6 +56,7 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
 
 void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   DBGPRINTF("handle_ipv4_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 20) { /* too small for IPv4 header + data (header might be longer)*/
     DBGPRINTF("IPv4 packet too small : %d\n", pktSize);
@@ -79,6 +81,7 @@ void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object 
 
 void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   DBGPRINTF("handle_icmp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 8) {
     DBGPRINTF("ICMP packet too small : %d\n", pktSize);
@@ -93,6 +96,7 @@ void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object 
 
 void handle_tcp_header(const uchar *packet, size_t pktSize, struct json_object *jparent){
   DBGPRINTF("handle_tcp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 20) {
     DBGPRINTF("TCP packet too small : %d\n", pktSize);
@@ -124,6 +128,7 @@ void handle_tcp_header(const uchar *packet, size_t pktSize, struct json_object *
 
 void handle_udp_header(const uchar *packet, size_t pktSize, struct json_object *jparent){
   DBGPRINTF("handle_udp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 8) {
     DBGPRINTF("UDP packet too small : %d\n", pktSize);
@@ -140,6 +145,7 @@ void handle_udp_header(const uchar *packet, size_t pktSize, struct json_object *
 
 void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   DBGPRINTF("handle_ipv6_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 40) { /* too small for IPv6 header + data (header might be longer)*/
     DBGPRINTF("IPv6 packet too small : %d\n", pktSize);
@@ -166,6 +172,7 @@ void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object 
 
 void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   DBGPRINTF("handle_arp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 27) { /* too small for ARP header*/
     DBGPRINTF("ARP packet too small : %d\n", pktSize);
@@ -201,6 +208,7 @@ void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *
 /* copy of ARP handler, as structure is the same but protocol code and name are different */
 void handle_rarp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   DBGPRINTF("handle_rarp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 27) { /* too small for RARP header*/
     DBGPRINTF("RARP packet too small : %d\n", pktSize);
