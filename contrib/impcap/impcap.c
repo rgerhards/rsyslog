@@ -75,6 +75,7 @@ struct modConfData_s {
   rsconf_t *pConf;
   instanceConf_t *root, *tail;
   uint16_t snap_length;
+  uint8_t metadataOnly;
 };
 
 static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current load process */
@@ -96,7 +97,8 @@ static struct cnfparamblk inppblk =
 
 /* module-global parameters */
 static struct cnfparamdescr modpdescr[] = {
-	{ "snap_length", eCmdHdlrPositiveInt, 0 }
+	{ "snap_length", eCmdHdlrPositiveInt, 0 },
+  { "metadata_only", eCmdHdlrBinary, 0 }
 };
 static struct cnfparamblk modpblk =
 	{ CNFPARAMBLK_VERSION,
@@ -202,6 +204,9 @@ CODESTARTsetModCnf
     if(!strcmp(modpblk.descr[i].name, "snap_length")) {
       loadModConf->snap_length = (int) pvals[i].val.d.n;
     }
+    else if(!strcmp(modpblk.descr[i].name, "metadata_only")) {
+      loadModConf->metadataOnly = (uint8_t) pvals[i].val.d.n;
+    }
     else {
       dbgprintf("impcap: non-handled param %s in beginSetModCnf\n", modpblk.descr[i].name);
     }
@@ -214,6 +219,7 @@ BEGINbeginCnfLoad
 CODESTARTbeginCnfLoad
   loadModConf = pModConf;
   loadModConf->pConf = pConf;
+  loadModConf->metadataOnly = 0;
   loadModConf->snap_length = 65535;
 ENDbeginCnfLoad
 
@@ -228,6 +234,10 @@ CODESTARTcheckCnf
     LogError(0, RS_RET_NO_LISTNERS , "impcap: module loaded, but "
         "no interface defined - no input will be gathered");
     iRet = RS_RET_NO_LISTNERS;
+  }
+
+  if(loadModConf->metadataOnly) {   /* if metadata_only is "on", snap_length is overwritten */
+    loadModConf->snap_length = 100; /* arbitrary value, should be enough for most protocols */
   }
 
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
