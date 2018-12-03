@@ -33,9 +33,9 @@
  #include <unistd.h>
  #include <stdarg.h>
  #include <ctype.h>
- #include <pcap.h>
-
  #include <json.h>
+
+ #include <pcap.h>
 
  #include "rsyslog.h"
  #include "errmsg.h"
@@ -55,6 +55,7 @@ MODULE_CNFNAME("impcap")
 DEF_IMOD_STATIC_DATA
 
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
+
 
 /* conf structures */
 
@@ -129,7 +130,7 @@ CODESTARTnewInpInst
 
   if(pvals == NULL) {
     LogError(0, RS_RET_MISSING_CNFPARAMS,
-              "impcap: required parameter are missing\n");
+              "impcap: required parameters are missing\n");
     ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
   }
 
@@ -222,9 +223,15 @@ CODESTARTactivateCnf
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
     dev = pcap_open_live((const char *)inst->interface, loadModConf->snap_length, 0, 0, errBuf);
     if(dev == NULL) {
-      LogError(0, RS_RET_LOAD_ERROR, "impcap: error while opening interface using pcap");
+      LogError(0, RS_RET_LOAD_ERROR, "impcap: error while opening interface using pcap: '%s'", pcap_geterr(dev));
       ABORT_FINALIZE(RS_RET_LOAD_ERROR);
     }
+
+    if(pcap_set_datalink(dev, DLT_EN10MB)) {
+      LogError(0, RS_RET_LOAD_ERROR, "impcap: error while setting datalink type: '%s'", pcap_geterr(dev));
+      ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+    }
+
     inst->device = dev;
   }
 
@@ -241,7 +248,7 @@ BEGINrunInput
   instanceConf_t *inst;
   int id = 0;
 CODESTARTrunInput
-inst = loadModConf->root; /* only start first instance for now */
+  inst = loadModConf->root; /* only start first instance for now */
   pcap_loop(inst->device, -1, handle_packet, (uchar *)&id);
 ENDrunInput
 
