@@ -75,6 +75,7 @@ void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object 
   json_object_object_add(jown, "IP_dest", json_object_new_string((char*)addrDst));
   json_object_object_add(jown, "IP_src", json_object_new_string((char*)addrSrc));
   json_object_object_add(jown, "IP_ihl", json_object_new_int(ipv4_header->ip_hl));
+  json_object_object_add(jown, "IP_ttl", json_object_new_int(ipv4_header->ip_ttl));
   json_object_object_add(jparent, "IPV4", jown);
 
   (*ipProtoHandlers[ipv4_header->ip_p])((packet + hdrLen), (pktSize - hdrLen), jown);
@@ -167,6 +168,7 @@ void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object 
   json_object_object_add(jown, "IP6_dest", json_object_new_string((char*)addrDst));
   json_object_object_add(jown, "IP6_src", json_object_new_string((char*)addrSrc));
   json_object_object_add(jown, "IP6_next_header", json_object_new_int(ipv6_header->ip6_nxt));
+  json_object_object_add(jown, "IP6_hop_limit", json_object_new_int(ipv6_header->ip6_hops));
   json_object_object_add(jparent, "IPV6", jown);
   if (ipv6_header->ip6_nxt == 58)
   {
