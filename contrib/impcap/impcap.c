@@ -61,6 +61,11 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __a
 
 struct instanceConf_s {
   uchar *interface;
+  uint8_t promiscuous;
+  uint8_t immediateMode;
+  uint32_t bufSize;
+  uint8_t bufTimeout;
+  uint8_t pktBatchCnt;
   pcap_t *device;
   pthread_t tid;
   struct instanceConf_s *next;
@@ -76,7 +81,12 @@ static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current l
 
 /* input instance parameters */
 static struct cnfparamdescr inppdescr[] = {
-	{ "interface", eCmdHdlrString, CNFPARAM_REQUIRED }
+	{ "interface", eCmdHdlrString, CNFPARAM_REQUIRED },
+  { "promiscuous", eCmdHdlrBinary, 0 },
+  { "no_buffer", eCmdHdlrBinary, 0 },
+  { "buffer_size", eCmdHdlrPositiveInt, 0 },
+  { "buffer_timeout", eCmdHdlrPositiveInt, 0 },
+  { "packet_count", eCmdHdlrPositiveInt, 0 }
 };
 static struct cnfparamblk inppblk =
 	{ CNFPARAMBLK_VERSION,
@@ -106,6 +116,11 @@ createInstance(instanceConf_t **pinst)
 	inst->next = NULL;
   inst->interface = NULL;
   inst->device = NULL;
+  inst->promiscuous = 0;
+  inst->immediateMode = 0;
+  inst->bufTimeout = 10;
+  inst->bufSize = 1024 * 1024 * 15;   /* should be enough for up to 10Gb interface*/
+  inst->pktBatchCnt = 5;
 
 	/* node created, let's add to global config */
 	if(loadModConf->tail == NULL) {
@@ -143,6 +158,21 @@ CODESTARTnewInpInst
     if(!strcmp(inppblk.descr[i].name, "interface")) {
       inst->interface = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
     }
+    else if(!strcmp(inppblk.descr[i].name, "promiscuous")) {
+      inst->promiscuous = (uint8_t) pvals[i].val.d.n;
+    }
+    else if(!strcmp(inppblk.descr[i].name, "no_buffer")) {
+      inst->immediateMode = (uint8_t) pvals[i].val.d.n;
+    }
+    else if(!strcmp(inppblk.descr[i].name, "buffer_size")) {
+      inst->bufSize = (uint32_t) pvals[i].val.d.n;
+    }
+    else if(!strcmp(inppblk.descr[i].name, "buffer_timeout")) {
+      inst->bufTimeout = (uint8_t) pvals[i].val.d.n;
+    }
+    else if(!strcmp(inppblk.descr[i].name, "packet_count")) {
+      inst->pktBatchCnt = (uint8_t) pvals[i].val.d.n;
+    }
     else {
       dbgprintf("impcap: non-handled param %s in beginCnfLoad\n", inppblk.descr[i].name);
     }
@@ -173,7 +203,7 @@ CODESTARTsetModCnf
       loadModConf->snap_length = (int) pvals[i].val.d.n;
     }
     else {
-      dbgprintf("impcap: non-handled param %s in beginCnfLoad\n", modpblk.descr[i].name);
+      dbgprintf("impcap: non-handled param %s in beginSetModCnf\n", modpblk.descr[i].name);
     }
   }
 ENDsetModCnf
@@ -218,18 +248,75 @@ BEGINactivateCnf
   instanceConf_t *inst;
   pcap_t *dev;
   char errBuf[PCAP_ERRBUF_SIZE];
+  uint8_t retCode;
 CODESTARTactivateCnf
   loadModConf = pModConf;
 
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
-    dev = pcap_open_live((const char *)inst->interface, loadModConf->snap_length, 0, 0, errBuf);
+    dev = pcap_create((const char *)inst->interface, errBuf);
     if(dev == NULL) {
-      LogError(0, RS_RET_LOAD_ERROR, "impcap: error while opening interface using pcap: '%s'", pcap_geterr(dev));
+      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while creating packet capture: '%s'", errBuf);
       ABORT_FINALIZE(RS_RET_LOAD_ERROR);
     }
 
+    DBGPRINTF("setting snap_length %d\n", loadModConf->snap_length);
+    if(pcap_set_snaplen(dev, loadModConf->snap_length)) {
+      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting snap length: '%s'", pcap_geterr(dev));
+      ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+    }
+
+    DBGPRINTF("setting promiscuous %d\n", inst->promiscuous);
+    if(pcap_set_promisc(dev, inst->promiscuous)) {
+      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting promiscuous mode: '%s'", pcap_geterr(dev));
+      ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+    }
+
+    DBGPRINTF("setting immediate mode %d\n", inst->immediateMode);
+    if(pcap_set_immediate_mode(dev, inst->immediateMode)) {
+      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting immediate mode: '%s',"
+        " using buffer instead\n", pcap_geterr(dev));
+    }
+    else {
+      DBGPRINTF("setting buffer size %lu\n", inst->bufSize);
+      if(pcap_set_buffer_size(dev, inst->bufSize)) {
+        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting buffer size: '%s'", pcap_geterr(dev));
+        ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+      }
+      DBGPRINTF("setting buffer timeout %dms\n", inst->bufTimeout);
+      if(pcap_set_timeout(dev, inst->bufTimeout)) {
+        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting buffer timeout: '%s'", pcap_geterr(dev));
+        ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+      }
+    }
+
+    switch(pcap_activate(dev)) {
+      case PCAP_WARNING_PROMISC_NOTSUP:
+          LogError(0, NO_ERRCODE, "interface doesn't support promiscuous mode");
+      case PCAP_WARNING_TSTAMP_TYPE_NOTSUP:
+          LogError(0, NO_ERRCODE, "timestamp type is not supported");
+      case PCAP_WARNING:
+          LogError(0, NO_ERRCODE, "pcap: %s", pcap_geterr(dev));
+          break;
+
+      case PCAP_ERROR_ACTIVATED:
+          LogError(0, RS_RET_LOAD_ERROR, "already activated");
+      case PCAP_ERROR_NO_SUCH_DEVICE:
+          LogError(0, RS_RET_LOAD_ERROR, "device doesn't exist");
+      case PCAP_ERROR_PERM_DENIED:
+          LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to open capture interface");
+      case PCAP_ERROR_PROMISC_PERM_DENIED:
+          LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to put interface in promiscuous mode");
+      case PCAP_ERROR_RFMON_NOTSUP:
+          LogError(0, RS_RET_LOAD_ERROR, "interface doesn't support monitor mode");
+      case PCAP_ERROR_IFACE_NOT_UP:
+          LogError(0, RS_RET_LOAD_ERROR, "interface is not up");
+      case PCAP_ERROR:
+          LogError(0, RS_RET_LOAD_ERROR, "pcap: %s", pcap_geterr(dev));
+          ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+    }
+
     if(pcap_set_datalink(dev, DLT_EN10MB)) {
-      LogError(0, RS_RET_LOAD_ERROR, "impcap: error while setting datalink type: '%s'", pcap_geterr(dev));
+      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting datalink type: '%s'", pcap_geterr(dev));
       ABORT_FINALIZE(RS_RET_LOAD_ERROR);
     }
 
@@ -248,7 +335,9 @@ ENDfreeCnf
 void* startCaptureThread(void *instanceConf) {
   int id = 0;
   instanceConf_t *inst = (instanceConf_t *)instanceConf;
-  pcap_loop(inst->device, -1, handle_packet, (uchar *)&id);
+  while(1) {
+    pcap_dispatch(inst->device, inst->pktBatchCnt, handle_packet, (uchar *)&id);
+  }
 }
 
 BEGINrunInput
