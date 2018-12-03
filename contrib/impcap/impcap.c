@@ -62,6 +62,7 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __a
 struct instanceConf_s {
   uchar *interface;
   pcap_t *device;
+  pthread_t tid;
   struct instanceConf_s *next;
 };
 
@@ -244,12 +245,23 @@ ENDfreeCnf
 
 /* runtime functions */
 
+void* startCaptureThread(void *instanceConf) {
+  int id = 0;
+  instanceConf_t *inst = (instanceConf_t *)instanceConf;
+  pcap_loop(inst->device, -1, handle_packet, (uchar *)&id);
+}
+
 BEGINrunInput
   instanceConf_t *inst;
-  int id = 0;
+  int ret = 0;
 CODESTARTrunInput
-  inst = loadModConf->root; /* only start first instance for now */
-  pcap_loop(inst->device, -1, handle_packet, (uchar *)&id);
+  for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
+    ret = pthread_create(&inst->tid, NULL, startCaptureThread, inst);
+    if(ret) {
+      LogError(0, RS_RET_NO_RUN, "impcap: error while creating threads\n");
+    }
+  }
+  pthread_exit(NULL);
 ENDrunInput
 
 BEGINwillRun
