@@ -27,7 +27,7 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
   json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
   json_object_object_add(jown, "total packet length", json_object_new_int(pkthdr->len));
 
-  handle_eth_header(packet, pkthdr->len, jown);
+  handle_eth_header(packet, pkthdr->caplen, jown);
 
 
   msgAddJSON(pMsg, JSON_LOOKUP_NAME, jown, 0, 0);
@@ -36,11 +36,11 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
 
 void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   DBGPRINTF("entered handle_eth_header\n");
-  if (pktSize <= 14) {  /* too short for eth header + data */
+  DBGPRINTF("packet size %d\n", pktSize);
+  if (pktSize < 14) {  /* too short for eth header + data */
     DBGPRINTF("ETH packet too small : %d\n", pktSize);
     return;
   }
-  struct json_object *jown = json_object_new_object();
 
   eth_header_t *eth_header = (eth_header_t *)packet;
 
@@ -48,18 +48,17 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
   char *ethMacDst = ether_ntoa((struct eth_addr *)eth_header->ether_dhost);
   uint16_t ethType = ntohs(eth_header->ether_type);
 
-  json_object_object_add(jown, "ETH_src", json_object_new_string((char*)ethMacSrc));
-  json_object_object_add(jown, "ETH_dst", json_object_new_string((char*)ethMacDst));
-  json_object_object_add(jown, "ETH_type", json_object_new_int(ethType));
+  json_object_object_add(jparent, "ETH_src", json_object_new_string((char*)ethMacSrc));
+  json_object_object_add(jparent, "ETH_dst", json_object_new_string((char*)ethMacDst));
+  json_object_object_add(jparent, "ETH_type", json_object_new_int(ethType));
 
-  json_object_object_add(jparent, "ETH", jown);
 
-  (*ethProtoHandlers[ethType])((packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jown);
+  (*ethProtoHandlers[ethType])((packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jparent);
 }
 
 void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_ipv4_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 20) { /* too small for IPv4 header + data (header might be longer)*/
     DBGPRINTF("IPv4 packet too small : %d\n", pktSize);
@@ -74,18 +73,17 @@ void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object 
   inet_ntop(AF_INET, (void *)&ipv4_header->ip_src, addrSrc, 20);
   inet_ntop(AF_INET, (void *)&ipv4_header->ip_dst, addrDst, 20);
 
-  json_object_object_add(jown, "IP_dest", json_object_new_string((char*)addrDst));
-  json_object_object_add(jown, "IP_src", json_object_new_string((char*)addrSrc));
-  json_object_object_add(jown, "IP_ihl", json_object_new_int(ipv4_header->ip_hl));
-  json_object_object_add(jown, "IP_ttl", json_object_new_int(ipv4_header->ip_ttl));
-  json_object_object_add(jparent, "IPV4", jown);
+  json_object_object_add(jparent, "IP_dest", json_object_new_string((char*)addrDst));
+  json_object_object_add(jparent, "IP_src", json_object_new_string((char*)addrSrc));
+  json_object_object_add(jparent, "IP_ihl", json_object_new_int(ipv4_header->ip_hl));
+  json_object_object_add(jparent, "IP_ttl", json_object_new_int(ipv4_header->ip_ttl));
 
-  (*ipProtoHandlers[ipv4_header->ip_p])((packet + hdrLen), (pktSize - hdrLen), jown);
+  (*ipProtoHandlers[ipv4_header->ip_p])((packet + hdrLen), (pktSize - hdrLen), jparent);
 }
 
 void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_icmp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 8) {
     DBGPRINTF("ICMP packet too small : %d\n", pktSize);
@@ -94,15 +92,13 @@ void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object 
 
   icmp_header_t *icmp_header = (icmp_header_t *)packet;
 
-  json_object_object_add(jown, "ICMP_type", json_object_new_int(icmp_header->type));
-  json_object_object_add(jown, "ICMP_code", json_object_new_int(icmp_header->code));
-  json_object_object_add(jparent, "ICMP", jown);
-
+  json_object_object_add(jparent, "ICMP_type", json_object_new_int(icmp_header->type));
+  json_object_object_add(jparent, "ICMP_code", json_object_new_int(icmp_header->code));
 }
 
 void handle_tcp_header(const uchar *packet, size_t pktSize, struct json_object *jparent){
-  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_tcp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 20) {
     DBGPRINTF("TCP packet too small : %d\n", pktSize);
@@ -124,18 +120,17 @@ void handle_tcp_header(const uchar *packet, size_t pktSize, struct json_object *
   flags[8] = (tcp_header->fin) ? '1':'0';
 
 
-  json_object_object_add(jown, "TCP_Source_Port", json_object_new_int(ntohs(tcp_header->th_sport)));
-  json_object_object_add(jown, "TCP_Destination_Port", json_object_new_int(ntohs(tcp_header->th_dport)));
-  json_object_object_add(jown, "TCP_Seq_Number", json_object_new_int(ntohl(tcp_header->seq)));
-  json_object_object_add(jown, "TCP_Ack_Number", json_object_new_int(ntohl(tcp_header->ack_seq)));
-  json_object_object_add(jown, "TCP_Flags", json_object_new_string(flags));
-  json_object_object_add(jparent, "TCP", jown);
+  json_object_object_add(jparent, "TCP_Source_Port", json_object_new_int(ntohs(tcp_header->th_sport)));
+  json_object_object_add(jparent, "TCP_Destination_Port", json_object_new_int(ntohs(tcp_header->th_dport)));
+  json_object_object_add(jparent, "TCP_Seq_Number", json_object_new_int(ntohl(tcp_header->seq)));
+  json_object_object_add(jparent, "TCP_Ack_Number", json_object_new_int(ntohl(tcp_header->ack_seq)));
+  json_object_object_add(jparent, "TCP_Flags", json_object_new_string(flags));
 
 }
 
 void handle_udp_header(const uchar *packet, size_t pktSize, struct json_object *jparent){
-  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_udp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 8) {
     DBGPRINTF("UDP packet too small : %d\n", pktSize);
@@ -144,16 +139,15 @@ void handle_udp_header(const uchar *packet, size_t pktSize, struct json_object *
 
   udp_header_t *udp_header = (udp_header_t *)packet;
 
-  json_object_object_add(jown, "UDP_Source_Port", json_object_new_int(ntohs(udp_header->uh_sport)));
-  json_object_object_add(jown, "UDP_Destination_Port", json_object_new_int(ntohs(udp_header->uh_dport)));
-  json_object_object_add(jown, "UDP_Length", json_object_new_int(ntohs(udp_header->uh_ulen)));
-  json_object_object_add(jparent, "UDP", jown);
+  json_object_object_add(jparent, "UDP_Source_Port", json_object_new_int(ntohs(udp_header->uh_sport)));
+  json_object_object_add(jparent, "UDP_Destination_Port", json_object_new_int(ntohs(udp_header->uh_dport)));
+  json_object_object_add(jparent, "UDP_Length", json_object_new_int(ntohs(udp_header->uh_ulen)));
 
 }
 
 void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_ipv6_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 40) { /* too small for IPv6 header + data (header might be longer)*/
     DBGPRINTF("IPv6 packet too small : %d\n", pktSize);
@@ -167,21 +161,20 @@ void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object 
   inet_ntop(AF_INET6, (void *)&ipv6_header->ip6_src, addrSrc, 40);
   inet_ntop(AF_INET6, (void *)&ipv6_header->ip6_dst, addrDst, 40);
 
-  json_object_object_add(jown, "IP6_dest", json_object_new_string((char*)addrDst));
-  json_object_object_add(jown, "IP6_src", json_object_new_string((char*)addrSrc));
-  json_object_object_add(jown, "IP6_next_header", json_object_new_int(ipv6_header->ip6_nxt));
-  json_object_object_add(jown, "IP6_hop_limit", json_object_new_int(ipv6_header->ip6_hops));
-  json_object_object_add(jparent, "IPV6", jown);
+  json_object_object_add(jparent, "IP6_dest", json_object_new_string((char*)addrDst));
+  json_object_object_add(jparent, "IP6_src", json_object_new_string((char*)addrSrc));
+  json_object_object_add(jparent, "IP6_next_header", json_object_new_int(ipv6_header->ip6_nxt));
+  json_object_object_add(jparent, "IP6_hop_limit", json_object_new_int(ipv6_header->ip6_hops));
   if (ipv6_header->ip6_nxt == 58)
   {
-	handle_icmp_header(packet+sizeof(ipv6_header_t),pktSize-sizeof(ipv6_header_t),jown);
+	handle_icmp_header(packet+sizeof(ipv6_header_t),pktSize-sizeof(ipv6_header_t),jparent);
   }
 
 }
 
 void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_arp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 27) { /* too small for ARP header*/
     DBGPRINTF("ARP packet too small : %d\n", pktSize);
@@ -192,33 +185,32 @@ void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *
 
   char pAddrSrc[20], pAddrDst[20];
 
-  json_object_object_add(jown, "ARP_hwType", json_object_new_int(ntohs(arp_header->arp_hrd)));
-  json_object_object_add(jown, "ARP_pType", json_object_new_int(ntohs(arp_header->arp_pro)));
-  json_object_object_add(jown, "ARP_op", json_object_new_int(ntohs(arp_header->arp_op)));
+  json_object_object_add(jparent, "ARP_hwType", json_object_new_int(ntohs(arp_header->arp_hrd)));
+  json_object_object_add(jparent, "ARP_pType", json_object_new_int(ntohs(arp_header->arp_pro)));
+  json_object_object_add(jparent, "ARP_op", json_object_new_int(ntohs(arp_header->arp_op)));
 
   if(ntohs(arp_header->arp_hrd) == 1) { /* ethernet addresses */
     char *hwAddrSrc = ether_ntoa((struct eth_addr *)arp_header->arp_sha);
     char *hwAddrDst = ether_ntoa((struct eth_addr *)arp_header->arp_tha);
 
-    json_object_object_add(jown, "ARP_hwSrc", json_object_new_string((char*)hwAddrSrc));
-    json_object_object_add(jown, "ARP_hwDst", json_object_new_string((char*)hwAddrDst));
+    json_object_object_add(jparent, "ARP_hwSrc", json_object_new_string((char*)hwAddrSrc));
+    json_object_object_add(jparent, "ARP_hwDst", json_object_new_string((char*)hwAddrDst));
   }
 
   if(ntohs(arp_header->arp_pro) == ETHERTYPE_IP) {
     inet_ntop(AF_INET, (void *)&arp_header->arp_spa, pAddrSrc, 20);
     inet_ntop(AF_INET, (void *)&arp_header->arp_tpa, pAddrDst, 20);
 
-    json_object_object_add(jown, "ARP_pSrc", json_object_new_string((char*)pAddrSrc));
-    json_object_object_add(jown, "ARP_pDst", json_object_new_string((char*)pAddrDst));
+    json_object_object_add(jparent, "ARP_pSrc", json_object_new_string((char*)pAddrSrc));
+    json_object_object_add(jparent, "ARP_pDst", json_object_new_string((char*)pAddrDst));
   }
 
-  json_object_object_add(jparent, "ARP", jown);
 }
 
 /* copy of ARP handler, as structure is the same but protocol code and name are different */
 void handle_rarp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  struct json_object *jown = json_object_new_object();
   DBGPRINTF("handle_rarp_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 27) { /* too small for RARP header*/
     DBGPRINTF("RARP packet too small : %d\n", pktSize);
@@ -229,27 +221,26 @@ void handle_rarp_header(const uchar *packet, size_t pktSize, struct json_object 
 
   char pAddrSrc[20], pAddrDst[20];
 
-  json_object_object_add(jown, "RARP_hwType", json_object_new_int(ntohs(rarp_header->arp_hrd)));
-  json_object_object_add(jown, "RARP_pType", json_object_new_int(ntohs(rarp_header->arp_pro)));
-  json_object_object_add(jown, "RARP_op", json_object_new_int(ntohs(rarp_header->arp_op)));
+  json_object_object_add(jparent, "RARP_hwType", json_object_new_int(ntohs(rarp_header->arp_hrd)));
+  json_object_object_add(jparent, "RARP_pType", json_object_new_int(ntohs(rarp_header->arp_pro)));
+  json_object_object_add(jparent, "RARP_op", json_object_new_int(ntohs(rarp_header->arp_op)));
 
   if(ntohs(rarp_header->arp_hrd) == 1) { /* ethernet addresses */
     char *hwAddrSrc = ether_ntoa((struct eth_addr *)rarp_header->arp_sha);
     char *hwAddrDst = ether_ntoa((struct eth_addr *)rarp_header->arp_tha);
 
-    json_object_object_add(jown, "RARP_hwSrc", json_object_new_string((char*)hwAddrSrc));
-    json_object_object_add(jown, "RARP_hwDst", json_object_new_string((char*)hwAddrDst));
+    json_object_object_add(jparent, "RARP_hwSrc", json_object_new_string((char*)hwAddrSrc));
+    json_object_object_add(jparent, "RARP_hwDst", json_object_new_string((char*)hwAddrDst));
   }
 
   if(ntohs(rarp_header->arp_pro) == ETHERTYPE_IP) {
     inet_ntop(AF_INET, (void *)&rarp_header->arp_spa, pAddrSrc, 20);
     inet_ntop(AF_INET, (void *)&rarp_header->arp_tpa, pAddrDst, 20);
 
-    json_object_object_add(jown, "RARP_pSrc", json_object_new_string((char*)pAddrSrc));
-    json_object_object_add(jown, "RARP_pDst", json_object_new_string((char*)pAddrDst));
+    json_object_object_add(jparent, "RARP_pSrc", json_object_new_string((char*)pAddrSrc));
+    json_object_object_add(jparent, "RARP_pDst", json_object_new_string((char*)pAddrDst));
   }
 
-  json_object_object_add(jparent, "RARP", jown);
 }
 
 void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparent) {
