@@ -55,7 +55,8 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
 
   if(ethType < 1500) {
     /* this is a LLC header */
-    handle_llc_header(packet + 12, pktSize - 12, jparent);
+    json_object_object_add(jparent, "ETH_len", json_object_new_int(ethType));
+    handle_llc_header(packet + 14, pktSize - 14, jparent);
     return;
   }
 
@@ -76,8 +77,10 @@ void handle_llc_header(const uchar *packet, size_t pktSize, struct json_object *
   uint16_t ctrl;
   uint8_t headerLen;
 
-  dsapField = packet[0];
-  ssapField = packet[1];
+  dsapField = (uint8_t) packet[0];
+  ssapField = (uint8_t) packet[1];
+  DBGPRINTF("dsapField : %02X\n", dsapField);
+  DBGPRINTF("ssapField : %02X\n", ssapField);
 
   if(dsapField == 0xff && ssapField == 0xff) {
     /* this is an IPX packet, without LLC */
@@ -106,7 +109,13 @@ void handle_llc_header(const uchar *packet, size_t pktSize, struct json_object *
 
   if(dsap == 0xaa && ssap == 0xaa && ctrl == 0x03) {
     /* SNAP header */
-    uint16_t ethType = (uint16_t)ntohs(packet[headerLen+3]);
+    uint32_t orgCode =  packet[headerLen]<<16 |
+                        packet[headerLen+1]<<8 |
+                        packet[headerLen+2];
+    uint16_t ethType = packet[headerLen+3]<<8 |
+                        packet[headerLen+4];
+    json_object_object_add(jparent, "SNAP_oui", json_object_new_int(orgCode));
+    json_object_object_add(jparent, "SNAP_ethType", json_object_new_int(ethType));
     (*ethProtoHandlers[ethType])(packet + headerLen, pktSize - headerLen, jparent);
     return;
   }
@@ -133,7 +142,7 @@ void handle_ipx_header(const uchar *packet, size_t pktSize, struct json_object *
     uint32_t srcNet;
     uint8_t srcNode[6];
     uint16_t srcSocket;
-  };
+  }__attribute__ ((__packed__));
 
   DBGPRINTF("entered handle_ipx_header\n");
   DBGPRINTF("packet size %d\n", pktSize);
@@ -162,8 +171,8 @@ void handle_ipx_header(const uchar *packet, size_t pktSize, struct json_object *
     ,ipx_header->srcNode[4]
     ,ipx_header->srcNode[5]);
 
-  json_object_object_add(jparent, "IPX_transCtrl", json_object_new_int(ntohs(ipx_header->transCtrl)));
-  json_object_object_add(jparent, "IPX_type", json_object_new_int(ntohs(ipx_header->type)));
+  json_object_object_add(jparent, "IPX_transCtrl", json_object_new_int(ipx_header->transCtrl));
+  json_object_object_add(jparent, "IPX_type", json_object_new_int(ipx_header->type));
   json_object_object_add(jparent, "IPX_dest_net", json_object_new_int(ntohl(ipx_header->dstNet)));
   json_object_object_add(jparent, "IPX_src_net", json_object_new_int(ntohl(ipx_header->srcNet)));
   json_object_object_add(jparent, "IPX_dest_node", json_object_new_string(ipxDstNode));
@@ -375,6 +384,7 @@ void init_eth_proto_handlers() {
   ethProtoHandlers[ETHERTYPE_ARP] = handle_arp_header;
   ethProtoHandlers[ETHERTYPE_REVARP] = handle_rarp_header;
   ethProtoHandlers[ETHERTYPE_IPV6] = handle_ipv6_header;
+  ethProtoHandlers[ETHERTYPE_IPX] = handle_ipx_header;
 
 }
 
