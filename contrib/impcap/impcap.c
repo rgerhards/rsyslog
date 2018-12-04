@@ -61,12 +61,13 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __a
 
 struct instanceConf_s {
   uchar *interface;
+  uchar *filePath;
+  pcap_t *device;
   uint8_t promiscuous;
   uint8_t immediateMode;
   uint32_t bufSize;
   uint8_t bufTimeout;
   uint8_t pktBatchCnt;
-  pcap_t *device;
   pthread_t tid;
   struct instanceConf_s *next;
 };
@@ -82,7 +83,8 @@ static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current l
 
 /* input instance parameters */
 static struct cnfparamdescr inppdescr[] = {
-	{ "interface", eCmdHdlrString, CNFPARAM_REQUIRED },
+	{ "interface", eCmdHdlrString, 0 },
+  { "file", eCmdHdlrString, 0},
   { "promiscuous", eCmdHdlrBinary, 0 },
   { "no_buffer", eCmdHdlrBinary, 0 },
   { "buffer_size", eCmdHdlrPositiveInt, 0 },
@@ -117,6 +119,7 @@ createInstance(instanceConf_t **pinst)
 	CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
 	inst->next = NULL;
   inst->interface = NULL;
+  inst->filePath = NULL;
   inst->device = NULL;
   inst->promiscuous = 0;
   inst->immediateMode = 0;
@@ -159,6 +162,9 @@ CODESTARTnewInpInst
       continue;
     if(!strcmp(inppblk.descr[i].name, "interface")) {
       inst->interface = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
+    }
+    else if(!strcmp(inppblk.descr[i].name, "file")) {
+      inst->filePath = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
     }
     else if(!strcmp(inppblk.descr[i].name, "promiscuous")) {
       inst->promiscuous = (uint8_t) pvals[i].val.d.n;
@@ -241,10 +247,14 @@ CODESTARTcheckCnf
   }
 
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
-    if(inst->interface == NULL || !strcmp((char *)inst->interface, "")) {
+    if(inst->interface == NULL && inst->filePath == NULL) {
       iRet = RS_RET_INVALID_PARAMS;
-      LogError(0, RS_RET_LOAD_ERROR, "impcap: interface parameter "
-          "invalid: %s", inst->interface);
+      LogError(0, RS_RET_LOAD_ERROR, "impcap: 'interface' or 'file' must be specified");
+      break;
+    }
+    if(inst->interface != NULL && inst->filePath != NULL) {
+      iRet = RS_RET_INVALID_PARAMS;
+      LogError(0, RS_RET_LOAD_ERROR, "impcap: either 'interface' or 'file' must be specified");
       break;
     }
   }
@@ -263,70 +273,84 @@ CODESTARTactivateCnf
   loadModConf = pModConf;
 
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
-    dev = pcap_create((const char *)inst->interface, errBuf);
-    if(dev == NULL) {
-      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while creating packet capture: '%s'", errBuf);
-      ABORT_FINALIZE(RS_RET_LOAD_ERROR);
-    }
-
-    DBGPRINTF("setting snap_length %d\n", loadModConf->snap_length);
-    if(pcap_set_snaplen(dev, loadModConf->snap_length)) {
-      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting snap length: '%s'", pcap_geterr(dev));
-      ABORT_FINALIZE(RS_RET_LOAD_ERROR);
-    }
-
-    DBGPRINTF("setting promiscuous %d\n", inst->promiscuous);
-    if(pcap_set_promisc(dev, inst->promiscuous)) {
-      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting promiscuous mode: '%s'", pcap_geterr(dev));
-      ABORT_FINALIZE(RS_RET_LOAD_ERROR);
-    }
-
-    DBGPRINTF("setting immediate mode %d\n", inst->immediateMode);
-    if(pcap_set_immediate_mode(dev, inst->immediateMode)) {
-      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting immediate mode: '%s',"
-        " using buffer instead\n", pcap_geterr(dev));
-    }
-    else {
-      DBGPRINTF("setting buffer size %lu\n", inst->bufSize);
-      if(pcap_set_buffer_size(dev, inst->bufSize)) {
-        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting buffer size: '%s'", pcap_geterr(dev));
-        ABORT_FINALIZE(RS_RET_LOAD_ERROR);
-      }
-      DBGPRINTF("setting buffer timeout %dms\n", inst->bufTimeout);
-      if(pcap_set_timeout(dev, inst->bufTimeout)) {
-        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting buffer timeout: '%s'", pcap_geterr(dev));
+    if(inst->filePath != NULL) {
+      dev = pcap_open_offline((const char *)inst->filePath, errBuf);
+      if(dev == NULL) {
+        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while opening capture file: '%s'", errBuf);
         ABORT_FINALIZE(RS_RET_LOAD_ERROR);
       }
     }
+    else if(inst->interface != NULL) {
+      dev = pcap_create((const char *)inst->interface, errBuf);
+      if(dev == NULL) {
+        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while creating packet capture: '%s'", errBuf);
+        ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+      }
 
-    switch(pcap_activate(dev)) {
-      case PCAP_WARNING_PROMISC_NOTSUP:
-          LogError(0, NO_ERRCODE, "interface doesn't support promiscuous mode");
-      case PCAP_WARNING_TSTAMP_TYPE_NOTSUP:
-          LogError(0, NO_ERRCODE, "timestamp type is not supported");
-      case PCAP_WARNING:
-          LogError(0, NO_ERRCODE, "pcap: %s", pcap_geterr(dev));
-          break;
+      DBGPRINTF("setting snap_length %d\n", loadModConf->snap_length);
+      if(pcap_set_snaplen(dev, loadModConf->snap_length)) {
+        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting snap length: '%s'", pcap_geterr(dev));
+        ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+      }
 
-      case PCAP_ERROR_ACTIVATED:
-          LogError(0, RS_RET_LOAD_ERROR, "already activated");
-      case PCAP_ERROR_NO_SUCH_DEVICE:
-          LogError(0, RS_RET_LOAD_ERROR, "device doesn't exist");
-      case PCAP_ERROR_PERM_DENIED:
-          LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to open capture interface");
-      case PCAP_ERROR_PROMISC_PERM_DENIED:
-          LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to put interface in promiscuous mode");
-      case PCAP_ERROR_RFMON_NOTSUP:
-          LogError(0, RS_RET_LOAD_ERROR, "interface doesn't support monitor mode");
-      case PCAP_ERROR_IFACE_NOT_UP:
-          LogError(0, RS_RET_LOAD_ERROR, "interface is not up");
-      case PCAP_ERROR:
-          LogError(0, RS_RET_LOAD_ERROR, "pcap: %s", pcap_geterr(dev));
+      DBGPRINTF("setting promiscuous %d\n", inst->promiscuous);
+      if(pcap_set_promisc(dev, inst->promiscuous)) {
+        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting promiscuous mode: '%s'", pcap_geterr(dev));
+        ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+      }
+
+      DBGPRINTF("setting immediate mode %d\n", inst->immediateMode);
+      if(pcap_set_immediate_mode(dev, inst->immediateMode)) {
+        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting immediate mode: '%s',"
+          " using buffer instead\n", pcap_geterr(dev));
+      }
+      else {
+        DBGPRINTF("setting buffer size %lu\n", inst->bufSize);
+        if(pcap_set_buffer_size(dev, inst->bufSize)) {
+          LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting buffer size: '%s'", pcap_geterr(dev));
           ABORT_FINALIZE(RS_RET_LOAD_ERROR);
-    }
+        }
+        DBGPRINTF("setting buffer timeout %dms\n", inst->bufTimeout);
+        if(pcap_set_timeout(dev, inst->bufTimeout)) {
+          LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting buffer timeout: '%s'", pcap_geterr(dev));
+          ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+        }
+      }
 
-    if(pcap_set_datalink(dev, DLT_EN10MB)) {
-      LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting datalink type: '%s'", pcap_geterr(dev));
+      switch(pcap_activate(dev)) {
+        case PCAP_WARNING_PROMISC_NOTSUP:
+            LogError(0, NO_ERRCODE, "interface doesn't support promiscuous mode");
+        case PCAP_WARNING_TSTAMP_TYPE_NOTSUP:
+            LogError(0, NO_ERRCODE, "timestamp type is not supported");
+        case PCAP_WARNING:
+            LogError(0, NO_ERRCODE, "pcap: %s", pcap_geterr(dev));
+            break;
+
+        case PCAP_ERROR_ACTIVATED:
+            LogError(0, RS_RET_LOAD_ERROR, "already activated");
+        case PCAP_ERROR_NO_SUCH_DEVICE:
+            LogError(0, RS_RET_LOAD_ERROR, "device doesn't exist");
+        case PCAP_ERROR_PERM_DENIED:
+            LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to open capture interface");
+        case PCAP_ERROR_PROMISC_PERM_DENIED:
+            LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to put interface in promiscuous mode");
+        case PCAP_ERROR_RFMON_NOTSUP:
+            LogError(0, RS_RET_LOAD_ERROR, "interface doesn't support monitor mode");
+        case PCAP_ERROR_IFACE_NOT_UP:
+            LogError(0, RS_RET_LOAD_ERROR, "interface is not up");
+        case PCAP_ERROR:
+            LogError(0, RS_RET_LOAD_ERROR, "pcap: %s", pcap_geterr(dev));
+            ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+      }
+
+      if(pcap_set_datalink(dev, DLT_EN10MB)) {
+        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting datalink type: '%s'", pcap_geterr(dev));
+        ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+      }
+    } /* inst->interface != NULL */
+    else {
+      LogError(0, RS_RET_LOAD_ERROR, "impcap: no capture method specified, "
+          "please specify either 'interface' or 'file' in config");
       ABORT_FINALIZE(RS_RET_LOAD_ERROR);
     }
 
