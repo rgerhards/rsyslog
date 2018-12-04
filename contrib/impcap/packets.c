@@ -16,17 +16,19 @@ void (*ethProtoHandlers[ETH_PROTO_NUM]) (const uchar *packet, size_t pktSize, st
 void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
   DBGPRINTF("impcap : entered handle_packet\n");
   smsg_t *pMsg;
-
+  
   if(pkthdr->len < 40 || pkthdr->len > 1514) {
     DBGPRINTF("bad packet length, discarded\n");
     return;
   }
-
+  int * id = (int *)arg;
   msgConstruct(&pMsg);
-
-	struct json_object *jown = json_object_new_object();
+  struct json_object *jown = json_object_new_object();
+  json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
+  json_object_object_add(jown, "total packet length", json_object_new_int(pkthdr->len));
 
   handle_eth_header(packet, pkthdr->len, jown);
+
 
   msgAddJSON(pMsg, JSON_LOOKUP_NAME, jown, 0, 0);
   submitMsg2(pMsg);
