@@ -43,9 +43,10 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
   }
 
   eth_header_t *eth_header = (eth_header_t *)packet;
+  char ethMacSrc[20], ethMacDst[20];
 
-  char *ethMacSrc = ether_ntoa((struct eth_addr *)eth_header->ether_shost);
-  char *ethMacDst = ether_ntoa((struct eth_addr *)eth_header->ether_dhost);
+  ether_ntoa_r((struct eth_addr *)eth_header->ether_shost, ethMacSrc);
+  ether_ntoa_r((struct eth_addr *)eth_header->ether_dhost, ethMacDst);
 
   json_object_object_add(jparent, "ETH_src", json_object_new_string((char*)ethMacSrc));
   json_object_object_add(jparent, "ETH_dst", json_object_new_string((char*)ethMacDst));
