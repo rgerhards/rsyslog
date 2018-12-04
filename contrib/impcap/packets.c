@@ -16,7 +16,7 @@ void (*ethProtoHandlers[ETH_PROTO_NUM]) (const uchar *packet, size_t pktSize, st
 void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
   DBGPRINTF("impcap : entered handle_packet\n");
   smsg_t *pMsg;
-  
+
   if(pkthdr->len < 40 || pkthdr->len > 1514) {
     DBGPRINTF("bad packet length, discarded\n");
     return;
@@ -37,7 +37,7 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
 void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   DBGPRINTF("entered handle_eth_header\n");
   DBGPRINTF("packet size %d\n", pktSize);
-  if (pktSize < 14) {  /* too short for eth header + data */
+  if (pktSize < 14) {  /* too short for eth header */
     DBGPRINTF("ETH packet too small : %d\n", pktSize);
     return;
   }
@@ -46,14 +46,129 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
 
   char *ethMacSrc = ether_ntoa((struct eth_addr *)eth_header->ether_shost);
   char *ethMacDst = ether_ntoa((struct eth_addr *)eth_header->ether_dhost);
-  uint16_t ethType = ntohs(eth_header->ether_type);
 
   json_object_object_add(jparent, "ETH_src", json_object_new_string((char*)ethMacSrc));
   json_object_object_add(jparent, "ETH_dst", json_object_new_string((char*)ethMacDst));
+
+  uint16_t ethType = (uint16_t)ntohs(eth_header->ether_type);
+
+  if(ethType < 1500) {
+    /* this is a LLC header */
+    handle_llc_header(packet + 12, pktSize - 12, jparent);
+    return;
+  }
+
   json_object_object_add(jparent, "ETH_type", json_object_new_int(ethType));
-
-
   (*ethProtoHandlers[ethType])((packet + sizeof(eth_header_t)), (pktSize - sizeof(eth_header_t)), jparent);
+}
+
+void handle_llc_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("entered handle_llc_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
+
+  if (pktSize < 3) {  /* too short for llc header */
+    DBGPRINTF("LLC packet too small : %d\n", pktSize);
+    return;
+  }
+
+  uint8_t dsapField, dsap, ssapField, ssap;
+  uint16_t ctrl;
+  uint8_t headerLen;
+
+  dsapField = packet[0];
+  ssapField = packet[1];
+
+  if(dsapField == 0xff && ssapField == 0xff) {
+    /* this is an IPX packet, without LLC */
+    handle_ipx_header(packet, pktSize, jparent);
+    return;
+  }
+
+  if((packet[2] & 0x03) == 3) {
+    /* U frame: LLC control is 8 bits */
+    ctrl = (uint8_t)packet[2];
+    headerLen = 3;
+  }
+  else {
+    /* I and S data frames: LLC control is 16 bits */
+    ctrl = ntohs((uint16_t)packet[2]);
+    headerLen = 4;
+  }
+
+  /* don't take last bit into account */
+  dsap = dsapField & 0xfe;
+  ssap = ssapField & 0xfe;
+
+  json_object_object_add(jparent, "LLC_dsap", json_object_new_int(dsap));
+  json_object_object_add(jparent, "LLC_ssap", json_object_new_int(ssap));
+  json_object_object_add(jparent, "LLC_ctrl", json_object_new_int(ctrl));
+
+  if(dsap == 0xaa && ssap == 0xaa && ctrl == 0x03) {
+    /* SNAP header */
+    uint16_t ethType = (uint16_t)ntohs(packet[headerLen+3]);
+    (*ethProtoHandlers[ethType])(packet + headerLen, pktSize - headerLen, jparent);
+    return;
+  }
+  if(dsap == 0x06 && ssap == 0x06 && ctrl == 0x03) {
+    /* IPv4 header */
+    handle_ipv4_header(packet + headerLen, pktSize - headerLen, jparent);
+    return;
+  }
+  if(dsap == 0xe0 && ssap == 0xe0 && ctrl == 0x03) {
+    /* IPX packet with LLC */
+    handle_ipx_header(packet + headerLen, pktSize - headerLen, jparent);
+  }
+}
+
+void handle_ipx_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  struct ipx_header_s {
+    uint16_t chksum;
+    uint16_t pktLen;
+    uint8_t transCtrl;
+    uint8_t type;
+    uint32_t dstNet;
+    uint8_t dstNode[6];
+    uint16_t dstSocket;
+    uint32_t srcNet;
+    uint8_t srcNode[6];
+    uint16_t srcSocket;
+  };
+
+  DBGPRINTF("entered handle_ipx_header\n");
+  DBGPRINTF("packet size %d\n", pktSize);
+
+  if (pktSize < 30) {  /* too short for IPX header */
+    DBGPRINTF("IPX packet too small : %d\n", pktSize);
+    return;
+  }
+
+  char ipxSrcNode[20], ipxDstNode[20];
+  struct ipx_header_s *ipx_header = (struct ipx_header_s *)packet;
+
+  snprintf(ipxDstNode, sizeof(ipxDstNode), "%02x:%02x:%02x:%02x:%02x:%02x"
+    ,ipx_header->dstNode[0]
+    ,ipx_header->dstNode[1]
+    ,ipx_header->dstNode[2]
+    ,ipx_header->dstNode[3]
+    ,ipx_header->dstNode[4]
+    ,ipx_header->dstNode[5]);
+
+  snprintf(ipxSrcNode, sizeof(ipxSrcNode), "%02x:%02x:%02x:%02x:%02x:%02x"
+    ,ipx_header->srcNode[0]
+    ,ipx_header->srcNode[1]
+    ,ipx_header->srcNode[2]
+    ,ipx_header->srcNode[3]
+    ,ipx_header->srcNode[4]
+    ,ipx_header->srcNode[5]);
+
+  json_object_object_add(jparent, "IPX_transCtrl", json_object_new_int(ntohs(ipx_header->transCtrl)));
+  json_object_object_add(jparent, "IPX_type", json_object_new_int(ntohs(ipx_header->type)));
+  json_object_object_add(jparent, "IPX_dest_net", json_object_new_int(ntohl(ipx_header->dstNet)));
+  json_object_object_add(jparent, "IPX_src_net", json_object_new_int(ntohl(ipx_header->srcNet)));
+  json_object_object_add(jparent, "IPX_dest_node", json_object_new_string(ipxDstNode));
+  json_object_object_add(jparent, "IPX_src_node", json_object_new_string(ipxSrcNode));
+  json_object_object_add(jparent, "IPX_dest_socket", json_object_new_int(ntohs(ipx_header->dstSocket)));
+  json_object_object_add(jparent, "IPX_src_soket", json_object_new_int(ntohs(ipx_header->srcSocket)));
 }
 
 void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
