@@ -1,7 +1,7 @@
 #include "parser.h"
 
-void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  DBGPRINTF("handle_arp_header\n");
+void arp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("arp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 27) { /* too small for ARP header*/
@@ -36,8 +36,8 @@ void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *
 }
 
 /* copy of ARP handler, as structure is the same but protocol code and name are different */
-void handle_rarp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  DBGPRINTF("handle_rarp_header\n");
+void rarp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("rarp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 27) { /* too small for RARP header*/

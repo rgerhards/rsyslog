@@ -1,7 +1,7 @@
 #include "parser.h"
 
-void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  DBGPRINTF("handle_ipv6_header\n");
+void ipv6_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("ipv6_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 40) { /* too small for IPv6 header + data (header might be longer)*/
@@ -22,7 +22,7 @@ void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object 
   json_object_object_add(jparent, "IP6_hop_limit", json_object_new_int(ipv6_header->ip6_hops));
   if (ipv6_header->ip6_nxt == 58)
   {
-	handle_icmp_header(packet+sizeof(ipv6_header_t),pktSize-sizeof(ipv6_header_t),jparent);
+	icmp_parse(packet+sizeof(ipv6_header_t),pktSize-sizeof(ipv6_header_t),jparent);
   }
 
 }

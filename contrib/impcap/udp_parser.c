@@ -1,7 +1,7 @@
 #include "parser.h"
 
-void handle_udp_header(const uchar *packet, size_t pktSize, struct json_object *jparent){
-  DBGPRINTF("handle_udp_header\n");
+void udp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent){
+  DBGPRINTF("udp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 8) {

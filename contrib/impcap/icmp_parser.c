@@ -1,7 +1,7 @@
 #include "parser.h"
 
-void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  DBGPRINTF("handle_icmp_header\n");
+void icmp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("icmp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 8) {

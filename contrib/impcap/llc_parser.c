@@ -1,7 +1,7 @@
 #include "parser.h"
 
-void handle_llc_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  DBGPRINTF("entered handle_llc_header\n");
+void llc_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("entered llc_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if (pktSize < 3) {  /* too short for llc header */
@@ -20,7 +20,7 @@ void handle_llc_header(const uchar *packet, size_t pktSize, struct json_object *
 
   if(dsapField == 0xff && ssapField == 0xff) {
     /* this is an IPX packet, without LLC */
-    handle_ipx_header(packet, pktSize, jparent);
+    ipx_parse(packet, pktSize, jparent);
     return;
   }
 
@@ -57,11 +57,11 @@ void handle_llc_header(const uchar *packet, size_t pktSize, struct json_object *
   }
   if(dsap == 0x06 && ssap == 0x06 && ctrl == 0x03) {
     /* IPv4 header */
-    handle_ipv4_header(packet + headerLen, pktSize - headerLen, jparent);
+    ipv4_parse(packet + headerLen, pktSize - headerLen, jparent);
     return;
   }
   if(dsap == 0xe0 && ssap == 0xe0 && ctrl == 0x03) {
     /* IPX packet with LLC */
-    handle_ipx_header(packet + headerLen, pktSize - headerLen, jparent);
+    ipx_parse(packet + headerLen, pktSize - headerLen, jparent);
   }
 }

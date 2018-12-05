@@ -369,7 +369,7 @@ ENDfreeCnf
 
 /* runtime functions */
 
-void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+void dont_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   DBGPRINTF("protocol not handled\n");
 }
 
@@ -378,14 +378,14 @@ void init_eth_proto_handlers() {
   DBGPRINTF("begining init eth handlers\n");
   // set all to blank function
   for(int i = 0; i < ETH_PROTO_NUM; ++i) {
-    ethProtoHandlers[i] = dont_handle;
+    ethProtoHandlers[i] = dont_parse;
   }
 
-  ethProtoHandlers[ETHERTYPE_IP] = handle_ipv4_header;
-  ethProtoHandlers[ETHERTYPE_ARP] = handle_arp_header;
-  ethProtoHandlers[ETHERTYPE_REVARP] = handle_rarp_header;
-  ethProtoHandlers[ETHERTYPE_IPV6] = handle_ipv6_header;
-  ethProtoHandlers[ETHERTYPE_IPX] = handle_ipx_header;
+  ethProtoHandlers[ETHERTYPE_IP] = ipv4_parse;
+  ethProtoHandlers[ETHERTYPE_ARP] = arp_parse;
+  ethProtoHandlers[ETHERTYPE_REVARP] = rarp_parse;
+  ethProtoHandlers[ETHERTYPE_IPV6] = ipv6_parse;
+  ethProtoHandlers[ETHERTYPE_IPX] = ipx_parse;
 
 }
 
@@ -394,12 +394,12 @@ void init_ip_proto_handlers() {
   DBGPRINTF("begining init ip handlers\n");
   // set all to blank function
   for(int i = 0; i < IP_PROTO_NUM; ++i) {
-    ipProtoHandlers[i] = dont_handle;
+    ipProtoHandlers[i] = dont_parse;
   }
 
-  ipProtoHandlers[IPPROTO_ICMP] = handle_icmp_header;
-  ipProtoHandlers[IPPROTO_TCP] = handle_tcp_header;
-  ipProtoHandlers[IPPROTO_UDP] = handle_udp_header;
+  ipProtoHandlers[IPPROTO_ICMP] = icmp_parse;
+  ipProtoHandlers[IPPROTO_TCP] = tcp_parse;
+  ipProtoHandlers[IPPROTO_UDP] = udp_parse;
 }
 
 /* TODO check ETH II or 802.3 or 802.3 Tagué (VLAN)
@@ -408,8 +408,8 @@ void init_ip_proto_handlers() {
       - <= 1500 means 802.3 and is length
         - special value of proto means tagged (+ tag 2 bytes after)
 */
-void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
-  DBGPRINTF("impcap : entered handle_packet\n");
+void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
+  DBGPRINTF("impcap : entered packet_parse\n");
   smsg_t *pMsg;
 
   if(pkthdr->len < 40 || pkthdr->len > 1514) {
@@ -422,7 +422,7 @@ void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pa
   json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
   json_object_object_add(jown, "total packet length", json_object_new_int(pkthdr->len));
 
-  handle_eth_header(packet, pkthdr->caplen, jown);
+  eth_parse(packet, pkthdr->caplen, jown);
 
 
   msgAddJSON(pMsg, JSON_LOOKUP_NAME, jown, 0, 0);
@@ -433,7 +433,7 @@ void* startCaptureThread(void *instanceConf) {
   int id = 0;
   instanceConf_t *inst = (instanceConf_t *)instanceConf;
   while(1) {
-    pcap_dispatch(inst->device, inst->pktBatchCnt, handle_packet, (uchar *)&id);
+    pcap_dispatch(inst->device, inst->pktBatchCnt, packet_parse, (uchar *)&id);
   }
 }
 

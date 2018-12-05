@@ -48,19 +48,19 @@ void (*ipProtoHandlers[IP_PROTO_NUM]) (const uchar *packet, size_t pktSize, stru
 void (*ethProtoHandlers[ETH_PROTO_NUM]) (const uchar *packet, size_t pktSize, struct json_object *jparent);
 
 /* --- handlers prototypes --- */
-void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet);
-void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_llc_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_ipx_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_icmp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_tcp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_udp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_ipv6_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_arp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_rarp_header(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparent);
-void handle_ah_header(const uchar *packet,size_t pktSize, struct json_object *jparent);
-void handle_esp_header(const uchar *packet,size_t pktSize, struct json_object *jparent);
+void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet);
+void eth_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void llc_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void ipx_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void ipv4_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void icmp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void tcp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void udp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void ipv6_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void arp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void rarp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void dont_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
+void ah_parse(const uchar *packet,size_t pktSize, struct json_object *jparent);
+void esp_parse(const uchar *packet,size_t pktSize, struct json_object *jparent);
 
-#endif /* INCLUDED_PARSER_H
+#endif /* INCLUDED_PARSER_H */

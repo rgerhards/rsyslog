@@ -1,8 +1,8 @@
 #include "parser.h"
 
 
-void handle_ipv4_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  DBGPRINTF("handle_ipv4_header\n");
+void ipv4_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("ipv4_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 20) { /* too small for IPv4 header + data (header might be longer)*/

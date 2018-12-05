@@ -1,7 +1,7 @@
 #include "parser.h"
 
-void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  DBGPRINTF("entered handle_eth_header\n");
+void eth_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("entered eth_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
   if (pktSize < 14) {  /* too short for eth header */
     DBGPRINTF("ETH packet too small : %d\n", pktSize);
@@ -22,7 +22,7 @@ void handle_eth_header(const uchar *packet, size_t pktSize, struct json_object *
   if(ethType < 1500) {
     /* this is a LLC header */
     json_object_object_add(jparent, "ETH_len", json_object_new_int(ethType));
-    handle_llc_header(packet + 14, pktSize - 14, jparent);
+    llc_parse(packet + 14, pktSize - 14, jparent);
     return;
   }
 

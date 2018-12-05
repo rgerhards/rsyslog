@@ -1,7 +1,7 @@
 #include "parser.h"
 
-void handle_tcp_header(const uchar *packet, size_t pktSize, struct json_object *jparent){
-  DBGPRINTF("handle_tcp_header\n");
+void tcp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent){
+  DBGPRINTF("tcp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 20) {

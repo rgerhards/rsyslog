@@ -1,6 +1,6 @@
 #include "parser.h"
 
-void handle_ipx_header(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+void ipx_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
   struct ipx_header_s {
     uint16_t chksum;
     uint16_t pktLen;
@@ -14,7 +14,7 @@ void handle_ipx_header(const uchar *packet, size_t pktSize, struct json_object *
     uint16_t srcSocket;
   }__attribute__ ((__packed__));
 
-  DBGPRINTF("entered handle_ipx_header\n");
+  DBGPRINTF("entered ipx_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if (pktSize < 30) {  /* too short for IPX header */
