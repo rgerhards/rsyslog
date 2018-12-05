@@ -29,8 +29,9 @@
 // #include <netinet/if_ether.h>  /* arp structure */
 #include <arpa/inet.h>   /* IP address extraction */
 
-#ifndef INCLUDED_PACKETS_H
-#define INCLUDED_PACKETS_H 1
+#ifndef INCLUDED_PARSER_H
+#define INCLUDED_PARSER_H 1
+
 typedef struct ether_header   eth_header_t;
 typedef struct ip             ipv4_header_t;
 typedef struct ether_arp      arp_header_t;
@@ -40,9 +41,11 @@ typedef struct tcphdr         tcp_header_t;
 typedef struct udphdr         udp_header_t;
 #define ip6_addr_sub16 __in6_u.__u6_addr16
 
-#define JSON_LOOKUP_NAME "!impcap"
 #define IP_PROTO_NUM 256
 #define ETH_PROTO_NUM 0x9000  /* initializing 36000+ values for just 11... there MUST be a better way... */
+
+void (*ipProtoHandlers[IP_PROTO_NUM]) (const uchar *packet, size_t pktSize, struct json_object *jparent);
+void (*ethProtoHandlers[ETH_PROTO_NUM]) (const uchar *packet, size_t pktSize, struct json_object *jparent);
 
 /* --- handlers prototypes --- */
 void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet);
@@ -60,7 +63,4 @@ void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparen
 void handle_ah_header(const uchar *packet,size_t pktSize, struct json_object *jparent);
 void handle_esp_header(const uchar *packet,size_t pktSize, struct json_object *jparent);
 
-/* --- init prototypes --- */
-void init_eth_proto_handlers();
-void init_ip_proto_handlers();
-#endif
+#endif /* INCLUDED_PARSER_H

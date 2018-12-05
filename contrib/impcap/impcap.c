@@ -44,18 +44,21 @@
  #include "rainerscript.h"
  #include "rsconf.h"
 
- #include "packets.h"
+ #include "parser.h"
 
 
 MODULE_TYPE_INPUT
 MODULE_TYPE_NOKEEP
 MODULE_CNFNAME("impcap")
 
+#define JSON_LOOKUP_NAME "!impcap"
+
 /* static data */
 DEF_IMOD_STATIC_DATA
 
-static rsRetVal resetConfigVariables(uchar __attribute__((unused)) *pp, void __attribute__((unused)) *pVal);
-
+/* --- init prototypes --- */
+void init_eth_proto_handlers();
+void init_ip_proto_handlers();
 
 /* conf structures */
 
@@ -365,6 +368,66 @@ CODESTARTfreeCnf
 ENDfreeCnf
 
 /* runtime functions */
+
+void dont_handle(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+  DBGPRINTF("protocol not handled\n");
+}
+
+/* TODO: add user parameters to select handled protocols */
+void init_eth_proto_handlers() {
+  DBGPRINTF("begining init eth handlers\n");
+  // set all to blank function
+  for(int i = 0; i < ETH_PROTO_NUM; ++i) {
+    ethProtoHandlers[i] = dont_handle;
+  }
+
+  ethProtoHandlers[ETHERTYPE_IP] = handle_ipv4_header;
+  ethProtoHandlers[ETHERTYPE_ARP] = handle_arp_header;
+  ethProtoHandlers[ETHERTYPE_REVARP] = handle_rarp_header;
+  ethProtoHandlers[ETHERTYPE_IPV6] = handle_ipv6_header;
+  ethProtoHandlers[ETHERTYPE_IPX] = handle_ipx_header;
+
+}
+
+/* TODO: add user parameters to select handled protocols */
+void init_ip_proto_handlers() {
+  DBGPRINTF("begining init ip handlers\n");
+  // set all to blank function
+  for(int i = 0; i < IP_PROTO_NUM; ++i) {
+    ipProtoHandlers[i] = dont_handle;
+  }
+
+  ipProtoHandlers[IPPROTO_ICMP] = handle_icmp_header;
+  ipProtoHandlers[IPPROTO_TCP] = handle_tcp_header;
+  ipProtoHandlers[IPPROTO_UDP] = handle_udp_header;
+}
+
+/* TODO check ETH II or 802.3 or 802.3 Tagué (VLAN)
+    difference in proto field (after source field) :
+      - >1500 means ETH II and is proto
+      - <= 1500 means 802.3 and is length
+        - special value of proto means tagged (+ tag 2 bytes after)
+*/
+void handle_packet(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
+  DBGPRINTF("impcap : entered handle_packet\n");
+  smsg_t *pMsg;
+
+  if(pkthdr->len < 40 || pkthdr->len > 1514) {
+    DBGPRINTF("bad packet length, discarded\n");
+    return;
+  }
+  int * id = (int *)arg;
+  msgConstruct(&pMsg);
+  struct json_object *jown = json_object_new_object();
+  json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
+  json_object_object_add(jown, "total packet length", json_object_new_int(pkthdr->len));
+
+  handle_eth_header(packet, pkthdr->caplen, jown);
+
+
+  msgAddJSON(pMsg, JSON_LOOKUP_NAME, jown, 0, 0);
+  submitMsg2(pMsg);
+}
 
 void* startCaptureThread(void *instanceConf) {
   int id = 0;
