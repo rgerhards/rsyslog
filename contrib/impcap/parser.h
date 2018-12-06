@@ -32,7 +32,6 @@
 
 typedef struct ip             ipv4_header_t;
 typedef struct ip6_hdr        ipv6_header_t;
-typedef struct icmphdr        icmp_header_t;
 typedef struct tcphdr         tcp_header_t;
 typedef struct udphdr         udp_header_t;
 #define ip6_addr_sub16 __in6_u.__u6_addr16
