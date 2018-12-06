@@ -24,10 +24,10 @@ void tcp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
   flags[8] = (tcp_header->fin) ? '1':'0';
 
 
-  json_object_object_add(jparent, "TCP_Source_Port", json_object_new_int(ntohs(tcp_header->th_sport)));
-  json_object_object_add(jparent, "TCP_Destination_Port", json_object_new_int(ntohs(tcp_header->th_dport)));
+  json_object_object_add(jparent, "net_src_port", json_object_new_int(ntohs(tcp_header->th_sport)));
+  json_object_object_add(jparent, "net_dst_port", json_object_new_int(ntohs(tcp_header->th_dport)));
   json_object_object_add(jparent, "TCP_Seq_Number", json_object_new_int(ntohl(tcp_header->seq)));
   json_object_object_add(jparent, "TCP_Ack_Number", json_object_new_int(ntohl(tcp_header->ack_seq)));
-  json_object_object_add(jparent, "TCP_Flags", json_object_new_string(flags));
+  json_object_object_add(jparent, "net_flags", json_object_new_string(flags));
 
 }

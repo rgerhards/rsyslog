@@ -420,7 +420,7 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
   msgConstruct(&pMsg);
   struct json_object *jown = json_object_new_object();
   json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
-  json_object_object_add(jown, "total packet length", json_object_new_int(pkthdr->len));
+  json_object_object_add(jown, "net_bytes_total", json_object_new_int(pkthdr->len));
 
   eth_parse(packet, pkthdr->caplen, jown);
 
