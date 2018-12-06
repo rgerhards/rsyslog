@@ -33,18 +33,6 @@ void ipv4_parse(const uchar *packet, size_t pktSize, struct json_object *jparent
 
 	ipv4_header_t *ipv4_header = (ipv4_header_t *)packet;
 
-  DBGPRINTF("ipv4_parse, version: %d\n", ipv4_header->version);
-  DBGPRINTF("ipv4_parse, ihl: %d\n", ipv4_header->ihl);
-  DBGPRINTF("ipv4_parse, service: %d\n", ipv4_header->service);
-  DBGPRINTF("ipv4_parse, total length: %d\n", ntohs(ipv4_header->totLen));
-  DBGPRINTF("ipv4_parse, id: %d\n", ntohs(ipv4_header->id));
-  DBGPRINTF("ipv4_parse, frag: %d\n", ntohs(ipv4_header->frag));
-  DBGPRINTF("ipv4_parse, ttl: %d\n", ipv4_header->ttl);
-  DBGPRINTF("ipv4_parse, proto: %d\n", ipv4_header->proto);
-  DBGPRINTF("ipv4_parse, checksum: %d\n", ntohs(ipv4_header->hdrChksum));
-  DBGPRINTF("ipv4_parse, version: %d\n", ipv4_header->version);
-
-
   char addrSrc[20], addrDst[20];
   uint8_t hdrLen = 4*ipv4_header->version;  /* 4 x length in words */
 
