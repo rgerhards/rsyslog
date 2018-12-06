@@ -18,10 +18,10 @@ void ipv4_parse(const uchar *packet, size_t pktSize, struct json_object *jparent
   inet_ntop(AF_INET, (void *)&ipv4_header->ip_src, addrSrc, 20);
   inet_ntop(AF_INET, (void *)&ipv4_header->ip_dst, addrDst, 20);
 
-  json_object_object_add(jparent, "IP_dest", json_object_new_string((char*)addrDst));
-  json_object_object_add(jparent, "IP_src", json_object_new_string((char*)addrSrc));
+  json_object_object_add(jparent, "net_dst_ip", json_object_new_string((char*)addrDst));
+  json_object_object_add(jparent, "net_src_ip", json_object_new_string((char*)addrSrc));
   json_object_object_add(jparent, "IP_ihl", json_object_new_int(ipv4_header->ip_hl));
-  json_object_object_add(jparent, "IP_ttl", json_object_new_int(ipv4_header->ip_ttl));
+  json_object_object_add(jparent, "net_ttl", json_object_new_int(ipv4_header->ip_ttl));
 
   (*ipProtoHandlers[ipv4_header->ip_p])((packet + hdrLen), (pktSize - hdrLen), jparent);
 }
