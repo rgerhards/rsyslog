@@ -13,9 +13,7 @@
 
 #ifdef __FreeBSD__
   #include <sys/socket.h>
-#endif
-
-#ifndef __FreeBSD__
+#else
   #include <netinet/ether.h>
 #endif
 
@@ -34,7 +32,6 @@
 
 typedef struct ether_header   eth_header_t;
 typedef struct ip             ipv4_header_t;
-typedef struct ether_arp      arp_header_t;
 typedef struct ip6_hdr        ipv6_header_t;
 typedef struct icmphdr        icmp_header_t;
 typedef struct tcphdr         tcp_header_t;
