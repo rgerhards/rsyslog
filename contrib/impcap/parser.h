@@ -30,7 +30,6 @@
 #ifndef INCLUDED_PARSER_H
 #define INCLUDED_PARSER_H 1
 
-typedef struct ip             ipv4_header_t;
 typedef struct ip6_hdr        ipv6_header_t;
 typedef struct tcphdr         tcp_header_t;
 typedef struct udphdr         udp_header_t;
