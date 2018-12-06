@@ -31,8 +31,6 @@
 #define INCLUDED_PARSER_H 1
 
 typedef struct tcphdr         tcp_header_t;
-typedef struct udphdr         udp_header_t;
-#define ip6_addr_sub16 __in6_u.__u6_addr16
 
 #define IP_PROTO_NUM 256
 #define ETH_PROTO_NUM 0x9000  /* initializing 36000+ values for just 11... there MUST be a better way... */

@@ -34,7 +34,7 @@ void ipv4_parse(const uchar *packet, size_t pktSize, struct json_object *jparent
 	ipv4_header_t *ipv4_header = (ipv4_header_t *)packet;
 
   char addrSrc[20], addrDst[20];
-  uint8_t hdrLen = 4*ipv4_header->version;  /* 4 x length in words */
+  uint8_t hdrLen = 4*ipv4_header->ihl;  /* 4 x length in words */
 
   inet_ntop(AF_INET, (void *)&ipv4_header->addrSrc, addrSrc, 20);
   inet_ntop(AF_INET, (void *)&ipv4_header->addrDst, addrDst, 20);
