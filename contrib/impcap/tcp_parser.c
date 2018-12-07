@@ -1,5 +1,22 @@
 #include "parser.h"
 
+struct tcp_header_s {
+  uint16_t srcPort;
+  uint16_t dstPort;
+  uint32_t seq;
+  uint32_t ack;
+  uint8_t dor;
+  uint8_t flags;
+  uint16_t windowSize;
+  uint16_t checksum;
+  uint16_t urgPointer;
+  uint8_t options[];
+};
+
+typedef struct tcp_header_s tcp_header_t;
+
+static char flagCodes[10] = "FSRPAUECN";
+
 void tcp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent){
   DBGPRINTF("tcp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
@@ -11,23 +28,21 @@ void tcp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
 
   tcp_header_t *tcp_header = (tcp_header_t *)packet;
 
-
+  uint8_t i, pos = 0;
   char flags[10] = {0};
-  flags[0] = (tcp_header->res1 & 0b01) ? '1':'0';
-  flags[1] = (tcp_header->res2 & 0b10) ? '1':'0';
-  flags[2] = (tcp_header->res2 & 0b01) ? '1':'0';
-  flags[3] = (tcp_header->urg) ? '1':'0';
-  flags[4] = (tcp_header->ack) ? '1':'0';
-  flags[5] = (tcp_header->psh) ? '1':'0';
-  flags[6] = (tcp_header->rst) ? '1':'0';
-  flags[7] = (tcp_header->syn) ? '1':'0';
-  flags[8] = (tcp_header->fin) ? '1':'0';
 
+  for(i=0 ; i<8 ; ++i) {
+    if(tcp_header->flags & (0x01<<i))
+      flags[pos++] = flagCodes[i];
+  }
+  if(tcp_header->dor & 0x01)
+    flags[pos++] = flagCodes[9];
 
-  json_object_object_add(jparent, "net_src_port", json_object_new_int(ntohs(tcp_header->th_sport)));
-  json_object_object_add(jparent, "net_dst_port", json_object_new_int(ntohs(tcp_header->th_dport)));
-  json_object_object_add(jparent, "TCP_Seq_Number", json_object_new_int(ntohl(tcp_header->seq)));
-  json_object_object_add(jparent, "TCP_Ack_Number", json_object_new_int(ntohl(tcp_header->ack_seq)));
+  json_object_object_add(jparent, "net_src_port", json_object_new_int(ntohs(tcp_header->srcPort)));
+  json_object_object_add(jparent, "net_dst_port", json_object_new_int(ntohs(tcp_header->dstPort)));
+  json_object_object_add(jparent, "TCP_Seq_Number", json_object_new_int64(ntohl(tcp_header->seq)));
+  json_object_object_add(jparent, "TCP_Ack_Number", json_object_new_int64(ntohl(tcp_header->ack)));
+  json_object_object_add(jparent, "TCP_data_offset", json_object_new_int((tcp_header->dor&0xF0)>>4));
   json_object_object_add(jparent, "net_flags", json_object_new_string(flags));
 
 }

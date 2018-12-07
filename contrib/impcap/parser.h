@@ -30,8 +30,6 @@
 #ifndef INCLUDED_PARSER_H
 #define INCLUDED_PARSER_H 1
 
-typedef struct tcphdr         tcp_header_t;
-
 #define IP_PROTO_NUM 256
 #define ETH_PROTO_NUM 0x9000  /* initializing 36000+ values for just 11... there MUST be a better way... */
 
