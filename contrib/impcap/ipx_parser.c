@@ -1,18 +1,21 @@
 #include "parser.h"
 
+struct ipx_header_s {
+  uint16_t chksum;
+  uint16_t pktLen;
+  uint8_t transCtrl;
+  uint8_t type;
+  uint32_t dstNet;
+  uint8_t dstNode[6];
+  uint16_t dstSocket;
+  uint32_t srcNet;
+  uint8_t srcNode[6];
+  uint16_t srcSocket;
+}__attribute__ ((__packed__));
+
+typedef struct ipx_header_s ipx_header_t;
+
 void ipx_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
-  struct ipx_header_s {
-    uint16_t chksum;
-    uint16_t pktLen;
-    uint8_t transCtrl;
-    uint8_t type;
-    uint32_t dstNet;
-    uint8_t dstNode[6];
-    uint16_t dstSocket;
-    uint32_t srcNet;
-    uint8_t srcNode[6];
-    uint16_t srcSocket;
-  }__attribute__ ((__packed__));
 
   DBGPRINTF("entered ipx_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
@@ -23,7 +26,7 @@ void ipx_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
   }
 
   char ipxSrcNode[20], ipxDstNode[20];
-  struct ipx_header_s *ipx_header = (struct ipx_header_s *)packet;
+  ipx_header_t *ipx_header = (ipx_header_t *)packet;
 
   snprintf(ipxDstNode, sizeof(ipxDstNode), "%02x:%02x:%02x:%02x:%02x:%02x"
     ,ipx_header->dstNode[0]
