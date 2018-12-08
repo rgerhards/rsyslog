@@ -51,5 +51,6 @@ void rarp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent
 void dont_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
 void ah_parse(const uchar *packet,size_t pktSize, struct json_object *jparent);
 void esp_parse(const uchar *packet,size_t pktSize, struct json_object *jparent);
+void smb_parse(const uchar *packet, size_t pktSize, struct json_object *jparent);
 
 #endif /* INCLUDED_PARSER_H */

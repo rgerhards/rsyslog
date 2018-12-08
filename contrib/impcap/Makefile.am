@@ -14,3 +14,4 @@ impcap_la_SOURCES += ipx_parser.c
 impcap_la_SOURCES += llc_parser.c
 impcap_la_SOURCES += tcp_parser.c
 impcap_la_SOURCES += udp_parser.c
+impcap_la_SOURCES += smb_parser.c
