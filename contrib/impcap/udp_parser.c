@@ -9,7 +9,7 @@ struct udp_header_s {
 
 typedef struct udp_header_s udp_header_t;
 
-char* udp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
+data_ret_t* udp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
   DBGPRINTF("udp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 

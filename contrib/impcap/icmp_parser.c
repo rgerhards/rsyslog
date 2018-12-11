@@ -9,7 +9,7 @@ struct icmp_header_s {
 
 typedef struct icmp_header_s icmp_header_t;
 
-char* icmp_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* icmp_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("icmp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 

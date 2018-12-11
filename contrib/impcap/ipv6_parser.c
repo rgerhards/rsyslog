@@ -18,11 +18,11 @@ struct ipv6_header_s {
 
 typedef struct ipv6_header_s ipv6_header_t;
 
-char* ipv6_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* ipv6_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("ipv6_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
-  if(pktSize <= 40) { /* too small for IPv6 header + data (header might be longer)*/
+  if(pktSize < 40) { /* too small for IPv6 header + data (header might be longer)*/
     DBGPRINTF("IPv6 packet too small : %d\n", pktSize);
     RETURN_DATA_AFTER(0)
   }

@@ -1,6 +1,6 @@
 #include "parser.h"
 
-char* llc_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* llc_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("entered llc_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 

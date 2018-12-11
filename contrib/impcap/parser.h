@@ -33,35 +33,43 @@
 #define IP_PROTO_NUM 256
 #define ETH_PROTO_NUM 0x9000  /* initializing 36000+ values for just 11... there MUST be a better way... */
 
-char* (*ipProtoHandlers[IP_PROTO_NUM]) (const uchar *packet, int pktSize, struct json_object *jparent);
-char* (*ethProtoHandlers[ETH_PROTO_NUM]) (const uchar *packet, int pktSize, struct json_object *jparent);
+/* data return structure */
+struct data_ret_s {
+  size_t size;
+  char *pData;
+};
+typedef struct data_ret_s data_ret_t;
+
+data_ret_t* (*ipProtoHandlers[IP_PROTO_NUM]) (const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* (*ethProtoHandlers[ETH_PROTO_NUM]) (const uchar *packet, int pktSize, struct json_object *jparent);
 
 /* --- handlers prototypes --- */
 void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet);
-char* eth_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* llc_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* ipx_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* ipv4_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* icmp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* tcp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* udp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* ipv6_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* arp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* rarp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* dont_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-char* ah_parse(const uchar *packet,int pktSize, struct json_object *jparent);
-char* esp_parse(const uchar *packet,int pktSize, struct json_object *jparent);
-char* smb_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-// char* http_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* eth_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* llc_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* ipx_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* ipv4_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* icmp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* tcp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* udp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* ipv6_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* arp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* dont_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+data_ret_t* ah_parse(const uchar *packet,int pktSize, struct json_object *jparent);
+data_ret_t* esp_parse(const uchar *packet,int pktSize, struct json_object *jparent);
+data_ret_t* smb_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+// data_ret_t* http_parse(const uchar *packet, int pktSize, struct json_object *jparent);
 
-#define RETURN_DATA_AFTER(x)   if(pktSize > x) {  \
-                                uint8_t dataSize = pktSize - x; \
-                                char *retBuf = malloc((dataSize+1)*sizeof(char)); \
-                                memcpy(retBuf, packet+x, dataSize); \
-                                retBuf[dataSize] = '\0';  \
-                                return retBuf;  \
-                              } else {  \
-                                return NULL; \
-                              }
+#define RETURN_DATA_AFTER(x)    data_ret_t *retData = malloc(sizeof(data_ret_t)); \
+                                if(pktSize > x) { \
+                                  retData->size = pktSize - x;  \
+                                  retData->pData = packet + x;  \
+                                } \
+                                else {  \
+                                  retData->size = 0;  \
+                                  retData->pData = NULL;  \
+                                } \
+                                return retData; \
 
 #endif /* INCLUDED_PARSER_H */

@@ -22,11 +22,11 @@ struct ipv4_header_s {
 
 typedef struct ipv4_header_s ipv4_header_t;
 
-char* ipv4_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* ipv4_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("ipv4_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
-  if(pktSize <= 20) { /* too small for IPv4 header + data (header might be longer)*/
+  if(pktSize < 20) { /* too small for IPv4 header + data (header might be longer)*/
     DBGPRINTF("IPv4 packet too small : %d\n", pktSize);
     RETURN_DATA_AFTER(0)
   }

@@ -15,7 +15,7 @@ struct ipx_header_s {
 
 typedef struct ipx_header_s ipx_header_t;
 
-char* ipx_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* ipx_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
 
   DBGPRINTF("entered ipx_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);

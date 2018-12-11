@@ -11,7 +11,7 @@ struct arp_header_s {
 
 typedef struct arp_header_s arp_header_t;
 
-char* arp_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* arp_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("arp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
@@ -50,7 +50,7 @@ char* arp_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
 }
 
 /* copy of ARP handler, as structure is the same but protocol code and name are different */
-char* rarp_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("rarp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 

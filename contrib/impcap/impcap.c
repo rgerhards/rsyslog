@@ -371,7 +371,7 @@ ENDfreeCnf
 
 /* runtime functions */
 
-char* dont_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* dont_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("protocol not handled\n");
   RETURN_DATA_AFTER(0)
 }
@@ -405,12 +405,10 @@ void init_ip_proto_handlers() {
   ipProtoHandlers[IPPROTO_UDP] = udp_parse;
 }
 
-char* stringToHex(char* string, size_t maxlen) {
+char* stringToHex(char* string, size_t length) {
   const char *hexChar = "0123456789ABCDEF";
   char *retBuf;
-  uint16_t length, i;
-
-  length = strnlen(string, maxlen);
+  uint16_t i;
 
   retBuf = malloc((2*length+1)*sizeof(char));
   for(i = 0; i < length; ++i) {
@@ -432,19 +430,18 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
   json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
   json_object_object_add(jown, "net_bytes_total", json_object_new_int(pkthdr->len));
 
-  char *dataLeft = eth_parse(packet, pkthdr->caplen, jown);
-  if(dataLeft != NULL) {
-    json_object_object_add(jown, "net_bytes_data", json_object_new_int(strlen(dataLeft)));
-    char *dataHex = stringToHex(dataLeft, pkthdr->caplen);
-    if(dataHex != NULL) {
-      struct json_object *jadd = json_object_new_object();
-      json_object_object_add(jadd, "length", json_object_new_int(strlen(dataHex)));
-      json_object_object_add(jadd, "content", json_object_new_string(dataHex));
-      msgAddJSON(pMsg, JSON_DATA_NAME, jadd, 0, 0);
-      free(dataHex);
-    }
-    free(dataLeft);
+  data_ret_t *dataLeft = eth_parse(packet, pkthdr->caplen, jown);
+
+  json_object_object_add(jown, "net_bytes_data", json_object_new_int(dataLeft->size));
+  char *dataHex = stringToHex(dataLeft->pData, dataLeft->size);
+  if(dataHex != NULL) {
+    struct json_object *jadd = json_object_new_object();
+    json_object_object_add(jadd, "length", json_object_new_int(strlen(dataHex)));
+    json_object_object_add(jadd, "content", json_object_new_string(dataHex));
+    msgAddJSON(pMsg, JSON_DATA_NAME, jadd, 0, 0);
+    free(dataHex);
   }
+  free(dataLeft);
 
   msgAddJSON(pMsg, JSON_LOOKUP_NAME, jown, 0, 0);
   submitMsg2(pMsg);

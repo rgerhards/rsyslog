@@ -19,7 +19,7 @@ struct vlan_header_s
 typedef struct eth_header_s eth_header_t;
 typedef struct vlan_header_s vlan_header_t;
 
-char* eth_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* eth_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("entered eth_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
   if (pktSize < 14) {  /* too short for eth header */

@@ -20,7 +20,7 @@ typedef struct tcp_header_s tcp_header_t;
 
 static char flagCodes[10] = "FSRPAUECN";
 
-char* tcp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
+data_ret_t* tcp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
   DBGPRINTF("tcp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
@@ -53,10 +53,11 @@ char* tcp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
   json_object_object_add(jparent, "net_flags", json_object_new_string(flags));
 
   if(srcPort == SMB_PORT || dstPort == SMB_PORT) {
-    smb_parse(packet + headerLength, pktSize - headerLength, jparent);
+    return smb_parse(packet + headerLength, pktSize - headerLength, jparent);
   }
   // if(srcPort == HTTP_PORT || dstPort == HTTP_PORT){
   //   http_parse(packet + headerLength, pktSize - headerLength, jparent);
   // }
+  DBGPRINTF("tcp return after 20\n");
   RETURN_DATA_AFTER(20)
 }

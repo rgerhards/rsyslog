@@ -41,7 +41,7 @@ typedef struct smb_header_s smb_header_t;
 
 static char flagCodes[5] = "RPCS";
 
-char* smb_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t* smb_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("smb_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
