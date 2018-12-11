@@ -55,8 +55,8 @@ char* tcp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
   if(srcPort == SMB_PORT || dstPort == SMB_PORT) {
     smb_parse(packet + headerLength, pktSize - headerLength, jparent);
   }
-  if(srcPort == HTTP_PORT || dstPort == HTTP_PORT){
-    http_parse(packet + headerLength, pktSize - headerLength, jparent)
-  }
+  // if(srcPort == HTTP_PORT || dstPort == HTTP_PORT){
+  //   http_parse(packet + headerLength, pktSize - headerLength, jparent);
+  // }
   RETURN_DATA_AFTER(20)
 }
