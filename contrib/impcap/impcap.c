@@ -52,6 +52,8 @@ MODULE_TYPE_NOKEEP
 MODULE_CNFNAME("impcap")
 
 #define JSON_LOOKUP_NAME "!impcap"
+#define JSON_DATA_NAME "!data"
+
 
 /* static data */
 DEF_IMOD_STATIC_DATA
@@ -369,8 +371,9 @@ ENDfreeCnf
 
 /* runtime functions */
 
-void dont_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+char* dont_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("protocol not handled\n");
+  RETURN_DATA_AFTER(0)
 }
 
 /* TODO: add user parameters to select handled protocols */
@@ -402,28 +405,46 @@ void init_ip_proto_handlers() {
   ipProtoHandlers[IPPROTO_UDP] = udp_parse;
 }
 
-/* TODO check ETH II or 802.3 or 802.3 Tagué (VLAN)
-    difference in proto field (after source field) :
-      - >1500 means ETH II and is proto
-      - <= 1500 means 802.3 and is length
-        - special value of proto means tagged (+ tag 2 bytes after)
-*/
+char* stringToHex(char* string, size_t maxlen) {
+  const char *hexChar = "0123456789ABCDEF";
+  char *retBuf;
+  uint16_t length, i;
+
+  length = strnlen(string, maxlen);
+
+  retBuf = malloc((2*length+1)*sizeof(char));
+  for(i = 0; i < length; ++i) {
+    retBuf[2*i] = hexChar[(string[i] & 0xF0) >> 4];
+    retBuf[2*i+1] = hexChar[string[i] & 0x0F];
+  }
+  retBuf[2*length] = '\0';
+
+  return retBuf;
+}
+
 void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
   DBGPRINTF("impcap : entered packet_parse\n");
   smsg_t *pMsg;
 
-  if(pkthdr->len < 40 || pkthdr->len > 1514) {
-    DBGPRINTF("bad packet length, discarded\n");
-    return;
-  }
   int * id = (int *)arg;
   msgConstruct(&pMsg);
   struct json_object *jown = json_object_new_object();
   json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
   json_object_object_add(jown, "net_bytes_total", json_object_new_int(pkthdr->len));
 
-  eth_parse(packet, pkthdr->caplen, jown);
-
+  char *dataLeft = eth_parse(packet, pkthdr->caplen, jown);
+  if(dataLeft != NULL) {
+    json_object_object_add(jown, "net_bytes_data", json_object_new_int(strlen(dataLeft)));
+    char *dataHex = stringToHex(dataLeft, pkthdr->caplen);
+    if(dataHex != NULL) {
+      struct json_object *jadd = json_object_new_object();
+      json_object_object_add(jadd, "length", json_object_new_int(strlen(dataHex)));
+      json_object_object_add(jadd, "content", json_object_new_string(dataHex));
+      msgAddJSON(pMsg, JSON_DATA_NAME, jadd, 0, 0);
+      free(dataHex);
+    }
+    free(dataLeft);
+  }
 
   msgAddJSON(pMsg, JSON_LOOKUP_NAME, jown, 0, 0);
   submitMsg2(pMsg);

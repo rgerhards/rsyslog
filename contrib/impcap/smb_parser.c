@@ -41,11 +41,11 @@ typedef struct smb_header_s smb_header_t;
 
 static char flagCodes[5] = "RPCS";
 
-void smb_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+char* smb_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("smb_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
-  while((int)pktSize > 0) {
+  while(pktSize > 0) {
     /* don't check packet[0] to include SMB version byte at the beginning */
     if(packet[1] == 'S') {
       if(packet[2] == 'M') {
@@ -59,7 +59,7 @@ void smb_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
 
   if((int)pktSize < 64) {
     DBGPRINTF("SMB packet too small : %d\n", pktSize);
-    return;
+    RETURN_DATA_AFTER(0)
   }
 
   smb_header_t *smb_header = (smb_header_t *)packet;
@@ -86,22 +86,5 @@ void smb_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
   json_object_object_add(jparent, "SMB_treeID", json_object_new_int64(smb_header->treeID));
   json_object_object_add(jparent, "SMB_userID", json_object_new_int64(userID));
 
-
-  DBGPRINTF("smb_parse, version: %X\n", smb_header->version);
-  DBGPRINTF("smb_parse, header length: %d\n", smb_header->headerLength);
-  DBGPRINTF("smb_parse, NT status: %X\n", smb_header->ntStatus);
-  DBGPRINTF("smb_parse, opcode: %X\n", smb_header->opCode);
-  DBGPRINTF("smb_parse, flags: %s\n", flags);
-  DBGPRINTF("smb_parse, chain offset: %d\n", smb_header->chainOffset);
-  DBGPRINTF("smb_parse, command sequence number: %X\n", seqNum);
-  DBGPRINTF("smb_parse, process ID: %X\n", smb_header->processID);
-  DBGPRINTF("smb_parse, treeID: %X\n", smb_header->treeID);
-  DBGPRINTF("smb_parse, userID: %X\n", userID);
-  DBGPRINTF("smb_parse, signature: %X %X %X %X\n",
-                              smb_header->signature[0],
-                              smb_header->signature[1],
-                              smb_header->signature[2],
-                              smb_header->signature[3]);
-
-
+  RETURN_DATA_AFTER(64)
 }

@@ -19,12 +19,12 @@ struct vlan_header_s
 typedef struct eth_header_s eth_header_t;
 typedef struct vlan_header_s vlan_header_t;
 
-void eth_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+char* eth_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("entered eth_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
   if (pktSize < 14) {  /* too short for eth header */
     DBGPRINTF("ETH packet too small : %d\n", pktSize);
-    return;
+    RETURN_DATA_AFTER(0)
   }
 
   eth_header_t *eth_header = (eth_header_t *)packet;
@@ -49,10 +49,9 @@ void eth_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
   if(ethType < 1500) {
     /* this is a LLC header */
     json_object_object_add(jparent, "ETH_len", json_object_new_int(ethType));
-    llc_parse(packet + hdrLen, pktSize - hdrLen, jparent);
-    return;
+    return llc_parse(packet + hdrLen, pktSize - hdrLen, jparent);
   }
 
   json_object_object_add(jparent, "ETH_type", json_object_new_int(ethType));
-  (*ethProtoHandlers[ethType])((packet + hdrLen), (pktSize - hdrLen), jparent);
+  return (*ethProtoHandlers[ethType])((packet + hdrLen), (pktSize - hdrLen), jparent);
 }

@@ -18,13 +18,13 @@ struct ipv6_header_s {
 
 typedef struct ipv6_header_s ipv6_header_t;
 
-void ipv6_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+char* ipv6_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("ipv6_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 40) { /* too small for IPv6 header + data (header might be longer)*/
     DBGPRINTF("IPv6 packet too small : %d\n", pktSize);
-    return;
+    RETURN_DATA_AFTER(0)
   }
 
 	ipv6_header_t *ipv6_header = (ipv6_header_t *)packet;
@@ -40,7 +40,8 @@ void ipv6_parse(const uchar *packet, size_t pktSize, struct json_object *jparent
   json_object_object_add(jparent, "net_ttl", json_object_new_int(ipv6_header->hopLimit));
   if (ipv6_header->nextHeader == 58)
   {
-	   icmp_parse(packet+sizeof(ipv6_header_t),pktSize-sizeof(ipv6_header_t),jparent);
+	   return icmp_parse(packet+sizeof(ipv6_header_t),pktSize-sizeof(ipv6_header_t),jparent);
   }
 
+  RETURN_DATA_AFTER(40)
 }

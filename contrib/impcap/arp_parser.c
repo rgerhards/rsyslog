@@ -11,13 +11,13 @@ struct arp_header_s {
 
 typedef struct arp_header_s arp_header_t;
 
-void arp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+char* arp_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("arp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
-  if(pktSize <= 27) { /* too small for ARP header*/
+  if(pktSize < 28) { /* too small for ARP header*/
     DBGPRINTF("ARP packet too small : %d\n", pktSize);
-    return;
+    return NULL;
   }
 
 	arp_header_t *arp_header = (arp_header_t *)packet;
@@ -28,13 +28,7 @@ void arp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
   json_object_object_add(jparent, "ARP_pType", json_object_new_int(ntohs(arp_header->pType)));
   json_object_object_add(jparent, "ARP_op", json_object_new_int(ntohs(arp_header->opCode)));
 
-  DBGPRINTF("processed 1\n");
-
   if(ntohs(arp_header->hwType) == 1) { /* ethernet addresses */
-    DBGPRINTF("entered ethernet address resolution\n");
-    DBGPRINTF("hwAddrLen: %d\n", arp_header->hwAddrLen);
-    DBGPRINTF("pAddrLen: %d\n", arp_header->pAddrLen);
-
     char hwAddrSrc[20], hwAddrDst[20];
 
     ether_ntoa_r((struct eth_addr *)arp_header->pAddr, hwAddrSrc);
@@ -52,14 +46,15 @@ void arp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
     json_object_object_add(jparent, "ARP_pDst", json_object_new_string((char*)pAddrDst));
   }
 
+  RETURN_DATA_AFTER(28)
 }
 
 /* copy of ARP handler, as structure is the same but protocol code and name are different */
-void rarp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+char* rarp_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("rarp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
-  if(pktSize <= 27) { /* too small for RARP header*/
+  if(pktSize < 28) { /* too small for RARP header*/
     DBGPRINTF("RARP packet too small : %d\n", pktSize);
     return;
   }
@@ -88,4 +83,5 @@ void rarp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent
     json_object_object_add(jparent, "RARP_pDst", json_object_new_string((char*)pAddrDst));
   }
 
+  RETURN_DATA_AFTER(28)
 }

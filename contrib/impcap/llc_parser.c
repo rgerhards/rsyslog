@@ -1,12 +1,12 @@
 #include "parser.h"
 
-void llc_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+char* llc_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("entered llc_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if (pktSize < 3) {  /* too short for llc header */
     DBGPRINTF("LLC packet too small : %d\n", pktSize);
-    return;
+    RETURN_DATA_AFTER(0)
   }
 
   uint8_t dsapField, dsap, ssapField, ssap;
@@ -20,8 +20,7 @@ void llc_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
 
   if(dsapField == 0xff && ssapField == 0xff) {
     /* this is an IPX packet, without LLC */
-    ipx_parse(packet, pktSize, jparent);
-    return;
+    return ipx_parse(packet, pktSize, jparent);
   }
 
   if((packet[2] & 0x03) == 3) {
@@ -52,16 +51,16 @@ void llc_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
                         packet[headerLen+4];
     json_object_object_add(jparent, "SNAP_oui", json_object_new_int(orgCode));
     json_object_object_add(jparent, "SNAP_ethType", json_object_new_int(ethType));
-    (*ethProtoHandlers[ethType])(packet + headerLen, pktSize - headerLen, jparent);
-    return;
+    return (*ethProtoHandlers[ethType])(packet + headerLen, pktSize - headerLen, jparent);
   }
   if(dsap == 0x06 && ssap == 0x06 && ctrl == 0x03) {
     /* IPv4 header */
-    ipv4_parse(packet + headerLen, pktSize - headerLen, jparent);
-    return;
+    return ipv4_parse(packet + headerLen, pktSize - headerLen, jparent);
   }
   if(dsap == 0xe0 && ssap == 0xe0 && ctrl == 0x03) {
     /* IPX packet with LLC */
-    ipx_parse(packet + headerLen, pktSize - headerLen, jparent);
+    return ipx_parse(packet + headerLen, pktSize - headerLen, jparent);
   }
+
+  RETURN_DATA_AFTER(headerLen)
 }

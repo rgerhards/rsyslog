@@ -19,13 +19,13 @@ typedef struct tcp_header_s tcp_header_t;
 
 static char flagCodes[10] = "FSRPAUECN";
 
-void tcp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent){
+char* tcp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
   DBGPRINTF("tcp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 20) {
     DBGPRINTF("TCP packet too small : %d\n", pktSize);
-    return;
+    RETURN_DATA_AFTER(0)
   }
 
   tcp_header_t *tcp_header = (tcp_header_t *)packet;
@@ -52,6 +52,8 @@ void tcp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
   json_object_object_add(jparent, "net_flags", json_object_new_string(flags));
 
   if(srcPort == SMB_PORT || dstPort == SMB_PORT) {
-    smb_parse(packet + headerLength, pktSize - headerLength, jparent);
+    return smb_parse(packet + headerLength, pktSize - headerLength, jparent);
   }
+
+  RETURN_DATA_AFTER(20)
 }

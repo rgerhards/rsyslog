@@ -9,13 +9,13 @@ struct udp_header_s {
 
 typedef struct udp_header_s udp_header_t;
 
-void udp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent){
+char* udp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
   DBGPRINTF("udp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize < 8) {
     DBGPRINTF("UDP packet too small : %d\n", pktSize);
-    return;
+    RETURN_DATA_AFTER(0)
   }
 
   udp_header_t *udp_header = (udp_header_t *)packet;
@@ -25,4 +25,5 @@ void udp_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
   json_object_object_add(jparent, "UDP_Length", json_object_new_int(ntohs(udp_header->totalLength)));
   json_object_object_add(jparent, "UDP_Checksum", json_object_new_int(ntohs(udp_header->checksum)));
 
+  RETURN_DATA_AFTER(8)
 }

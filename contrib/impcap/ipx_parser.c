@@ -15,14 +15,14 @@ struct ipx_header_s {
 
 typedef struct ipx_header_s ipx_header_t;
 
-void ipx_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+char* ipx_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
 
   DBGPRINTF("entered ipx_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if (pktSize < 30) {  /* too short for IPX header */
     DBGPRINTF("IPX packet too small : %d\n", pktSize);
-    return;
+    RETURN_DATA_AFTER(0)
   }
 
   char ipxSrcNode[20], ipxDstNode[20];
@@ -52,4 +52,6 @@ void ipx_parse(const uchar *packet, size_t pktSize, struct json_object *jparent)
   json_object_object_add(jparent, "IPX_src_node", json_object_new_string(ipxSrcNode));
   json_object_object_add(jparent, "IPX_dest_socket", json_object_new_int(ntohs(ipx_header->dstSocket)));
   json_object_object_add(jparent, "IPX_src_soket", json_object_new_int(ntohs(ipx_header->srcSocket)));
+
+  RETURN_DATA_AFTER(30)
 }

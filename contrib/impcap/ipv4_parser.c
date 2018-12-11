@@ -22,13 +22,13 @@ struct ipv4_header_s {
 
 typedef struct ipv4_header_s ipv4_header_t;
 
-void ipv4_parse(const uchar *packet, size_t pktSize, struct json_object *jparent) {
+char* ipv4_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("ipv4_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
 
   if(pktSize <= 20) { /* too small for IPv4 header + data (header might be longer)*/
     DBGPRINTF("IPv4 packet too small : %d\n", pktSize);
-    return;
+    RETURN_DATA_AFTER(0)
   }
 
 	ipv4_header_t *ipv4_header = (ipv4_header_t *)packet;
@@ -44,5 +44,5 @@ void ipv4_parse(const uchar *packet, size_t pktSize, struct json_object *jparent
   json_object_object_add(jparent, "IP_ihl", json_object_new_int(ipv4_header->ihl));
   json_object_object_add(jparent, "net_ttl", json_object_new_int(ipv4_header->ttl));
 
-  (*ipProtoHandlers[ipv4_header->proto])((packet + hdrLen), (pktSize - hdrLen), jparent);
+  return (*ipProtoHandlers[ipv4_header->proto])((packet + hdrLen), (pktSize - hdrLen), jparent);
 }
