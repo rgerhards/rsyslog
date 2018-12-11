@@ -1,6 +1,7 @@
 #include "parser.h"
 
 #define SMB_PORT 445
+#define HTTP_PORT 80
 
 struct tcp_header_s {
   uint16_t srcPort;
@@ -52,8 +53,10 @@ char* tcp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
   json_object_object_add(jparent, "net_flags", json_object_new_string(flags));
 
   if(srcPort == SMB_PORT || dstPort == SMB_PORT) {
-    return smb_parse(packet + headerLength, pktSize - headerLength, jparent);
+    smb_parse(packet + headerLength, pktSize - headerLength, jparent);
   }
-
+  if(srcPort == HTTP_PORT || dstPort == HTTP_PORT){
+    http_parse(packet + headerLength, pktSize - headerLength, jparent)
+  }
   RETURN_DATA_AFTER(20)
 }

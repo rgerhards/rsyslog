@@ -52,7 +52,7 @@ char* dont_parse(const uchar *packet, int pktSize, struct json_object *jparent);
 char* ah_parse(const uchar *packet,int pktSize, struct json_object *jparent);
 char* esp_parse(const uchar *packet,int pktSize, struct json_object *jparent);
 char* smb_parse(const uchar *packet, int pktSize, struct json_object *jparent);
-
+char* http_parse(const uchar *packet, int pktSize, struct json_object *jparent);
 
 #define RETURN_DATA_AFTER(x)   if(pktSize > x) {  \
                                 uint8_t dataSize = pktSize - x; \
