@@ -17,7 +17,7 @@ data_ret_t* arp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 
   if(pktSize < 28) { /* too small for ARP header*/
     DBGPRINTF("ARP packet too small : %d\n", pktSize);
-    return NULL;
+    RETURN_DATA_AFTER(0)
   }
 
 	arp_header_t *arp_header = (arp_header_t *)packet;
@@ -56,7 +56,7 @@ data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jpa
 
   if(pktSize < 28) { /* too small for RARP header*/
     DBGPRINTF("RARP packet too small : %d\n", pktSize);
-    return;
+    RETURN_DATA_AFTER(0)
   }
 
 	arp_header_t *rarp_header = (arp_header_t *)packet;
