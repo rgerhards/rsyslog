@@ -1,6 +1,9 @@
 #include "parser.h"
 
-data_ret_t* http_parse(const uchar *packet,size_t pktSize, struct json_object *jparent){
+char* catch_Status_Code(char* header);
+char* catch_property(char* header, char* property);
+
+data_ret_t* http_parse(const uchar *packet,int pktSize, struct json_object *jparent){
   char *http = malloc(strlen(packet) * sizeof(char));
   memcpy(http,packet,pktSize);
 //"^HTTP/1.[0,1] [0-9]{0,3} *"
