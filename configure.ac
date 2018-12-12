@@ -2268,6 +2268,18 @@ if test "x$enable_impcap" = "xyes"; then
 fi
 AM_CONDITIONAL(ENABLE_IMPCAP, test x$enable_impcap = xyes)
 
+# settings for the pmcapture parser module
+AC_ARG_ENABLE(pmcapture,
+        [AS_HELP_STRING([--enable-pmcapture],[pmcapture parser module enabled @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_pmcapture="yes" ;;
+          no) enable_pmcapture="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-pmcapture) ;;
+         esac],
+        [enable_pmcapture=no]
+)
+
+AM_CONDITIONAL(ENABLE_PMCAPTURE, test x$enable_pmcapture = xyes)
 
 
 
@@ -2391,6 +2403,7 @@ AC_CONFIG_FILES([Makefile \
 		contrib/omfile-hardened/Makefile \
 		contrib/mmkubernetes/Makefile \
 		plugins/impcap/Makefile \
+		plugins/pmcapture/Makefile \
 		tests/Makefile])
 AC_OUTPUT
 
@@ -2458,6 +2471,7 @@ echo "    pmnormalize module will be compiled:      $enable_pmnormalize"
 echo "    pmaixforwardedfrom module w.be compiled:  $enable_pmaixforwardedfrom"
 echo "    pmsnare module will be compiled:          $enable_pmsnare"
 echo "    pmpanngfw module will be compiled:        $enable_pmpanngfw"
+echo "    pmcapture parser module enabled:          $enable_pmcapture"
 echo
 echo "---{ message modification modules }---"
 echo "    mmnormalize module will be compiled:      $enable_mmnormalize"

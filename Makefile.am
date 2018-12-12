@@ -304,6 +304,10 @@ if ENABLE_IMPCAP
 SUBDIRS += plugins/impcap
 endif
 
+if ENABLE_PMCAPTURE
+SUBDIRS += plugins/pmcapture
+endif
+
 # tests are added as last element, because tests may need different
 # modules that need to be generated first
 SUBDIRS += tests
