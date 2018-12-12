@@ -2,6 +2,8 @@
 
 #define SMB_PORT 445
 #define HTTP_PORT 80
+#define FTP_PORT 21
+#define FTP_PORT_DATA 20
 
 struct tcp_header_s {
   uint16_t srcPort;
@@ -54,6 +56,9 @@ data_ret_t* tcp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 
   if(srcPort == SMB_PORT || dstPort == SMB_PORT) {
     return smb_parse(packet + headerLength, pktSize - headerLength, jparent);
+  }
+  if(srcPort == FTP_PORT || dstPort == FTP_PORT || srcPort == FTP_PORT_DATA || dstPort == FTP_PORT_DATA) {
+    return ftp_parse(packet + headerLength, pktSize - headerLength, jparent);
   }
   // if(srcPort == HTTP_PORT || dstPort == HTTP_PORT){
   //   http_parse(packet + headerLength, pktSize - headerLength, jparent);
