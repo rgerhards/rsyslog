@@ -16,3 +16,4 @@ impcap_la_SOURCES += tcp_parser.c
 impcap_la_SOURCES += udp_parser.c
 impcap_la_SOURCES += smb_parser.c
 impcap_la_SOURCES += ftp_parser.c
+impcap_la_SOURCES += http_parser.c

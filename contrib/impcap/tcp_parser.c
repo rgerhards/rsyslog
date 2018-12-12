@@ -60,9 +60,9 @@ data_ret_t* tcp_parse(const uchar *packet, int pktSize, struct json_object *jpar
   if(srcPort == FTP_PORT || dstPort == FTP_PORT || srcPort == FTP_PORT_DATA || dstPort == FTP_PORT_DATA) {
     return ftp_parse(packet + headerLength, pktSize - headerLength, jparent);
   }
-  // if(srcPort == HTTP_PORT || dstPort == HTTP_PORT){
-  //   http_parse(packet + headerLength, pktSize - headerLength, jparent);
-  // }
+  if(srcPort == HTTP_PORT || dstPort == HTTP_PORT){
+    http_parse(packet + headerLength, pktSize - headerLength, jparent);
+  }
   DBGPRINTF("tcp return after 20\n");
   RETURN_DATA_AFTER(20)
 }
