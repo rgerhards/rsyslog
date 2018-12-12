@@ -68,6 +68,7 @@ struct instanceConf_s {
   uchar *interface;
   uchar *filePath;
   pcap_t *device;
+  uchar *filter;
   uint8_t promiscuous;
   uint8_t immediateMode;
   uint32_t bufSize;
@@ -91,6 +92,7 @@ static struct cnfparamdescr inppdescr[] = {
 	{ "interface", eCmdHdlrString, 0 },
   { "file", eCmdHdlrString, 0},
   { "promiscuous", eCmdHdlrBinary, 0 },
+  { "filter", eCmdHdlrString, 0 },
   { "no_buffer", eCmdHdlrBinary, 0 },
   { "buffer_size", eCmdHdlrPositiveInt, 0 },
   { "buffer_timeout", eCmdHdlrPositiveInt, 0 },
@@ -127,6 +129,7 @@ createInstance(instanceConf_t **pinst)
   inst->filePath = NULL;
   inst->device = NULL;
   inst->promiscuous = 0;
+  inst->filter = NULL;
   inst->immediateMode = 0;
   inst->bufTimeout = 10;
   inst->bufSize = 1024 * 1024 * 15;   /* should be enough for up to 10Gb interface*/
@@ -173,6 +176,9 @@ CODESTARTnewInpInst
     }
     else if(!strcmp(inppblk.descr[i].name, "promiscuous")) {
       inst->promiscuous = (uint8_t) pvals[i].val.d.n;
+    }
+    else if(!strcmp(inppblk.descr[i].name, "filter")) {
+      inst->filter = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
     }
     else if(!strcmp(inppblk.descr[i].name, "no_buffer")) {
       inst->immediateMode = (uint8_t) pvals[i].val.d.n;
@@ -272,6 +278,8 @@ ENDactivateCnfPrePrivDrop
 BEGINactivateCnf
   instanceConf_t *inst;
   pcap_t *dev;
+  struct bpf_program filter_program;
+  bpf_u_int32 SubNet,NetMask;
   char errBuf[PCAP_ERRBUF_SIZE];
   uint8_t retCode;
 CODESTARTactivateCnf
@@ -346,6 +354,24 @@ CODESTARTactivateCnf
         case PCAP_ERROR:
             LogError(0, RS_RET_LOAD_ERROR, "pcap: %s", pcap_geterr(dev));
             ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+      }
+
+      if(inst->filter != NULL) {
+        DBGPRINTF("getting submask on %s\n", inst->interface);
+        //obtain the subnet
+        if(pcap_lookupnet(inst->interface, &SubNet, &NetMask, errBuf)){
+          DBGPRINTF("Unable to obtain the netmask: '%s'", errBuf);
+          ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+        }
+        DBGPRINTF("setting filter %s\n", inst->filter);
+        /* Compile the filter */
+        if(pcap_compile(dev, &filter_program, inst->filter, 1, NetMask)) {
+          LogError(0, RS_RET_LOAD_ERROR, "pcap: error while compiling filter: '%s'", pcap_geterr(dev));
+          ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+        } else if(pcap_setfilter(dev, &filter_program)) {
+          LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting filter: '%s'", pcap_geterr(dev));
+          ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+        }
       }
 
       if(pcap_set_datalink(dev, DLT_EN10MB)) {
