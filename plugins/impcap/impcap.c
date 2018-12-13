@@ -281,7 +281,7 @@ BEGINactivateCnf
   struct bpf_program filter_program;
   bpf_u_int32 SubNet,NetMask;
   char errBuf[PCAP_ERRBUF_SIZE];
-  uint8_t retCode;
+  uint8_t retCode = 0;
 CODESTARTactivateCnf
   loadModConf = pModConf;
 
@@ -312,12 +312,16 @@ CODESTARTactivateCnf
         ABORT_FINALIZE(RS_RET_LOAD_ERROR);
       }
 
-      DBGPRINTF("setting immediate mode %d\n", inst->immediateMode);
-      if(pcap_set_immediate_mode(dev, inst->immediateMode)) {
-        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting immediate mode: '%s',"
-          " using buffer instead\n", pcap_geterr(dev));
+      if(inst->immediateMode) {
+        DBGPRINTF("setting immediate mode %d\n", inst->immediateMode);
+        retCode = pcap_set_immediate_mode(dev, inst->immediateMode);
+        if(retCode) {
+          LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting immediate mode: '%s',"
+            " using buffer instead\n", pcap_geterr(dev));
+        }
       }
-      else {
+
+      if(!inst->immediateMode || retCode){
         DBGPRINTF("setting buffer size %lu\n", inst->bufSize);
         if(pcap_set_buffer_size(dev, inst->bufSize)) {
           LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting buffer size: '%s'", pcap_geterr(dev));
