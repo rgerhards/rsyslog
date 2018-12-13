@@ -69,6 +69,7 @@ struct instanceConf_s {
   uchar *filePath;
   pcap_t *device;
   uchar *filter;
+  uchar *tag;
   uint8_t promiscuous;
   uint8_t immediateMode;
   uint32_t bufSize;
@@ -93,6 +94,7 @@ static struct cnfparamdescr inppdescr[] = {
   { "file", eCmdHdlrString, 0},
   { "promiscuous", eCmdHdlrBinary, 0 },
   { "filter", eCmdHdlrString, 0 },
+  { "tag", eCmdHdlrString, 0 },
   { "no_buffer", eCmdHdlrBinary, 0 },
   { "buffer_size", eCmdHdlrPositiveInt, 0 },
   { "buffer_timeout", eCmdHdlrPositiveInt, 0 },
@@ -130,6 +132,7 @@ createInstance(instanceConf_t **pinst)
   inst->device = NULL;
   inst->promiscuous = 0;
   inst->filter = NULL;
+  inst->tag = NULL;
   inst->immediateMode = 0;
   inst->bufTimeout = 10;
   inst->bufSize = 1024 * 1024 * 15;   /* should be enough for up to 10Gb interface*/
@@ -179,6 +182,9 @@ CODESTARTnewInpInst
     }
     else if(!strcmp(inppblk.descr[i].name, "filter")) {
       inst->filter = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
+    }
+    else if(!strcmp(inppblk.descr[i].name, "tag")) {
+      inst->tag = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
     }
     else if(!strcmp(inppblk.descr[i].name, "no_buffer")) {
       inst->immediateMode = (uint8_t) pvals[i].val.d.n;
@@ -446,12 +452,26 @@ char* stringToHex(char* string, size_t length) {
   return retBuf;
 }
 
+
 void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
   DBGPRINTF("impcap : entered packet_parse\n");
   smsg_t *pMsg;
 
   int * id = (int *)arg;
   msgConstruct(&pMsg);
+   
+  //search inst in loadmodconf,and check if there is tag. if so set tag in msg.
+  pthread_t ctid = pthread_self();
+  instanceConf_t *inst;
+  for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
+    if(pthread_equal(ctid, inst->tid)) {
+      if(inst->tag != NULL){
+	MsgSetTAG(pMsg,inst->tag,strlen(inst->tag));
+      }
+    }
+  }
+
+
   struct json_object *jown = json_object_new_object();
   json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
   json_object_object_add(jown, "net_bytes_total", json_object_new_int(pkthdr->len));
