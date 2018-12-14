@@ -32,6 +32,8 @@
  #include <stdarg.h>
  #include <ctype.h>
  #include <json.h>
+ #include <sys/types.h>    
+ #include <sys/stat.h>
 
  #include "rsyslog.h"
  #include "errmsg.h"
@@ -47,6 +49,7 @@ MODULE_CNFNAME("pmcapture")
 
 /* static data */
 DEF_IMOD_STATIC_DATA
+#define FOLDERNAME "pmcapture_files"
 
 static char* proto_list[] = {
   "http",
@@ -133,6 +136,29 @@ CODESTARTfreeParserInst
 ENDfreeParserInst
 
 /* runtime functions */
+
+int createfolder(char* folder){
+    struct stat file_stat;
+    char index[512]="";
+    strcat(index,folder);
+    strcat(index,"/");
+    strcat(index,FOLDERNAME);
+
+    ret = stat(index, &file_stat);
+    if(ret<0)
+    {
+        if(errno == ENOENT)
+        {
+            ret = mkdir(index, 0775);
+            if(ret < 0)
+            {
+		return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 
 BEGINparse2
 CODESTARTparse2

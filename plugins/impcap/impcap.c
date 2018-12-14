@@ -38,6 +38,8 @@
  #include <pcap.h>
 
  #include "rsyslog.h"
+ #include "ruleset.h"
+
  #include "errmsg.h"
  #include "unicode-helper.h"
  #include "module-template.h"
@@ -59,6 +61,7 @@ MODULE_CNFNAME("impcap")
 /* static data */
 DEF_IMOD_STATIC_DATA
 DEFobjCurrIf(glbl)
+DEFobjCurrIf(ruleset)
 
 /* --- init prototypes --- */
 void init_eth_proto_handlers();
@@ -78,6 +81,8 @@ struct instanceConf_s {
   uint8_t bufTimeout;
   uint8_t pktBatchCnt;
   pthread_t tid;
+  uchar *pszBindRuleset;		/* name of ruleset to bind to */
+  ruleset_t *pBindRuleset;	/* ruleset to bind listener to (use system default if unspecified) */
   struct instanceConf_s *next;
 };
 
@@ -97,6 +102,7 @@ static struct cnfparamdescr inppdescr[] = {
   { "promiscuous", eCmdHdlrBinary, 0 },
   { "filter", eCmdHdlrString, 0 },
   { "tag", eCmdHdlrString, 0 },
+  { "ruleset", eCmdHdlrString, 0 },
   { "no_buffer", eCmdHdlrBinary, 0 },
   { "buffer_size", eCmdHdlrPositiveInt, 0 },
   { "buffer_timeout", eCmdHdlrPositiveInt, 0 },
@@ -119,6 +125,8 @@ static struct cnfparamblk modpblk =
 	  modpdescr
 	};
 
+ #include "im-helper.h"
+
 /* create input instance, set default parameters, and
  * add it to the list of instances.
  */
@@ -129,16 +137,18 @@ createInstance(instanceConf_t **pinst)
 	DEFiRet;
 	CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
 	inst->next = NULL;
-  inst->interface = NULL;
-  inst->filePath = NULL;
-  inst->device = NULL;
-  inst->promiscuous = 0;
-  inst->filter = NULL;
-  inst->tag = NULL;
-  inst->immediateMode = 0;
-  inst->bufTimeout = 10;
-  inst->bufSize = 1024 * 1024 * 15;   /* should be enough for up to 10Gb interface*/
-  inst->pktBatchCnt = 5;
+  	inst->interface = NULL;
+  	inst->filePath = NULL;
+  	inst->device = NULL;
+  	inst->promiscuous = 0;
+  	inst->filter = NULL;
+  	inst->tag = NULL;
+  	inst->pszBindRuleset = NULL;
+  	//inst->pBindRuleset = NULL;
+  	inst->immediateMode = 0;
+  	inst->bufTimeout = 10;
+  	inst->bufSize = 1024 * 1024 * 15;   /* should be enough for up to 10Gb interface*/
+  	inst->pktBatchCnt = 5;
 
 	/* node created, let's add to global config */
 	if(loadModConf->tail == NULL) {
@@ -187,6 +197,9 @@ CODESTARTnewInpInst
     }
     else if(!strcmp(inppblk.descr[i].name, "tag")) {
       inst->tag = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
+    }
+    else if(!strcmp(inppblk.descr[i].name, "ruleset")) {
+      inst->pszBindRuleset = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
     }
     else if(!strcmp(inppblk.descr[i].name, "no_buffer")) {
       inst->immediateMode = (uint8_t) pvals[i].val.d.n;
@@ -252,6 +265,16 @@ BEGINendCnfLoad
 CODESTARTendCnfLoad
 ENDendCnfLoad
 
+
+/* function to generate error message if framework does not find requested ruleset */
+static inline void
+std_checkRuleset_genErrMsg(__attribute__((unused)) modConfData_t *modConf, instanceConf_t *inst)
+{
+	LogError(0, NO_ERRCODE, "impcap: ruleset '%s' for interface %s not found - "
+			"using default ruleset instead", inst->pszBindRuleset,
+			inst->interface);
+}
+
 BEGINcheckCnf
   instanceConf_t *inst;
 CODESTARTcheckCnf
@@ -266,6 +289,7 @@ CODESTARTcheckCnf
   }
 
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
+    std_checkRuleset(pModConf, inst);
     if(inst->interface == NULL && inst->filePath == NULL) {
       iRet = RS_RET_INVALID_PARAMS;
       LogError(0, RS_RET_LOAD_ERROR, "impcap: 'interface' or 'file' must be specified");
@@ -277,6 +301,7 @@ CODESTARTcheckCnf
       break;
     }
   }
+
 ENDcheckCnf
 
 BEGINactivateCnfPrePrivDrop
@@ -471,6 +496,9 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
   instanceConf_t *inst;
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
     if(pthread_equal(ctid, inst->tid)) {
+      if(inst->pBindRuleset != NULL){
+        MsgSetRuleset(pMsg, inst->pBindRuleset);
+      }
       if(inst->tag != NULL){
         MsgSetTAG(pMsg,inst->tag,strlen(inst->tag));
       }
@@ -538,6 +566,7 @@ ENDafterRun
 BEGINmodExit
 CODESTARTmodExit
 objRelease(glbl, CORE_COMPONENT);
+objRelease(ruleset, CORE_COMPONENT);
 ENDmodExit
 
 /* declaration of functions */
@@ -555,4 +584,5 @@ BEGINmodInit()
 CODESTARTmodInit
   *ipIFVersProvided = CURR_MOD_IF_VERSION;
   CHKiRet(objUse(glbl, CORE_COMPONENT));
+  CHKiRet(objUse(ruleset, CORE_COMPONENT));
 ENDmodInit
