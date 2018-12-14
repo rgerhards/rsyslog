@@ -211,6 +211,7 @@ ENDfreeCnf
 int createfolder(char* folder){
     struct stat file_stat;
     char index[512]="";
+    strcat(index,folder);
     strcat(index,"/");
     strcat(index,FOLDERNAME);
 
