@@ -42,49 +42,38 @@
 
 MODULE_TYPE_PARSER
 MODULE_TYPE_NOKEEP
+PARSER_NAME("rsyslog.pmcapture")
 MODULE_CNFNAME("pmcapture")
-
-PARSER_NAME("pmcapture")
 
 /* static data */
 DEF_IMOD_STATIC_DATA
 
+static char* proto_list[] = {
+  "http",
+  "ftp",
+  "smb"
+};
+
 /* conf structures */
 
 struct instanceConf_s {
+  uchar* protocol;
+  uchar* folder;
   struct instanceConf_s *next;
 };
 
-struct modConfData_s {
-  rsconf_t *pConf;
-  instanceConf_t *root, *tail;
-};
-
-static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current load process */
-
 /* input instance parameters */
-static struct cnfparamdescr inppdescr[] = {
-	{ "interface", eCmdHdlrString, 0 }
+static struct cnfparamdescr parspdescr[] = {
+	{ "protocol", eCmdHdlrString, 0 },
+  { "folder", eCmdHdlrString, 0 }
 };
-static struct cnfparamblk inppblk =
-	{ CNFPARAMBLK_VERSION,
-	  sizeof(inppdescr)/sizeof(struct cnfparamdescr),
-	  inppdescr
-	};
-
-/* module-global parameters */
-static struct cnfparamdescr modpdescr[] = {
-	{ "snap_length", eCmdHdlrPositiveInt, 0 }
+static struct cnfparamblk parspblk =
+{ CNFPARAMBLK_VERSION,
+  sizeof(parspdescr)/sizeof(struct cnfparamdescr),
+  parspdescr
 };
-static struct cnfparamblk modpblk =
-	{ CNFPARAMBLK_VERSION,
-	  sizeof(modpdescr)/sizeof(struct cnfparamdescr),
-	  modpdescr
-	};
 
-/* create parser instance, set default parameters, and
- * add it to the list of instances.
- */
+/* create parser instance, set default parameters */
 static rsRetVal
 createInstance(instanceConf_t **pinst)
 {
@@ -92,13 +81,7 @@ createInstance(instanceConf_t **pinst)
 	DEFiRet;
 	CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
 
-	/* node created, let's add to global config */
-	if(loadModConf->tail == NULL) {
-		loadModConf->tail = loadModConf->root = inst;
-	} else {
-		loadModConf->tail->next = inst;
-		loadModConf->tail = inst;
-	}
+  inst->protocol = NULL;
 
 	*pinst = inst;
 finalize_it:
@@ -108,101 +91,46 @@ finalize_it:
 /* parser instances */
 
 BEGINnewParserInst
-  struct cnfparamvals *pvals;
+  struct cnfparamvals *pvals = NULL;
   int i;
 CODESTARTnewParserInst
-  pvals = nvlstGetParams(lst, &inppblk, NULL);
+  DBGPRINTF("pmcapture: begin newParserInst\n");
 
+  inst = NULL;
+  CHKiRet(createInstance(&inst));
+
+  if(lst == NULL)
+    FINALIZE;
+
+  pvals = nvlstGetParams(lst, &parspblk, NULL);
   if(pvals == NULL) {
     LogError(0, RS_RET_MISSING_CNFPARAMS,
               "pmcapture: required parameters are missing\n");
     ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
   }
 
-  CHKiRet(createInstance(&inst));
-
-  for(i = 0 ; i < inppblk.nParams ; ++i) {
+  for(i = 0 ; i < parspblk.nParams ; ++i) {
     if(!pvals[i].bUsed)
       continue;
-    // if(!strcmp(inppblk.descr[i].name, "interface")) {
-    //   inst->interface = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
-    // }
-    // else {
-    //   dbgprintf("pmcapture: non-handled param %s in beginCnfLoad\n", inppblk.descr[i].name);
-    // }
+    if(!strcmp(parspblk.descr[i].name, "protocol")) {
+      inst->protocol = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
+    }
+    else if(!strcmp(parspblk.descr[i].name, "folder")) {
+      inst->folder = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
+    }
+    else {
+      dbgprintf("pmcapture: non-handled param %s in beginCnfLoad\n", parspblk.descr[i].name);
+    }
   }
 
 finalize_it:
 CODE_STD_FINALIZERnewParserInst
-  cnfparamvalsDestruct(pvals, &inppblk);
+  cnfparamvalsDestruct(pvals, &parspblk);
 ENDnewParserInst
 
 BEGINfreeParserInst
 CODESTARTfreeParserInst
 ENDfreeParserInst
-
-/* global mod conf (v2 system) */
-
-BEGINsetModCnf
-  struct cnfparamvals *pvals = NULL;
-  int i;
-CODESTARTsetModCnf
-
-  pvals = nvlstGetParams(lst, &modpblk, NULL);
-
-  for(i = 0 ; i < modpblk.nParams ; ++i) {
-    if(!pvals[i].bUsed)
-      continue;
-    // if(!strcmp(modpblk.descr[i].name, "snap_length")) {
-    //   loadModConf->snap_length = (int) pvals[i].val.d.n;
-    // }
-    // else {
-    //   dbgprintf("pmcapture: non-handled param %s in beginSetModCnf\n", modpblk.descr[i].name);
-    // }
-  }
-ENDsetModCnf
-
-/* config v2 system */
-
-BEGINbeginCnfLoad
-CODESTARTbeginCnfLoad
-  loadModConf = pModConf;
-  loadModConf->pConf = pConf;
-ENDbeginCnfLoad
-
-BEGINendCnfLoad
-CODESTARTendCnfLoad
-ENDendCnfLoad
-
-BEGINcheckCnf
-  instanceConf_t *inst;
-CODESTARTcheckCnf
-  if(pModConf->root == NULL) {
-    LogError(0, RS_RET_NO_LISTNERS , "pmcapture: module loaded, but "
-        "no interface defined - no input will be gathered");
-    iRet = RS_RET_NO_LISTNERS;
-  }
-
-  for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
-    // add conditions if necessary
-  }
-ENDcheckCnf
-
-BEGINactivateCnf
-  instanceConf_t *inst;
-CODESTARTactivateCnf
-  loadModConf = pModConf;
-
-  for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
-    // add activation actions
-  }
-
-finalize_it:
-ENDactivateCnf
-
-BEGINfreeCnf
-CODESTARTfreeCnf
-ENDfreeCnf
 
 /* runtime functions */
 
@@ -218,10 +146,7 @@ ENDmodExit
 
 BEGINqueryEtryPt
 CODESTARTqueryEtryPt
-CODEqueryEtryPt_STD_MOD_QUERIES
-CODEqueryEtryPt_STD_CONF2_QUERIES
 CODEqueryEtryPt_STD_PMOD2_QUERIES
-CODEqueryEtryPt_STD_CONF2_setModCnf_QUERIES
 ENDqueryEtryPt
 
 BEGINmodInit()
