@@ -43,6 +43,7 @@
  #include "module-template.h"
  #include "rainerscript.h"
  #include "rsconf.h"
+ #include "glbl.h"
 
  #include "parser.h"
 
@@ -57,6 +58,7 @@ MODULE_CNFNAME("impcap")
 
 /* static data */
 DEF_IMOD_STATIC_DATA
+DEFobjCurrIf(glbl)
 
 /* --- init prototypes --- */
 void init_eth_proto_handlers();
@@ -463,14 +465,14 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
 
   int * id = (int *)arg;
   msgConstruct(&pMsg);
-   
+
   //search inst in loadmodconf,and check if there is tag. if so set tag in msg.
   pthread_t ctid = pthread_self();
   instanceConf_t *inst;
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
     if(pthread_equal(ctid, inst->tid)) {
       if(inst->tag != NULL){
-	MsgSetTAG(pMsg,inst->tag,strlen(inst->tag));
+        MsgSetTAG(pMsg,inst->tag,strlen(inst->tag));
       }
     }
   }
@@ -500,9 +502,10 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
 void* startCaptureThread(void *instanceConf) {
   int id = 0;
   instanceConf_t *inst = (instanceConf_t *)instanceConf;
-  while(1) {
+  while(glbl.GetGlobalInputTermState() == 0) {
     pcap_dispatch(inst->device, inst->pktBatchCnt, packet_parse, (uchar *)&id);
   }
+  pthread_exit(0);
 }
 
 BEGINrunInput
@@ -515,7 +518,9 @@ CODESTARTrunInput
       LogError(0, RS_RET_NO_RUN, "impcap: error while creating threads\n");
     }
   }
-  pthread_exit(NULL);
+
+  // will block as long as created threads don't return
+  pthread_exit(0);
 ENDrunInput
 
 BEGINwillRun
@@ -532,6 +537,7 @@ ENDafterRun
 
 BEGINmodExit
 CODESTARTmodExit
+objRelease(glbl, CORE_COMPONENT);
 ENDmodExit
 
 /* declaration of functions */
@@ -548,4 +554,5 @@ ENDqueryEtryPt
 BEGINmodInit()
 CODESTARTmodInit
   *ipIFVersProvided = CURR_MOD_IF_VERSION;
+  CHKiRet(objUse(glbl, CORE_COMPONENT));
 ENDmodInit
