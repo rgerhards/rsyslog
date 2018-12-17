@@ -1,13 +1,13 @@
 #include "parser.h"
 
 struct ipv4_header_s {
-#if __BYTE_ORDER == __BIG_ENDIAN
+/*#if __BYTE_ORDER == __BIG_ENDIAN
   unsigned char version:4;
   unsigned char ihl:4;
-#else
+#else*/
   unsigned char ihl:4;
   unsigned char version:4;
-#endif
+//#endif
   uint8_t service;
   uint16_t totLen;
   uint16_t id;
