@@ -38,11 +38,14 @@
  #include <pcap.h>
 
  #include "rsyslog.h"
+ #include "ruleset.h"
+
  #include "errmsg.h"
  #include "unicode-helper.h"
  #include "module-template.h"
  #include "rainerscript.h"
  #include "rsconf.h"
+ #include "glbl.h"
 
  #include "parser.h"
 
@@ -57,6 +60,8 @@ MODULE_CNFNAME("impcap")
 
 /* static data */
 DEF_IMOD_STATIC_DATA
+DEFobjCurrIf(glbl)
+DEFobjCurrIf(ruleset)
 
 /* --- init prototypes --- */
 void init_eth_proto_handlers();
@@ -68,12 +73,16 @@ struct instanceConf_s {
   uchar *interface;
   uchar *filePath;
   pcap_t *device;
+  uchar *filter;
+  uchar *tag;
   uint8_t promiscuous;
   uint8_t immediateMode;
   uint32_t bufSize;
   uint8_t bufTimeout;
   uint8_t pktBatchCnt;
   pthread_t tid;
+  uchar *pszBindRuleset;		/* name of ruleset to bind to */
+  ruleset_t *pBindRuleset;	/* ruleset to bind listener to (use system default if unspecified) */
   struct instanceConf_s *next;
 };
 
@@ -91,6 +100,9 @@ static struct cnfparamdescr inppdescr[] = {
 	{ "interface", eCmdHdlrString, 0 },
   { "file", eCmdHdlrString, 0},
   { "promiscuous", eCmdHdlrBinary, 0 },
+  { "filter", eCmdHdlrString, 0 },
+  { "tag", eCmdHdlrString, 0 },
+  { "ruleset", eCmdHdlrString, 0 },
   { "no_buffer", eCmdHdlrBinary, 0 },
   { "buffer_size", eCmdHdlrPositiveInt, 0 },
   { "buffer_timeout", eCmdHdlrPositiveInt, 0 },
@@ -113,6 +125,8 @@ static struct cnfparamblk modpblk =
 	  modpdescr
 	};
 
+ #include "im-helper.h"
+
 /* create input instance, set default parameters, and
  * add it to the list of instances.
  */
@@ -123,14 +137,18 @@ createInstance(instanceConf_t **pinst)
 	DEFiRet;
 	CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
 	inst->next = NULL;
-  inst->interface = NULL;
-  inst->filePath = NULL;
-  inst->device = NULL;
-  inst->promiscuous = 0;
-  inst->immediateMode = 0;
-  inst->bufTimeout = 10;
-  inst->bufSize = 1024 * 1024 * 15;   /* should be enough for up to 10Gb interface*/
-  inst->pktBatchCnt = 5;
+  	inst->interface = NULL;
+  	inst->filePath = NULL;
+  	inst->device = NULL;
+  	inst->promiscuous = 0;
+  	inst->filter = NULL;
+  	inst->tag = NULL;
+  	inst->pszBindRuleset = NULL;
+  	//inst->pBindRuleset = NULL;
+  	inst->immediateMode = 0;
+  	inst->bufTimeout = 10;
+  	inst->bufSize = 1024 * 1024 * 15;   /* should be enough for up to 10Gb interface*/
+  	inst->pktBatchCnt = 5;
 
 	/* node created, let's add to global config */
 	if(loadModConf->tail == NULL) {
@@ -173,6 +191,15 @@ CODESTARTnewInpInst
     }
     else if(!strcmp(inppblk.descr[i].name, "promiscuous")) {
       inst->promiscuous = (uint8_t) pvals[i].val.d.n;
+    }
+    else if(!strcmp(inppblk.descr[i].name, "filter")) {
+      inst->filter = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
+    }
+    else if(!strcmp(inppblk.descr[i].name, "tag")) {
+      inst->tag = (uchar*) es_str2cstr(pvals[i].val.d.estr, NULL);
+    }
+    else if(!strcmp(inppblk.descr[i].name, "ruleset")) {
+      inst->pszBindRuleset = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
     }
     else if(!strcmp(inppblk.descr[i].name, "no_buffer")) {
       inst->immediateMode = (uint8_t) pvals[i].val.d.n;
@@ -238,6 +265,16 @@ BEGINendCnfLoad
 CODESTARTendCnfLoad
 ENDendCnfLoad
 
+
+/* function to generate error message if framework does not find requested ruleset */
+static inline void
+std_checkRuleset_genErrMsg(__attribute__((unused)) modConfData_t *modConf, instanceConf_t *inst)
+{
+	LogError(0, NO_ERRCODE, "impcap: ruleset '%s' for interface %s not found - "
+			"using default ruleset instead", inst->pszBindRuleset,
+			inst->interface);
+}
+
 BEGINcheckCnf
   instanceConf_t *inst;
 CODESTARTcheckCnf
@@ -252,6 +289,7 @@ CODESTARTcheckCnf
   }
 
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
+    std_checkRuleset(pModConf, inst);
     if(inst->interface == NULL && inst->filePath == NULL) {
       iRet = RS_RET_INVALID_PARAMS;
       LogError(0, RS_RET_LOAD_ERROR, "impcap: 'interface' or 'file' must be specified");
@@ -263,6 +301,7 @@ CODESTARTcheckCnf
       break;
     }
   }
+
 ENDcheckCnf
 
 BEGINactivateCnfPrePrivDrop
@@ -272,8 +311,10 @@ ENDactivateCnfPrePrivDrop
 BEGINactivateCnf
   instanceConf_t *inst;
   pcap_t *dev;
+  struct bpf_program filter_program;
+  bpf_u_int32 SubNet,NetMask;
   char errBuf[PCAP_ERRBUF_SIZE];
-  uint8_t retCode;
+  uint8_t retCode = 0;
 CODESTARTactivateCnf
   loadModConf = pModConf;
 
@@ -304,12 +345,16 @@ CODESTARTactivateCnf
         ABORT_FINALIZE(RS_RET_LOAD_ERROR);
       }
 
-      DBGPRINTF("setting immediate mode %d\n", inst->immediateMode);
-      if(pcap_set_immediate_mode(dev, inst->immediateMode)) {
-        LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting immediate mode: '%s',"
-          " using buffer instead\n", pcap_geterr(dev));
+      if(inst->immediateMode) {
+        DBGPRINTF("setting immediate mode %d\n", inst->immediateMode);
+        retCode = pcap_set_immediate_mode(dev, inst->immediateMode);
+        if(retCode) {
+          LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting immediate mode: '%s',"
+            " using buffer instead\n", pcap_geterr(dev));
+        }
       }
-      else {
+
+      if(!inst->immediateMode || retCode){
         DBGPRINTF("setting buffer size %lu\n", inst->bufSize);
         if(pcap_set_buffer_size(dev, inst->bufSize)) {
           LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting buffer size: '%s'", pcap_geterr(dev));
@@ -346,6 +391,24 @@ CODESTARTactivateCnf
         case PCAP_ERROR:
             LogError(0, RS_RET_LOAD_ERROR, "pcap: %s", pcap_geterr(dev));
             ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+      }
+
+      if(inst->filter != NULL) {
+        DBGPRINTF("getting submask on %s\n", inst->interface);
+        //obtain the subnet
+        if(pcap_lookupnet(inst->interface, &SubNet, &NetMask, errBuf)){
+          DBGPRINTF("Unable to obtain the netmask: '%s'", errBuf);
+          ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+        }
+        DBGPRINTF("setting filter %s\n", inst->filter);
+        /* Compile the filter */
+        if(pcap_compile(dev, &filter_program, inst->filter, 1, NetMask)) {
+          LogError(0, RS_RET_LOAD_ERROR, "pcap: error while compiling filter: '%s'", pcap_geterr(dev));
+          ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+        } else if(pcap_setfilter(dev, &filter_program)) {
+          LogError(0, RS_RET_LOAD_ERROR, "pcap: error while setting filter: '%s'", pcap_geterr(dev));
+          ABORT_FINALIZE(RS_RET_LOAD_ERROR);
+        }
       }
 
       if(pcap_set_datalink(dev, DLT_EN10MB)) {
@@ -420,12 +483,29 @@ char* stringToHex(char* string, size_t length) {
   return retBuf;
 }
 
+
 void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
   DBGPRINTF("impcap : entered packet_parse\n");
   smsg_t *pMsg;
 
   int * id = (int *)arg;
   msgConstruct(&pMsg);
+
+  //search inst in loadmodconf,and check if there is tag. if so set tag in msg.
+  pthread_t ctid = pthread_self();
+  instanceConf_t *inst;
+  for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
+    if(pthread_equal(ctid, inst->tid)) {
+      if(inst->pBindRuleset != NULL){
+        MsgSetRuleset(pMsg, inst->pBindRuleset);
+      }
+      if(inst->tag != NULL){
+        MsgSetTAG(pMsg,inst->tag,strlen(inst->tag));
+      }
+    }
+  }
+
+
   struct json_object *jown = json_object_new_object();
   json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
   json_object_object_add(jown, "net_bytes_total", json_object_new_int(pkthdr->len));
@@ -450,9 +530,10 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
 void* startCaptureThread(void *instanceConf) {
   int id = 0;
   instanceConf_t *inst = (instanceConf_t *)instanceConf;
-  while(1) {
+  while(glbl.GetGlobalInputTermState() == 0) {
     pcap_dispatch(inst->device, inst->pktBatchCnt, packet_parse, (uchar *)&id);
   }
+  pthread_exit(0);
 }
 
 BEGINrunInput
@@ -465,7 +546,9 @@ CODESTARTrunInput
       LogError(0, RS_RET_NO_RUN, "impcap: error while creating threads\n");
     }
   }
-  pthread_exit(NULL);
+
+  // will block as long as created threads don't return
+  pthread_exit(0);
 ENDrunInput
 
 BEGINwillRun
@@ -482,6 +565,8 @@ ENDafterRun
 
 BEGINmodExit
 CODESTARTmodExit
+objRelease(glbl, CORE_COMPONENT);
+objRelease(ruleset, CORE_COMPONENT);
 ENDmodExit
 
 /* declaration of functions */
@@ -498,4 +583,6 @@ ENDqueryEtryPt
 BEGINmodInit()
 CODESTARTmodInit
   *ipIFVersProvided = CURR_MOD_IF_VERSION;
+  CHKiRet(objUse(glbl, CORE_COMPONENT));
+  CHKiRet(objUse(ruleset, CORE_COMPONENT));
 ENDmodInit

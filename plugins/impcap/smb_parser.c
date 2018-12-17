@@ -86,5 +86,5 @@ data_ret_t* smb_parse(const uchar *packet, int pktSize, struct json_object *jpar
   json_object_object_add(jparent, "SMB_treeID", json_object_new_int64(smb_header->treeID));
   json_object_object_add(jparent, "SMB_userID", json_object_new_int64(userID));
 
-  RETURN_DATA_AFTER(64)
+  RETURN_DATA_AFTER(smb_header->headerLength)
 }
