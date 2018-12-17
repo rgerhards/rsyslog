@@ -32,7 +32,7 @@
  #include <stdarg.h>
  #include <ctype.h>
  #include <json.h>
- #include <sys/types.h>    
+ #include <sys/types.h>
  #include <sys/stat.h>
 
  #include "rsyslog.h"
@@ -85,10 +85,60 @@ createInstance(instanceConf_t **pinst)
 	CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
 
   inst->protocol = NULL;
+  inst->folder = "/var/log/rsyslog/";
 
 	*pinst = inst;
 finalize_it:
 	RETiRet;
+}
+
+int createFolder(char* folder){
+  struct stat file_stat;
+  int ret;
+  char index[512]="";
+  strcat(index,folder);
+  strcat(index,"/");
+  strcat(index,FOLDERNAME);
+  
+  ret = stat(index, &file_stat);
+  if(ret<0)
+  {
+    if(errno == ENOENT)
+    {
+      ret = mkdir(index, 0775);
+
+      if(ret == -1) {
+        switch(errno) {
+          case EACCES:
+                    LogError(0, RS_RET_ERR,
+                    "cannot create folder %s: access denied\n", index);
+                    break;
+          case EEXIST:
+                    LogError(0, RS_RET_ERR,
+                    "cannot create folder %s: already exists\n", index);
+                    break;
+          case ENAMETOOLONG:
+                    LogError(0, RS_RET_ERR,
+                    "cannot create folder %s: name is too long\n", index);
+                    break;
+          case ENOENT:
+                    LogError(0, RS_RET_ERR,
+                    "cannot create folder %s: path doesn't exist\n", index);
+                    break;
+          case ENOSPC:
+                    LogError(0, RS_RET_ERR,
+                    "cannot create folder %s: no space left on disk\n", index);
+                    break;
+          case EROFS:
+                    LogError(0, RS_RET_ERR,
+                    "cannot create folder %s: read-only filesystem\n", index);
+                    break;
+        }
+        return ret;
+      }
+    }
+  }
+  return 0;
 }
 
 /* parser instances */
@@ -96,6 +146,7 @@ finalize_it:
 BEGINnewParserInst
   struct cnfparamvals *pvals = NULL;
   int i;
+  int retVal = 0;
 CODESTARTnewParserInst
   DBGPRINTF("pmcapture: begin newParserInst\n");
 
@@ -126,6 +177,10 @@ CODESTARTnewParserInst
     }
   }
 
+  if(createFolder(inst->folder)){
+    ABORT_FINALIZE(RS_RET_ERR);
+  }
+
 finalize_it:
 CODE_STD_FINALIZERnewParserInst
   cnfparamvalsDestruct(pvals, &parspblk);
@@ -136,29 +191,6 @@ CODESTARTfreeParserInst
 ENDfreeParserInst
 
 /* runtime functions */
-
-int createfolder(char* folder){
-    struct stat file_stat;
-    char index[512]="";
-    strcat(index,folder);
-    strcat(index,"/");
-    strcat(index,FOLDERNAME);
-
-    ret = stat(index, &file_stat);
-    if(ret<0)
-    {
-        if(errno == ENOENT)
-        {
-            ret = mkdir(index, 0775);
-            if(ret < 0)
-            {
-		return 1;
-            }
-        }
-    }
-    return 0;
-}
-
 
 BEGINparse2
 CODESTARTparse2
