@@ -45,6 +45,7 @@ data_ret_t* tcp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 
   uint16_t srcPort = ntohs(tcp_header->srcPort);
   uint16_t dstPort = ntohs(tcp_header->dstPort);
+  DBGPRINTF("TCP dst port : %d\n", dstPort);
   uint8_t headerLength = (tcp_header->dor&0xF0)>>2; //>>4 to offset and <<2 to get offset as bytes
 
   json_object_object_add(jparent, "net_src_port", json_object_new_int(srcPort));
