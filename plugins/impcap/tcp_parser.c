@@ -47,12 +47,13 @@ data_ret_t* tcp_parse(const uchar *packet, int pktSize, struct json_object *jpar
   uint16_t dstPort = ntohs(tcp_header->dstPort);
   DBGPRINTF("TCP dst port : %d\n", dstPort);
   uint8_t headerLength = (tcp_header->dor&0xF0)>>2; //>>4 to offset and <<2 to get offset as bytes
-
+  
   json_object_object_add(jparent, "net_src_port", json_object_new_int(srcPort));
   json_object_object_add(jparent, "net_dst_port", json_object_new_int(dstPort));
-  json_object_object_add(jparent, "TCP_Seq_Number", json_object_new_int64(ntohl(tcp_header->seq)));
-  json_object_object_add(jparent, "TCP_Ack_Number", json_object_new_int64(ntohl(tcp_header->ack)));
-  json_object_object_add(jparent, "TCP_data_offset", json_object_new_int(headerLength));
+  json_object_object_add(jparent, "TCP_seq_number", json_object_new_int64(ntohl(tcp_header->seq)));
+  json_object_object_add(jparent, "TCP_ack_number", json_object_new_int64(ntohl(tcp_header->ack)));
+  //json_object_object_add(jparent, "TCP_data_offset", json_object_new_int(headerLength));
+  json_object_object_add(jparent, "TCP_data_length", json_object_new_int(pktSize-headerLength));
   json_object_object_add(jparent, "net_flags", json_object_new_string(flags));
 
   if(srcPort == SMB_PORT || dstPort == SMB_PORT) {
