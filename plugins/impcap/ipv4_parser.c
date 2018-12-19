@@ -43,6 +43,8 @@ data_ret_t* ipv4_parse(const uchar *packet, int pktSize, struct json_object *jpa
   json_object_object_add(jparent, "net_src_ip", json_object_new_string((char*)addrSrc));
   json_object_object_add(jparent, "IP_ihl", json_object_new_int(ipv4_header->ihl));
   json_object_object_add(jparent, "net_ttl", json_object_new_int(ipv4_header->ttl));
+  json_object_object_add(jparent, "IP_proto", json_object_new_int(ipv4_header->proto));
+
 
   return (*ipProtoHandlers[ipv4_header->proto])((packet + hdrLen), (pktSize - hdrLen), jparent);
 }
