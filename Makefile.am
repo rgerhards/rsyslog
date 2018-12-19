@@ -304,8 +304,8 @@ if ENABLE_IMPCAP
 SUBDIRS += plugins/impcap
 endif
 
-if ENABLE_PMCAPTURE
-SUBDIRS += plugins/pmcapture
+if ENABLE_MMCAPTURE
+SUBDIRS += plugins/mmcapture
 endif
 
 # tests are added as last element, because tests may need different
