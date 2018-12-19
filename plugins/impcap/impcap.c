@@ -38,6 +38,7 @@
  #include <pcap.h>
 
  #include "rsyslog.h"
+ #include "prop.h"
  #include "ruleset.h"
 
  #include "errmsg.h"
@@ -61,7 +62,10 @@ MODULE_CNFNAME("impcap")
 /* static data */
 DEF_IMOD_STATIC_DATA
 DEFobjCurrIf(glbl)
+DEFobjCurrIf(prop)
 DEFobjCurrIf(ruleset)
+
+static prop_t *pInputName = NULL;
 
 /* --- init prototypes --- */
 void init_eth_proto_handlers();
@@ -490,7 +494,8 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
 
   int * id = (int *)arg;
   msgConstruct(&pMsg);
-
+	
+  MsgSetInputName(pMsg, pInputName);
   //search inst in loadmodconf,and check if there is tag. if so set tag in msg.
   pthread_t ctid = pthread_self();
   instanceConf_t *inst;
@@ -553,6 +558,11 @@ ENDrunInput
 
 BEGINwillRun
 CODESTARTwillRun
+	/* we need to create the inputName property (only once during our lifetime) */
+	CHKiRet(prop.Construct(&pInputName));
+	CHKiRet(prop.SetString(pInputName, UCHAR_CONSTANT("impcap"), sizeof("impcap") - 1));
+	CHKiRet(prop.ConstructFinalize(pInputName));
+finalize_it:
 ENDwillRun
 
 BEGINafterRun
@@ -561,11 +571,15 @@ CODESTARTafterRun
   for(inst = loadModConf->root ; inst != NULL; inst = inst->next) {
     pcap_close(inst->device);
   }
+  if(pInputName != NULL){
+    prop.Destruct(&pInputName);
+  }
 ENDafterRun
 
 BEGINmodExit
 CODESTARTmodExit
 objRelease(glbl, CORE_COMPONENT);
+objRelease(prop, CORE_COMPONENT);
 objRelease(ruleset, CORE_COMPONENT);
 ENDmodExit
 
@@ -585,4 +599,5 @@ CODESTARTmodInit
   *ipIFVersProvided = CURR_MOD_IF_VERSION;
   CHKiRet(objUse(glbl, CORE_COMPONENT));
   CHKiRet(objUse(ruleset, CORE_COMPONENT));
+  CHKiRet(objUse(prop, CORE_COMPONENT));
 ENDmodInit
