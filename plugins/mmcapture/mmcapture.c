@@ -23,26 +23,26 @@
  * limitations under the License.
  */
 
- #include "config.h"
- #include <stdlib.h>
- #include <assert.h>
- #include <string.h>
- #include <errno.h>
- #include <unistd.h>
- #include <stdarg.h>
- #include <ctype.h>
- #include <json.h>
- #include <sys/types.h>
- #include <sys/stat.h>
+#include "config.h"
+#include <stdlib.h>
+#include <assert.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <stdarg.h>
+#include <ctype.h>
+#include <json.h>
+#include <sys/types.h>
 
- #include "rsyslog.h"
- #include "errmsg.h"
- #include "unicode-helper.h"
- #include "module-template.h"
- #include "rainerscript.h"
- #include "rsconf.h"
+#include "rsyslog.h"
+#include "errmsg.h"
+#include "unicode-helper.h"
+#include "module-template.h"
+#include "rainerscript.h"
+#include "rsconf.h"
 
- #include "tcp_sessions.h"
+#include "file_utils.h"
+#include "tcp_sessions.h"
 
 MODULE_TYPE_OUTPUT
 MODULE_TYPE_NOKEEP
@@ -53,8 +53,6 @@ DEF_OMOD_STATIC_DATA
 
 #define IMPCAP_METADATA "!impcap"
 #define IMPCAP_DATA     "!data"
-
-#define FOLDERNAME "mmcapture_files"
 
 static char* proto_list[] = {
   "http",
@@ -144,55 +142,6 @@ BEGINfreeWrkrInstance
 DBGPRINTF("entering freeWrkrInstance\n");
 CODESTARTfreeWrkrInstance
 ENDfreeWrkrInstance
-
-int createFolder(char* folder){
-  struct stat file_stat;
-  int ret;
-  char index[512]="";
-  strcat(index,folder);
-  strcat(index,"/");
-  strcat(index,FOLDERNAME);
-
-  ret = stat(index, &file_stat);
-  if(ret<0)
-  {
-    if(errno == ENOENT)
-    {
-      ret = mkdir(index, 0775);
-
-      if(ret == -1) {
-        switch(errno) {
-          case EACCES:
-                    LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: access denied\n", index);
-                    break;
-          case EEXIST:
-                    LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: already exists\n", index);
-                    break;
-          case ENAMETOOLONG:
-                    LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: name is too long\n", index);
-                    break;
-          case ENOENT:
-                    LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: path doesn't exist\n", index);
-                    break;
-          case ENOSPC:
-                    LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: no space left on disk\n", index);
-                    break;
-          case EROFS:
-                    LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: read-only filesystem\n", index);
-                    break;
-        }
-        return ret;
-      }
-    }
-  }
-  return 0;
-}
 
 BEGINnewActInst
 DBGPRINTF("entering newActInst\n");

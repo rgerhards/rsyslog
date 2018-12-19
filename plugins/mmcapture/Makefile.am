@@ -5,3 +5,4 @@ mmcapture_la_CPPFLAGS = -I$(top_srcdir) $(PTHREADS_CFLAGS) $(RSRT_CFLAGS)
 mmcapture_la_LDFLAGS = -module -avoid-version
 
 mmcapture_la_SOURCES += tcp_sessions.c
+mmcapture_la_SOURCES += file_utils.c
