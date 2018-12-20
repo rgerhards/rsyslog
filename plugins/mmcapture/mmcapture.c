@@ -183,22 +183,24 @@ ENDnewActInst
 /* runtime functions */
 
 rsRetVal getImpcapTCPMetadata(smsg_t *pMsg, tcp_packet *data) {
-  rsRetVal iRet;
+  rsRetVal iRet = 0;
+  int localRet;
   struct json_object *pJson = NULL;
   msgPropDescr_t *pDesc = malloc(sizeof(msgPropDescr_t));
 
   DBGPRINTF("entered getImpcapTCPMetadata\n");
 
   msgPropDescrFill(pDesc, (uchar*)IMPCAP_METADATA, strlen(IMPCAP_METADATA));
-  iRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
+  localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
 
-  if(iRet == 0) {
+  if(localRet == 0) {
     struct json_object *obj = NULL;
     char *flags_str;
     int i;
 
     if(fjson_object_object_get_ex(pJson, "IP_proto", &obj)) {
       if(fjson_object_get_int(obj) == TCP_PROTO) {
+        iRet = 1;
         if(data->meta == NULL)
           data->meta = malloc(sizeof(tcp_metadata));
 
@@ -241,8 +243,9 @@ DBGPRINTF("entering doAction\n");
 CODESTARTdoAction
   struct tcp_packet *parsed_data = malloc(sizeof(tcp_packet));
 
-  iRet = getImpcapTCPMetadata(pMsg, parsed_data);
-  DBGPRINTF("return value: %d\n", iRet);
+  if(getImpcapTCPMetadata(pMsg, parsed_data)){
+    checkTcpSessions(parsed_data);
+  }
 
 ENDdoAction
 

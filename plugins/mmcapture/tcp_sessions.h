@@ -6,6 +6,8 @@
 
 #define TCP_PROTO 6
 
+#define IS_TCP_FLAG(x, y) ((strchr(x, y) == NULL) ? 0 : 1)
+
 typedef struct tcp_connection_s{
   uint16_t hPort;
   uint32_t seqNum;
