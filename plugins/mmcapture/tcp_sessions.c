@@ -45,13 +45,13 @@ tcp_session* createNewSession(tcp_packet* packet){
 	return new_session;
 }
 
-void updatesession(struct tcp_session* session, struct tcp_packet* packet){
-	if(session->sCon->hPort==packet->meta->srcPort){
+void updateSession(tcp_session* session, tcp_packet* packet){
+	if(session->sCon->hPort == packet->meta->srcPort){
 		session->cCon->ackNum += packet->pload->length;
 		session->sCon->seqNum += packet->pload->length;
-    if(session->sCon->seqNum==0){
-			session->sCon->seqNum= packet->meta->seqNum;
-      session->cCon->ackNum= packet->meta->seqNum+1;
+		if(session->sCon->seqNum == 0){
+			session->sCon->seqNum = packet->meta->seqNum;
+			session->cCon->ackNum = packet->meta->seqNum+1;
 		}
 	}
 	else{
