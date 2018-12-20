@@ -23,6 +23,11 @@ FILE* openFile(const char* path, const char* file_name){
   int ret;
   char *new_file_comp_path;
 
+  assert(file_name != NULL);
+  assert(path != NULL);
+
+  DBGPRINTF("opening file %s in folder %s", file_name, path);
+
 	dir = opendir(path);
 	if(dir != NULL){
     new_file_comp_path = malloc(strlen(path)+1+strlen(file_name)+1);
@@ -56,43 +61,41 @@ FILE* openFile(const char* path, const char* file_name){
 int createFolder(char* folder){
   struct stat file_stat;
   int ret;
-  char index[512]="";
-  strcat(index,folder);
-  strcat(index,"/");
-  strcat(index,FOLDERNAME);
 
-  ret = stat(index, &file_stat);
+  assert(folder != NULL);
+
+  ret = stat(folder, &file_stat);
   if(ret<0)
   {
     if(errno == ENOENT)
     {
-      ret = mkdir(index, 0775);
+      ret = mkdir(folder, 0775);
 
       if(ret == -1) {
         switch(errno) {
           case EACCES:
                     LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: access denied\n", index);
+                    "cannot create folder %s: access denied\n", folder);
                     break;
           case EEXIST:
                     LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: already exists\n", index);
+                    "cannot create folder %s: already exists\n", folder);
                     break;
           case ENAMETOOLONG:
                     LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: name is too long\n", index);
+                    "cannot create folder %s: name is too long\n", folder);
                     break;
           case ENOENT:
                     LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: path doesn't exist\n", index);
+                    "cannot create folder %s: path doesn't exist\n", folder);
                     break;
           case ENOSPC:
                     LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: no space left on disk\n", index);
+                    "cannot create folder %s: no space left on disk\n", folder);
                     break;
           case EROFS:
                     LogError(0, RS_RET_ERR,
-                    "cannot create folder %s: read-only filesystem\n", index);
+                    "cannot create folder %s: read-only filesystem\n", folder);
                     break;
         }
         return ret;

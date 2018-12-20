@@ -13,8 +13,6 @@
 #ifndef FILE_UTILS_H
 #define FILE_UTILS_H
 
-#define FOLDERNAME "mmcapture_files"
-
 void addDataToFile(char* pData, uint32_t sizeData, uint32_t offSet, FILE* file);
 FILE* openFile(const char* path, const char* file_name);
 int createFolder(char* folder);
