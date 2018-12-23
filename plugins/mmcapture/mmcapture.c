@@ -182,52 +182,25 @@ ENDnewActInst
 
 /* runtime functions */
 
-rsRetVal getImpcapTCPMetadata(smsg_t *pMsg, tcp_packet *data) {
-  rsRetVal iRet = 0;
+int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData) {
+  int iRet = 0;
   int localRet;
   struct json_object *pJson = NULL;
+  struct json_object *obj = NULL;
+
   msgPropDescr_t *pDesc = malloc(sizeof(msgPropDescr_t));
 
-  DBGPRINTF("entered getImpcapTCPMetadata\n");
+  DBGPRINTF("entered getImpcapMetadata\n");
 
   msgPropDescrFill(pDesc, (uchar*)IMPCAP_METADATA, strlen(IMPCAP_METADATA));
   localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
 
   if(localRet == 0) {
-    struct json_object *obj = NULL;
-    char *flags_str;
-    int i;
-
     if(fjson_object_object_get_ex(pJson, "IP_proto", &obj)) {
       if(fjson_object_get_int(obj) == TCP_PROTO) {
-        iRet = 1;
-        if(data->meta == NULL)
-          data->meta = malloc(sizeof(tcp_metadata));
-
-        if(fjson_object_object_get_ex(pJson, "net_src_port", &obj)) {
-          data->meta->srcPort = fjson_object_get_int(obj);
-          DBGPRINTF("source_port: %u\n", data->meta->srcPort);
-        }
-
-        if(fjson_object_object_get_ex(pJson, "net_dst_port", &obj)) {
-          data->meta->dstPort = fjson_object_get_int(obj);
-          DBGPRINTF("dest_port: %u\n", data->meta->dstPort);
-        }
-
-        if(fjson_object_object_get_ex(pJson, "TCP_seq_number", &obj)) {
-          data->meta->seqNum = fjson_object_get_int64(obj);
-          DBGPRINTF("seq_number: %lu\n", data->meta->seqNum);
-        }
-
-        if(fjson_object_object_get_ex(pJson, "TCP_ack_number", &obj)) {
-          data->meta->ackNum = fjson_object_get_int64(obj);
-          DBGPRINTF("ack_number: %lu\n", data->meta->ackNum);
-        }
-
-        if(fjson_object_object_get_ex(pJson, "net_flags", &obj)) {
-          data->meta->flags = fjson_object_get_string(obj);
-          DBGPRINTF("flags: %s\n", data->meta->flags);
-        }
+        DBGPRINTF("entering getTCPMetadata\n");
+        iRet = getTCPMetadata(pJson, pData);
+        DBGPRINTF("returned from getTCPMetadata\n");
       }
     }
   }
@@ -241,12 +214,13 @@ DBGPRINTF("entering doAction\n");
   smsg_t **ppMsg = (smsg_t **)pMsgData;
   smsg_t *pMsg = *ppMsg;
 CODESTARTdoAction
-  struct tcp_packet *parsed_data = malloc(sizeof(tcp_packet));
+  tcp_packet *pData = createPacket();
 
-  if(getImpcapTCPMetadata(pMsg, parsed_data)){
-    checkTcpSessions(parsed_data);
+  if(getImpcapMetadata(pMsg, pData)){
+    checkTcpSessions(pData);
   }
 
+  freePacket(pData);
 ENDdoAction
 
 BEGINparseSelectorAct
