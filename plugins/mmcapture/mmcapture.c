@@ -185,6 +185,64 @@ CODE_STD_FINALIZERnewActInst
 ENDnewActInst
 
 /* runtime functions */
+char *hexToData(char *hex, uint32_t length) {
+  char *retBuf = malloc(length/2*sizeof(char));
+  int i;
+  DBGPRINTF("hexToData\n");
+  DBGPRINTF("length %d\n", length);
+
+  for(i = 0; i < length; ++i) {
+    if(i%2) {
+      retBuf[i/2] <<= 4;  /* bitwise left shift */
+      if(hex[i] >= '0' && hex[i] <= '9') {
+        retBuf[i/2] += hex[i] - '0';
+      }
+      else if(hex[i] >= 'A' && hex[i] <= 'F') {
+        retBuf[i/2] += hex[i] - 'A' + 10;
+      }
+    }
+    else {
+      if(hex[i] >= '0' && hex[i] <= '9') {
+        retBuf[i/2] = hex[i] - '0';
+      }
+      else if(hex[i] >= 'A' && hex[i] <= 'F') {
+        retBuf[i/2] = hex[i] - 'A' + 10;
+      }
+    }
+  }
+
+  return retBuf;
+}
+
+int getImpcapPayload(smsg_t *pMsg, tcp_packet *pData) {
+  struct json_object *pJson = NULL;
+  struct json_object *obj = NULL;
+  int localRet;
+  size_t contentLength;
+  char *content;
+
+  DBGPRINTF("entered getImpcapPayload\n");
+
+  assert(pData->pload != NULL);
+
+  msgPropDescr_t *pDesc = malloc(sizeof(msgPropDescr_t));
+  msgPropDescrFill(pDesc, (uchar*)IMPCAP_DATA, strlen(IMPCAP_DATA));
+  localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
+
+  if(localRet == 0) {
+    if(fjson_object_object_get_ex(pJson, "length", &obj)) {
+      contentLength = fjson_object_get_int64(obj);
+      if(fjson_object_object_get_ex(pJson, "content", &obj)) {
+        content = fjson_object_get_string(obj);
+        pData->pload->data = hexToData(content, contentLength);
+        pData->pload->length = contentLength/2;
+        return pData->pload->length;
+      }
+    }
+  }
+
+  return 0;
+}
 
 int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData) {
   int iRet = 0;
@@ -192,9 +250,9 @@ int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData) {
   struct json_object *pJson = NULL;
   struct json_object *obj = NULL;
 
-  msgPropDescr_t *pDesc = malloc(sizeof(msgPropDescr_t));
-
   DBGPRINTF("entered getImpcapMetadata\n");
+
+  msgPropDescr_t *pDesc = malloc(sizeof(msgPropDescr_t));
 
   msgPropDescrFill(pDesc, (uchar*)IMPCAP_METADATA, strlen(IMPCAP_METADATA));
   localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
@@ -202,9 +260,8 @@ int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData) {
   if(localRet == 0) {
     if(fjson_object_object_get_ex(pJson, "IP_proto", &obj)) {
       if(fjson_object_get_int(obj) == TCP_PROTO) {
-        DBGPRINTF("entering getTCPMetadata\n");
+        getImpcapPayload(pMsg, pData);
         iRet = getTCPMetadata(pJson, pData);
-        DBGPRINTF("returned from getTCPMetadata\n");
       }
     }
   }
