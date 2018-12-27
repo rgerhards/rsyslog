@@ -3,6 +3,8 @@
 static tcp_session_list *sessions = NULL;
 
 tcp_session_list* initTcp(){
+	DBGPRINTF("initializing TCP sessions list\n");
+
 	if(sessions == NULL) {
 		sessions = malloc(sizeof(tcp_session_list));
 		if(sessions != NULL) {
@@ -15,6 +17,8 @@ tcp_session_list* initTcp(){
 }
 
 uint8_t addSession(tcp_session *session) {
+	DBGPRINTF("entering addSession\n");
+
 	if(session == NULL)
 		return 0;
 
@@ -35,6 +39,7 @@ uint8_t addSession(tcp_session *session) {
 }
 
 uint8_t removeSession(tcp_session *session) {
+	DBGPRINTF("entering removeSession\n");
 	if(session == NULL)
 		return 0;
 
@@ -72,7 +77,7 @@ void checkTcpSessions(tcp_packet *packet){
 	if(session != NULL) {
 		updateSession(session, packet);
 	}
-	else {
+	else if(HAS_TCP_FLAG(packet->meta->flags, 'S')){
 		session = createNewSession(packet);
 		addSession(session);
 	}
@@ -82,9 +87,10 @@ void checkTcpSessions(tcp_packet *packet){
 
 void dbgPrintSessionsStats() {
 	tcp_session *session;
-	DBGPRINTF("tcp sessions status:\n");
+	DBGPRINTF("\ntcp sessions status:\n");
+	DBGPRINTF("number of active sessions %u\n", sessions->activeSessions);
+
 	for(session = sessions->head; session != NULL; session = session->nextSession) {
-		DBGPRINTF("number of active sessions %u\n", sessions->activeSessions);
 		DBGPRINTF("client port %u\n", session->cCon->hPort);
 		DBGPRINTF("\tclient seq %u\n", session->cCon->seqNum);
 		DBGPRINTF("\tclient ack %u\n", session->cCon->ackNum);
@@ -112,8 +118,28 @@ tcp_session* createNewSession(tcp_packet* packet){
 	return new_session;
 }
 
+uint8_t freeSession(tcp_session *session) {
+	DBGPRINTF("entering freeSession\n");
+
+	if(session != NULL) {
+		if(session->cCon != NULL)
+			free(session->cCon);
+		if(session->sCon != NULL)
+			free(session->sCon);
+		free(session);
+	}
+}
+
 void updateSession(tcp_session* session, tcp_packet* packet){
 	DBGPRINTF("entering updateSession\n");
+
+	if(HAS_TCP_FLAG(packet->meta->flags, 'R') || HAS_TCP_FLAG(packet->meta->flags, 'F')) {
+		DBGPRINTF("reset or end of TCP session\n");
+		removeSession(session);
+		freeSession(session);
+		return;
+	}
+
 	if(session->sCon->hPort == packet->meta->srcPort){
 		DBGPRINTF("msg from server\n");
 		session->cCon->ackNum += packet->pload->length;
