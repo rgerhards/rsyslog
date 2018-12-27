@@ -1,17 +1,69 @@
 #include "tcp_sessions.h"
 
-static tcp_session* sessions[512];
+static tcp_session_list *sessions = NULL;
+
+tcp_session_list* initTcp(){
+	if(sessions == NULL) {
+		sessions = malloc(sizeof(tcp_session_list));
+		if(sessions != NULL) {
+			sessions->activeSessions = 0;
+			sessions->head = NULL;
+			sessions->tail = NULL;
+		}
+	}
+	return sessions;
+}
+
+uint8_t addSession(tcp_session *session) {
+	if(session == NULL)
+		return 0;
+
+	if(sessions->activeSessions == MAX_TCP_SESSIONS)
+		return 0;
+
+	if(sessions->activeSessions == 0) {
+		sessions->head = session;
+		sessions->tail = session;
+	}
+	else {
+		sessions->tail->nextSession = session;
+		sessions->tail = session;
+	}
+
+	(sessions->activeSessions)++;
+	return 1;
+}
+
+uint8_t removeSession(tcp_session *session) {
+	if(session == NULL)
+		return 0;
+
+	 if(session->prevSession != NULL) {
+		 session->prevSession->nextSession = session->nextSession;
+	 }
+	 else {
+		 sessions->head = session->nextSession;
+	 }
+
+	 if(session->nextSession != NULL) {
+		 session->nextSession->prevSession = session->prevSession;
+	 }
+	 else {
+		 sessions->tail = session->prevSession;
+	 }
+
+	 (sessions->activeSessions)--;
+	 return 1;
+}
 
 void checkTcpSessions(tcp_packet *packet){
 	DBGPRINTF("entering checkTcpSessions\n");
-	tcp_session *session = NULL;
-	int i;
-	for(i = 0 ; sessions[i] != NULL ; i++){
-		if(sessions[i]->cCon->hPort==packet->meta->srcPort ||
-			sessions[i]->sCon->hPort==packet->meta->srcPort) {
-			if(sessions[i]->cCon->hPort==packet->meta->dstPort ||
-				sessions[i]->sCon->hPort==packet->meta->dstPort) {
-				session = sessions[i];
+	tcp_session *session;
+	for(session = sessions->head ; session != NULL ; session = session->nextSession){
+		if(session->cCon->hPort==packet->meta->srcPort ||
+			session->sCon->hPort==packet->meta->srcPort) {
+			if(session->cCon->hPort==packet->meta->dstPort ||
+				session->sCon->hPort==packet->meta->dstPort) {
 				break;
 			}
 		}
@@ -22,13 +74,23 @@ void checkTcpSessions(tcp_packet *packet){
 	}
 	else {
 		session = createNewSession(packet);
-		for(int i=0;i<512;i++){
-			if(sessions[i] == NULL){
-				DBGPRINTF("added session %d\n", i);
-				sessions[i] = session;
-				break;
-			}
-		}
+		addSession(session);
+	}
+
+	dbgPrintSessionsStats();
+}
+
+void dbgPrintSessionsStats() {
+	tcp_session *session;
+	DBGPRINTF("tcp sessions status:\n");
+	for(session = sessions->head; session != NULL; session = session->nextSession) {
+		DBGPRINTF("number of active sessions %u\n", sessions->activeSessions);
+		DBGPRINTF("client port %u\n", session->cCon->hPort);
+		DBGPRINTF("\tclient seq %u\n", session->cCon->seqNum);
+		DBGPRINTF("\tclient ack %u\n", session->cCon->ackNum);
+		DBGPRINTF("server port %u\n", session->sCon->hPort);
+		DBGPRINTF("\tserver seq %u\n", session->sCon->seqNum);
+		DBGPRINTF("\tserver ack %u\n\n", session->sCon->ackNum);
 	}
 }
 
@@ -45,6 +107,8 @@ tcp_session* createNewSession(tcp_packet* packet){
 	sCon->ackNum = (packet->meta->seqNum)+1;
 	new_session->cCon = cCon;
 	new_session->sCon = sCon;
+	new_session->prevSession = NULL;
+	new_session->nextSession = NULL;
 	return new_session;
 }
 

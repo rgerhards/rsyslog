@@ -177,6 +177,10 @@ CODE_STD_STRING_REQUESTnewActInst(1)
   if(createFolder(pData->folder)){
     ABORT_FINALIZE(RS_RET_ERR);
   }
+
+  if(initTcp() == NULL){
+    ABORT_FINALIZE(RS_RET_ERR);
+  }
 CODE_STD_FINALIZERnewActInst
 ENDnewActInst
 
