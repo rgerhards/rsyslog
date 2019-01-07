@@ -1,12 +1,17 @@
 /* impcap.c
  *
- * This is a first implementation of an input module using libpcap, a
+ * This is an input module using libpcap, a
  * portable C/C++ library for network traffic capture.
- * This module aims to read packets received from a network interface
- * using libpcap to extract information, such as IP addresses, ports,
- * protocols, etc... and make it available to rsyslog and its modules.
+ * This module reads packets received from a network interface
+ * using libpcap, to extract information such as IP addresses, ports,
+ * protocols, etc... and make it available to rsyslog and other modules.
  *
  * File begun on 2018-11-13
+ *
+ * Created by:
+ *  - François Bernard (francois.bernard@isen.yncrea.fr)
+ *  - Théo Bertin (theo.bertin@isen.yncrea.fr)
+ *  - Tianyu Geng (tianyu.geng@isen.yncrea.fr)
  *
  * This file is part of rsyslog.
  *
@@ -131,7 +136,8 @@ static struct cnfparamblk modpblk =
 
  #include "im-helper.h"
 
-/* create input instance, set default parameters, and
+/*
+ * create input instance, set default parameters, and
  * add it to the list of instances.
  */
 static rsRetVal
@@ -148,7 +154,6 @@ createInstance(instanceConf_t **pinst)
   	inst->filter = NULL;
   	inst->tag = NULL;
   	inst->pszBindRuleset = NULL;
-  	//inst->pBindRuleset = NULL;
   	inst->immediateMode = 0;
   	inst->bufTimeout = 10;
   	inst->bufSize = 1024 * 1024 * 15;   /* should be enough for up to 10Gb interface*/
@@ -289,7 +294,7 @@ CODESTARTcheckCnf
   }
 
   if(loadModConf->metadataOnly) {   /* if metadata_only is "on", snap_length is overwritten */
-    loadModConf->snap_length = 100; /* arbitrary value, should be enough for most protocols */
+    loadModConf->snap_length = 100; /* arbitrary value, but should be enough for most protocols */
   }
 
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
@@ -438,12 +443,18 @@ ENDfreeCnf
 
 /* runtime functions */
 
+/*
+ *  Mock function to do no parsing when protocol is not a valid number
+*/
 data_ret_t* dont_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("protocol not handled\n");
   RETURN_DATA_AFTER(0)
 }
 
-/* TODO: add user parameters to select handled protocols */
+/*
+ *  Initializes the function pointers' list for handled protocols
+ *  contained within Ethernet II
+*/
 void init_eth_proto_handlers() {
   DBGPRINTF("begining init eth handlers\n");
   // set all to blank function
@@ -459,7 +470,10 @@ void init_eth_proto_handlers() {
 
 }
 
-/* TODO: add user parameters to select handled protocols */
+/*
+ *  Initializes the function pointers' list for handled protocols
+ *  contained within IP
+*/
 void init_ip_proto_handlers() {
   DBGPRINTF("begining init ip handlers\n");
   // set all to blank function
@@ -472,6 +486,15 @@ void init_ip_proto_handlers() {
   ipProtoHandlers[IPPROTO_UDP] = udp_parse;
 }
 
+/*
+ *  Converts a list of bytes to their hexadecimal representation in ASCII
+ *
+ *  Gets the list of bytes and the length as parameters
+ *
+ *  Returns a pointer on the new list, being a string of ASCII characters
+ *  representing hexadecimal values, in the form "A5B34C65..."
+ *  its size is twice length parameter + 1
+*/
 char* stringToHex(char* string, size_t length) {
   const char *hexChar = "0123456789ABCDEF";
   char *retBuf;
@@ -487,14 +510,18 @@ char* stringToHex(char* string, size_t length) {
   return retBuf;
 }
 
-
+/*
+ *  This method parses every packet received by libpcap, and is called by it
+ *  It creates the message for Rsyslog, calls the parsers and add all necessary information
+ *  in the message
+*/
 void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *packet) {
   DBGPRINTF("impcap : entered packet_parse\n");
   smsg_t *pMsg;
 
   int * id = (int *)arg;
   msgConstruct(&pMsg);
-	
+
   MsgSetInputName(pMsg, pInputName);
   //search inst in loadmodconf,and check if there is tag. if so set tag in msg.
   pthread_t ctid = pthread_self();
@@ -532,6 +559,10 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
   submitMsg2(pMsg);
 }
 
+/*
+ *  This is the main function for each thread
+ *  taking care of a specified network interface
+*/
 void* startCaptureThread(void *instanceConf) {
   int id = 0;
   instanceConf_t *inst = (instanceConf_t *)instanceConf;
@@ -546,6 +577,7 @@ BEGINrunInput
   int ret = 0;
 CODESTARTrunInput
   for(inst = loadModConf->root ; inst != NULL ; inst = inst->next) {
+    /* creates a thread and starts capturing on the interface */
     ret = pthread_create(&inst->tid, NULL, startCaptureThread, inst);
     if(ret) {
       LogError(0, RS_RET_NO_RUN, "impcap: error while creating threads\n");

@@ -1,3 +1,31 @@
+/* ftp_parser.c
+ *
+ * This file contains functions to parse FTP headers.
+ *
+ * File begun on 2018-11-13
+ *
+ * Created by:
+ *  - François Bernard (francois.bernard@isen.yncrea.fr)
+ *  - Théo Bertin (theo.bertin@isen.yncrea.fr)
+ *  - Tianyu Geng (tianyu.geng@isen.yncrea.fr)
+ *
+ * This file is part of rsyslog.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *       -or-
+ *       see COPYING.ASL20 in the source distribution
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "parser.h"
 
 static const int ftp_cds[] = {
@@ -48,7 +76,10 @@ static const char *ftp_cmds[] = {
         NULL
 };
 
-// Search frst_part_ftp in ftp_cmds[]
+/*
+ * This function searches for a valid command in the header (from the list defined in ftp_cmds[])
+ * and returns either the command or a NULL pointer
+*/
 uchar* check_Command_ftp(uchar *first_part_packet){
   DBGPRINTF("in check_Command_ftp\n");
   DBGPRINTF("first_part_packet : '%s' \n",first_part_packet);
@@ -61,7 +92,10 @@ uchar* check_Command_ftp(uchar *first_part_packet){
   return NULL;
 }
 
-// Search frst_part_ftp in ftp_cds[]
+/*
+ * This function searches for a valid code in the header (from the list defined in ftp_cds[])
+ * and returns either the command or a NULL pointer
+*/
 int check_Code_ftp(uchar *first_part_packet){
   DBGPRINTF("in check_Code_ftp\n");
   DBGPRINTF("first_part_packet : %s \n",first_part_packet);
@@ -74,6 +108,19 @@ int check_Code_ftp(uchar *first_part_packet){
   return 0;
 }
 
+/*
+ *  This function parses the bytes in the received packet to extract FTP metadata.
+ *
+ *  its parameters are:
+ *    - a pointer on the list of bytes representing the packet
+ *        the first byte must be the beginning of the FTP header
+ *    - the size of the list passed as first parameter
+ *    - a pointer on a json_object, containing all the metadata recovered so far
+ *      this is also where FTP metadata will be added
+ *
+ *  This function returns a structure containing the data unprocessed by this parser
+ *  or the ones after (as a list of bytes), and the length of this data.
+*/
 data_ret_t* ftp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
   DBGPRINTF("ftp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
@@ -83,7 +130,7 @@ data_ret_t* ftp_parse(const uchar *packet, int pktSize, struct json_object *jpar
     }
   uchar *packet2 = malloc(pktSize * sizeof(char));
 
-  memcpy(packet2, packet, pktSize); // strtok change original packet
+  memcpy(packet2, packet, pktSize); // strtok changes original packet
   const uchar *frst_part_ftp;
   frst_part_ftp = strtok(packet2," "); // Get first part of packet ftp
   const uchar *data_part;
@@ -104,5 +151,4 @@ data_ret_t* ftp_parse(const uchar *packet, int pktSize, struct json_object *jpar
   }else{
     RETURN_DATA_AFTER(0)
   }
-
 }

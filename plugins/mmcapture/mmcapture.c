@@ -1,8 +1,8 @@
 /* mmcapture.c
  *
  * This is a parser intended to work in coordination with impcap.
- * This module gets data from the impcap module, and follow streams
- * to capture relevant data, such as files, from packets.
+ * This module gets data from the impcap module, and follow TCP streams
+ * to capture relevant data (such as files) from packets.
  *
  * File begun on 2018-11-13
  *

@@ -1,3 +1,31 @@
+/* tcp_parser.c
+ *
+ * This file contains functions to parse TCP headers.
+ *
+ * File begun on 2018-11-13
+ *
+ * Created by:
+ *  - François Bernard (francois.bernard@isen.yncrea.fr)
+ *  - Théo Bertin (theo.bertin@isen.yncrea.fr)
+ *  - Tianyu Geng (tianyu.geng@isen.yncrea.fr)
+ *
+ * This file is part of rsyslog.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *       -or-
+ *       see COPYING.ASL20 in the source distribution
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "parser.h"
 
 #define SMB_PORT 445
@@ -22,6 +50,19 @@ typedef struct tcp_header_s tcp_header_t;
 
 static char flagCodes[10] = "FSRPAUECN";
 
+/*
+ *  This function parses the bytes in the received packet to extract TCP metadata.
+ *
+ *  its parameters are:
+ *    - a pointer on the list of bytes representing the packet
+ *        the first byte must be the beginning of the TCP header
+ *    - the size of the list passed as first parameter
+ *    - a pointer on a json_object, containing all the metadata recovered so far
+ *      this is also where TCP metadata will be added
+ *
+ *  This function returns a structure containing the data unprocessed by this parser
+ *  or the ones after (as a list of bytes), and the length of this data.
+*/
 data_ret_t* tcp_parse(const uchar *packet, int pktSize, struct json_object *jparent){
   DBGPRINTF("tcp_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);
@@ -46,13 +87,12 @@ data_ret_t* tcp_parse(const uchar *packet, int pktSize, struct json_object *jpar
   uint16_t srcPort = ntohs(tcp_header->srcPort);
   uint16_t dstPort = ntohs(tcp_header->dstPort);
   DBGPRINTF("TCP dst port : %d\n", dstPort);
-  uint8_t headerLength = (tcp_header->dor&0xF0)>>2; //>>4 to offset and <<2 to get offset as bytes
+  uint8_t headerLength = (tcp_header->dor&0xF0)>>2; //>>4 to offset but <<2 to get offset as bytes
 
   json_object_object_add(jparent, "net_src_port", json_object_new_int(srcPort));
   json_object_object_add(jparent, "net_dst_port", json_object_new_int(dstPort));
   json_object_object_add(jparent, "TCP_seq_number", json_object_new_int64(ntohl(tcp_header->seq)));
   json_object_object_add(jparent, "TCP_ack_number", json_object_new_int64(ntohl(tcp_header->ack)));
-  //json_object_object_add(jparent, "TCP_data_offset", json_object_new_int(headerLength));
   json_object_object_add(jparent, "TCP_data_length", json_object_new_int(pktSize-headerLength));
   json_object_object_add(jparent, "net_flags", json_object_new_string(flags));
 

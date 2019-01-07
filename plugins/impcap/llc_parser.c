@@ -1,5 +1,46 @@
+/* llc_parser.c
+ *
+ * This file contains functions to parse llc headers.
+ *
+ * File begun on 2018-11-13
+ *
+ * Created by:
+ *  - François Bernard (francois.bernard@isen.yncrea.fr)
+ *  - Théo Bertin (theo.bertin@isen.yncrea.fr)
+ *  - Tianyu Geng (tianyu.geng@isen.yncrea.fr)
+ *
+ * This file is part of rsyslog.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *       -or-
+ *       see COPYING.ASL20 in the source distribution
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "parser.h"
 
+/*
+ *  This function parses the bytes in the received packet to extract LLC metadata.
+ *
+ *  its parameters are:
+ *    - a pointer on the list of bytes representing the packet
+ *        the first byte must be the beginning of the LLC header
+ *    - the size of the list passed as first parameter
+ *    - a pointer on a json_object, containing all the metadata recovered so far
+ *      this is also where LLC metadata will be added
+ *
+ *  This function returns a structure containing the data unprocessed by this parser
+ *  or the ones after (as a list of bytes), and the length of this data.
+*/
 data_ret_t* llc_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
   DBGPRINTF("entered llc_parse\n");
   DBGPRINTF("packet size %d\n", pktSize);

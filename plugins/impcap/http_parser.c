@@ -1,16 +1,53 @@
+/* http_parser.c
+ *
+ * This file contains functions to parse HTTP headers.
+ *
+ * File begun on 2018-11-13
+ *
+ * Created by:
+ *  - François Bernard (francois.bernard@isen.yncrea.fr)
+ *  - Théo Bertin (theo.bertin@isen.yncrea.fr)
+ *  - Tianyu Geng (tianyu.geng@isen.yncrea.fr)
+ *
+ * This file is part of rsyslog.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *       -or-
+ *       see COPYING.ASL20 in the source distribution
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "parser.h"
 
 char* catch_Status_Code(char* header);
 char* catch_property(char* header, char* property);
 
+/*
+ *  This function parses the bytes in the received packet to extract HTTP metadata.
+ *
+ *  its parameters are:
+ *    - a pointer on the list of bytes representing the packet
+ *        the beginning of the header will be checked by the function
+ *    - the size of the list passed as first parameter
+ *    - a pointer on a json_object, containing all the metadata recovered so far
+ *      this is also where HTTP metadata will be added
+ *
+ *  This function returns a structure containing the data unprocessed by this parser
+ *  or the ones after (as a list of bytes), and the length of this data.
+*/
 data_ret_t* http_parse(const uchar *packet,int pktSize, struct json_object *jparent){
   int oldpktSize = pktSize;
   char *http = malloc(strlen(packet) * sizeof(char));
   memcpy(http,packet,pktSize);
-
-//  if(!strstr(packet,"HTTP")){
-//     RETURN_DATA_AFTER(0)
-//  }
 
   while(pktSize > 0) {
     if(packet[0] == 'H') {
@@ -30,30 +67,26 @@ data_ret_t* http_parse(const uchar *packet,int pktSize, struct json_object *jpar
    RETURN_DATA_AFTER(0)
   }
 
-//json_object_object_add(jparent, "Http", json_object_new_string("Http"));
-  
-  
   char*header = strtok(http,"\r\n\r\n");
-  //if(strcmp(catch_Status_Code(header),"200") == 0)
   json_object_object_add(jparent, "Http_Status_Code", json_object_new_string(catch_Status_Code(header)));
-  
-  
+
+
   char* property = "Content-Type:";
   char* pro = "Http_Content_Type";
   char* prop = catch_property(header, property);
   if(prop != NULL){
     json_object_object_add(jparent, pro, json_object_new_string(prop));
   }
-  int headerlength = strlen(header)+4;	
+  int headerlength = strlen(header)+4;
   free(http);
   RETURN_DATA_AFTER(headerlength)
-  
-  //char*data = strtok(NULL,"");
-  //json_object_object_add(jparent, "Http_Data", json_object_new_string(data)); 
-  
 }
 
-char* catch_Status_Code(char* header){ 
+/*
+ *  This function catches the HTTP status code
+ *  and returns it or NULL if none was found
+*/
+char* catch_Status_Code(char* header){
  char *catch = malloc(strlen(header) * sizeof(char));
  memcpy(catch,header,strlen(header));
  char* a = strtok(catch," ");
@@ -62,6 +95,10 @@ char* catch_Status_Code(char* header){
  return b;
 }
 
+/*
+ *  This function catches a HTTP header property
+ *  and returns it or NULL if none was found
+*/
 char* catch_property(char* header, char* property){
  char *catch = malloc(strlen(header) * sizeof(char));
  memcpy(catch,header,strlen(header));
