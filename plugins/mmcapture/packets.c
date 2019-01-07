@@ -1,5 +1,43 @@
+/* packets.c
+ *
+ * This file contains functions to parse metadata from Rsyslog packets
+ * to internal 'packet' structures, defined in packets.h
+ *
+ * File begun on 2018-12-5
+ *
+ * Created by:
+ *  - François Bernard (francois.bernard@isen.yncrea.fr)
+ *  - Théo Bertin (theo.bertin@isen.yncrea.fr)
+ *  - Tianyu Geng (tianyu.geng@isen.yncrea.fr)
+ *
+ * This file is part of rsyslog.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *       -or-
+ *       see COPYING.ASL20 in the source distribution
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "packets.h"
 
+/*
+ *  This function recovers SMB fields from an impcap metadata json
+ *
+ *  It gets in parameters:
+ *  - the json of impcap metadata
+ *  - the tcp_packet to fill informations in
+ *
+ *  It returns the number of fields recovered
+*/
 int getSMBMetadata(struct json_object *pJson, tcp_packet *pData){
   struct json_object *obj = NULL;
   smb_metadata *session;
@@ -44,6 +82,15 @@ int getSMBMetadata(struct json_object *pJson, tcp_packet *pData){
   }
 }
 
+/*
+ *  This function recovers TCP fields from an impcap metadata json
+ *
+ *  It gets in parameters:
+ *  - the json of impcap metadata
+ *  - the tcp_packet to fill informations in
+ *
+ *  It returns the number of fields recovered
+*/
 int getTCPMetadata(struct json_object *pJson, tcp_packet *pData) {
 	int iRet = 0;
 	struct json_object *obj = NULL;
@@ -90,6 +137,12 @@ int getTCPMetadata(struct json_object *pJson, tcp_packet *pData) {
 	return iRet;
 }
 
+/*
+ *  This function creates and initialize a tcp_packet structure,
+ *  first-level structures are allocated as well
+ *
+ *  It returns the newly allocated structure
+*/
 tcp_packet* createPacket() {
   DBGPRINTF("creating packet\n");
   tcp_packet *pPacket = NULL;
@@ -111,6 +164,11 @@ tcp_packet* createPacket() {
   return pPacket;
 }
 
+/*
+ *  This function completely frees a tcp_packet structure
+ *
+ *  It gets in parameter the pointer on the structure to free
+*/
 void freePacket(tcp_packet *pPacket) {
   DBGPRINTF("freeing packet\n");
 	if(pPacket != NULL) {

@@ -1,5 +1,47 @@
+/* file_utils.c
+ *
+ *  This file contains functions related to files and folders (creation, modification...)
+ *
+ * File begun on 2018-12-5
+ *
+ * Created by:
+ *  - François Bernard (francois.bernard@isen.yncrea.fr)
+ *  - Théo Bertin (theo.bertin@isen.yncrea.fr)
+ *  - Tianyu Geng (tianyu.geng@isen.yncrea.fr)
+ *
+ * This file is part of rsyslog.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *       -or-
+ *       see COPYING.ASL20 in the source distribution
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "file_utils.h"
 
+/*
+ *  This method write an amount of bytes at a specific offset in an open file
+ *
+ *  It gets in parameters:
+ *  - a pointer on the data
+ *  - the number of bytes to write
+ *  - the offset where to begin writing (beginning at zero)
+ *  - the file where to write the data
+ *
+ *  The file must not be NULL and must already be opened
+ *
+ *  If the offset provided is past the end of the file, zeros will be written
+ *  to fill the missing space
+*/
 void addDataToFile(char* pData, uint32_t sizeData, uint32_t offSet, FILE* file){
   char zero = 0x00;
   uint32_t i;
@@ -17,6 +59,20 @@ void addDataToFile(char* pData, uint32_t sizeData, uint32_t offSet, FILE* file){
   fwrite(pData, sizeof(char), sizeData, file);
 }
 
+/*
+ *  This function opens a file given a name and a path:
+ *  - if the file exists it is simply opened
+ *  - if the file doesn't exists, it is created in 'path'
+ *
+ *  The parameters are:
+ *  - a char array representing the (complete) path to the
+ *      folder containing the file
+ *  - a char array representing the name of the file
+ *
+ *  The returned value is either the link on the opened file,
+ *  or NULL if an error occured
+ *  There is no error code returned, but simply a debug message
+*/
 FILE* openFile(const char* path, const char* file_name){
 	DIR *dir;
 	FILE *file = NULL;
@@ -58,6 +114,18 @@ FILE* openFile(const char* path, const char* file_name){
   return file;
 }
 
+/*
+ *  This function creates a folder given its complete path+name
+ *
+ *  It gets a char array representing the complete path
+ *  AND the name of the folder
+ *
+ *  It returns zero if the folder was created successfully,
+ *  a negative value otherwise
+ *
+ *  It cannot create parent folders if they do not already exist,
+ *  separate calls are necessary to create them
+*/
 int createFolder(char* folder){
   struct stat file_stat;
   int ret;

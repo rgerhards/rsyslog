@@ -4,7 +4,12 @@
  * This module gets data from the impcap module, and follow TCP streams
  * to capture relevant data (such as files) from packets.
  *
- * File begun on 2018-11-13
+ * File begun on 2018-12-5
+ *
+ * Created by:
+ *  - François Bernard (francois.bernard@isen.yncrea.fr)
+ *  - Théo Bertin (theo.bertin@isen.yncrea.fr)
+ *  - Tianyu Geng (tianyu.geng@isen.yncrea.fr)
  *
  * This file is part of rsyslog.
  *
@@ -125,7 +130,7 @@ BEGINcreateInstance
 DBGPRINTF("entering createInstance\n");
 CODESTARTcreateInstance
   pData->protocol = NULL;
-  pData->folder = "/var/log/rsyslog/";
+  pData->folder = "/var/log/rsyslog/";  /* default folder for captured files */
 ENDcreateInstance
 
 BEGINcreateWrkrInstance
@@ -185,6 +190,18 @@ CODE_STD_FINALIZERnewActInst
 ENDnewActInst
 
 /* runtime functions */
+
+/*
+ *  This function converts a char array of ASCII-represented
+ *  hexadecimal values into their original data form
+ *
+ *  It gets in parameters:
+ *  - a char array representing the data as ASCII code hexadecimal
+ *  - the length of the array
+ *
+ *  It returns another char array, containing the raw values
+ *  The length of this array is always half the length given in parameter
+*/
 char *hexToData(char *hex, uint32_t length) {
   char *retBuf = malloc(length/2*sizeof(char));
   int i;
@@ -214,6 +231,20 @@ char *hexToData(char *hex, uint32_t length) {
   return retBuf;
 }
 
+/*
+*  This function extracts impcap payload data from a
+*  rsyslog message
+ *
+ *  It gets in parameters:
+ *  - a rsyslog msg
+ *  - an empty (but allocated) tcp_packet
+ *      (the structure must be created using create_packet)
+ *
+ *  If the rsyslog message contains an impcap data field,
+ *  it will be extracted and added to pData
+ *  The functions also returns the payload length (raw data length)
+ *  or zero if no impcap payload data was found
+*/
 int getImpcapPayload(smsg_t *pMsg, tcp_packet *pData) {
   struct json_object *pJson = NULL;
   struct json_object *obj = NULL;
@@ -244,6 +275,20 @@ int getImpcapPayload(smsg_t *pMsg, tcp_packet *pData) {
   return 0;
 }
 
+/*
+ *  This function extracts impcap metadata from a
+ *  rsyslog message
+ *
+ *  It gets in parameters:
+ *  - a rsyslog msg
+ *  - an empty (but allocated) tcp_packet
+ *      (the structure must be created using create_packet)
+ *
+ *  If the rsyslog message contains an impcap metadata field,
+ *  it will be extracted and added to pData
+ *  The functions also returns the number of fields recovered,
+ *  or zero if no impcap metadata was found
+*/
 int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData) {
   int iRet = 0;
   int localRet;

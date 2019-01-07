@@ -1,7 +1,38 @@
+/* tcp_sessions.c
+ *
+ * This file contains functions to handle TCP sessions
+ *
+ * File begun on 2018-12-5
+ *
+ * Created by:
+ *  - François Bernard (francois.bernard@isen.yncrea.fr)
+ *  - Théo Bertin (theo.bertin@isen.yncrea.fr)
+ *  - Tianyu Geng (tianyu.geng@isen.yncrea.fr)
+ *
+ * This file is part of rsyslog.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *       -or-
+ *       see COPYING.ASL20 in the source distribution
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "tcp_sessions.h"
 
 static tcp_session_list *sessions = NULL;
 
+/*
+ *	Initializes the linked list to contain TCP sessions
+*/
 tcp_session_list* initTcp(){
 	DBGPRINTF("initializing TCP sessions list\n");
 
@@ -16,6 +47,14 @@ tcp_session_list* initTcp(){
 	return sessions;
 }
 
+/*
+ *	Adds a session to the global linked list
+ *
+ *	Gets the pointer on the created tcp_session
+ *
+ *	Doesn't add the session if MAX_TCP_SESSIONS
+ *	is reached
+*/
 uint8_t addSession(tcp_session *session) {
 	DBGPRINTF("entering addSession\n");
 
@@ -38,6 +77,14 @@ uint8_t addSession(tcp_session *session) {
 	return 1;
 }
 
+/*
+ *	Removes a session from the global linked list
+ *
+ *	It gets in parameter the session to remove
+ *
+ *	the session must be in the linked list,
+ *	or the behaviour will be undetermined
+*/
 uint8_t removeSession(tcp_session *session) {
 	DBGPRINTF("entering removeSession\n");
 	if(session == NULL)
@@ -61,9 +108,18 @@ uint8_t removeSession(tcp_session *session) {
 	 return 1;
 }
 
+/*
+ *	Compares a tcp_packet to the existing sessions,
+ *	if the session exists (defined by source and destination ports)
+ *	it is updated, otherwise it is created
+ *
+ *	Get as parameter a pointer on a tcp_packet
+*/
 void checkTcpSessions(tcp_packet *packet){
 	DBGPRINTF("entering checkTcpSessions\n");
-	tcp_session *session;
+	tcp_session *session = NULL;
+
+	/* search for an existing session with same ports involved */
 	for(session = sessions->head ; session != NULL ; session = session->nextSession){
 		if(session->cCon->hPort==packet->meta->srcPort ||
 			session->sCon->hPort==packet->meta->srcPort) {
@@ -77,7 +133,7 @@ void checkTcpSessions(tcp_packet *packet){
 	if(session != NULL) {
 		updateSession(session, packet);
 	}
-	else if(HAS_TCP_FLAG(packet->meta->flags, 'S')){
+	else if(HAS_TCP_FLAG(packet->meta->flags, 'S')){	/* if the TCP packet has a SYN flag */
 		session = createNewSession(packet);
 		addSession(session);
 	}
@@ -85,6 +141,11 @@ void checkTcpSessions(tcp_packet *packet){
 	dbgPrintSessionsStats();
 }
 
+/*
+ *	Prints information about all the active sessions in the linked list
+ *
+ *	**TODO** This is a debug function and should be removed for production
+*/
 void dbgPrintSessionsStats() {
 	tcp_session *session;
 	DBGPRINTF("\ntcp sessions status:\n");
@@ -100,6 +161,14 @@ void dbgPrintSessionsStats() {
 	}
 }
 
+/*
+ *	Creates a new session from a tcp_packet
+ *
+ *	Get a pointer on a tcp_packet structure
+ *
+ *	Returns a pointer on a tcp_session structure,
+ *	this session is not added to the global linked list
+*/
 tcp_session* createNewSession(tcp_packet* packet){
 	DBGPRINTF("entering createNewSession\n");
 	tcp_connection* cCon = malloc(sizeof(tcp_connection));
@@ -118,7 +187,12 @@ tcp_session* createNewSession(tcp_packet* packet){
 	return new_session;
 }
 
-uint8_t freeSession(tcp_session *session) {
+/*
+ *	Frees completely a tcp_session
+ *
+ *	Gets in parameter the pointer on the tcp_session to free
+*/
+void freeSession(tcp_session *session) {
 	DBGPRINTF("entering freeSession\n");
 
 	if(session != NULL) {
@@ -130,6 +204,13 @@ uint8_t freeSession(tcp_session *session) {
 	}
 }
 
+/*
+ *	Updates a tcp session with the information contained in a packet
+ *
+ *	Get in parameters:
+ *		-	a pointer on the tcp_session to update
+ *		-	a pointer on the tcp_packet
+*/
 void updateSession(tcp_session* session, tcp_packet* packet){
 	DBGPRINTF("entering updateSession\n");
 
