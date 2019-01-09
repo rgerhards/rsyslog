@@ -64,7 +64,7 @@ uint8_t addSession(tcp_session *session);
 uint8_t removeSession(tcp_session *session);
 void checkTcpSessions(tcp_packet *packet);
 tcp_session* createNewSession(tcp_packet* packet);
-uint8_t freeSession(tcp_session *session);
+void freeSession(tcp_session *session);
 void updateSession(tcp_session* session, tcp_packet* packet);
 
 void dbgPrintSessionsStats();
