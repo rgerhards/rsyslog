@@ -280,6 +280,8 @@ doPhysOpen(strm_t *pThis)
 
 	pThis->fd = open((char*)pThis->pszCurrFName, iFlags | O_LARGEFILE, pThis->tOpenMode);
 	const int errno_save = errno; /* dbgprintf can mangle it! */
+fprintf(stderr, "file '%s' opened as #%d with mode %d\n", pThis->pszCurrFName,
+	  pThis->fd, (int) pThis->tOpenMode);
 	DBGPRINTF("file '%s' opened as #%d with mode %d\n", pThis->pszCurrFName,
 		  pThis->fd, (int) pThis->tOpenMode);
 	if(pThis->fd == -1) {
@@ -424,6 +426,7 @@ finalize_it:
 			pThis->pszCurrFName = NULL; /* just to prevent mis-adressing down the road... */
 		}
 		if(pThis->fd != -1) {
+fprintf(stderr, "%s:%d: close fd\n", __FILE__, __LINE__);
 			close(pThis->fd);
 			pThis->fd = -1;
 		}
@@ -493,6 +496,7 @@ static rsRetVal strmCloseFile(strm_t *pThis)
 	 */
 	if(pThis->fd != -1) {
 		currOffs = lseek64(pThis->fd, 0, SEEK_CUR);
+fprintf(stderr, "%s:%d: close fd\n", __FILE__, __LINE__);
 		close(pThis->fd);
 		pThis->fd = -1;
 		pThis->inode = 0;
@@ -504,6 +508,7 @@ static rsRetVal strmCloseFile(strm_t *pThis)
 
 	if(pThis->fdDir != -1) {
 		/* close associated directory handle, if it is open */
+fprintf(stderr, "%s:%d: close fd\n", __FILE__, __LINE__);
 		close(pThis->fdDir);
 		pThis->fdDir = -1;
 	}
@@ -1382,6 +1387,7 @@ tryTTYRecover(strm_t *pThis, int err)
 	 */
 	if(err == ERR_TTYHUP || err == ENXIO || err == EIO) {
 #endif /* __FreeBSD__ */
+fprintf(stderr, "%s:%d: close fd\n", __FILE__, __LINE__);
 		close(pThis->fd);
 		pThis->fd = -1;
 		CHKiRet(doPhysOpen(pThis));
@@ -1441,6 +1447,7 @@ doWriteCall(strm_t *pThis, uchar *pBuf, size_t *pLenBuf)
 				/*NO ERROR, just continue */;
 			} else if( !pThis->bIsTTY && ( err == ENOTCONN  || err == EIO )) {
 				/* Failure for network file system, thus file needs to be closed and reopened. */
+fprintf(stderr, "%s:%d: close fd\n", __FILE__, __LINE__);
 				close(pThis->fd);
 				pThis->fd = -1;
 				CHKiRet(doPhysOpen(pThis));

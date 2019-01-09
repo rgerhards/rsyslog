@@ -497,7 +497,9 @@ startup() {
 	else
 		n_option="-n"
 	fi
-	eval LD_PRELOAD=$RSYSLOG_PRELOAD $valgrind ../tools/rsyslogd -C $n_option -i$RSYSLOG_PIDBASE$instance.pid -M../runtime/.libs:../.libs -f$CONF_FILE $RS_REDIR &
+	#eval LD_PRELOAD=$RSYSLOG_PRELOAD $valgrind ../tools/rsyslogd -C $n_option -i$RSYSLOG_PIDBASE$instance.pid -M../runtime/.libs:../.libs -f$CONF_FILE $RS_REDIR &
+	eval strace -f ../tools/rsyslogd -C $n_option -i$RSYSLOG_PIDBASE$instance.pid -M../runtime/.libs:../.libs -f$CONF_FILE $RS_REDIR &
+	#eval strace -e trace=openat,close ../tools/rsyslogd -C $n_option -i$RSYSLOG_PIDBASE$instance.pid -M../runtime/.libs:../.libs -f$CONF_FILE $RS_REDIR &
 	wait_startup $instance
 }
 

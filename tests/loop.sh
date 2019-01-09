@@ -7,7 +7,7 @@
 # in" -- we don't think it's worth to add proper options for that.
 # Copyright (2015) by Rainer Gerhards, released under ASL 2.0
 RUN=1
-MAXRUN=50
+MAXRUN=5000
 SUCCESS=0
 FAIL=0
 while [ $RUN -le $MAXRUN ]; do
