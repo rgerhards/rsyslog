@@ -238,7 +238,7 @@ AC_TRY_COMPILE([
 	AC_MSG_RESULT(yes)
 	,
 	# note: we use 1024 here, which should be far more than needed by any system. If that's too low, we simply
-	# life with the need to change it. Most of the code doesn't need it anyways, but there are a few places 
+	# life with the need to change it. Most of the code doesn't need it anyways, but there are a few places
 	# where it actually is needed and it makes no sense to change them.
 	AC_DEFINE(MAXHOSTNAMELEN, 1024, [Define with a value if your <sys/param.h> does not define MAXHOSTNAMELEN])
 	AC_MSG_RESULT(no; defined as 64)
@@ -362,13 +362,13 @@ AC_ARG_ENABLE(fmhash-xxhash,
 AM_CONDITIONAL(ENABLE_FMHASH, [test "x$enable_fmhash" = "xyes" || test "x$enable_fmhash_xxhash" = "xyes"])
 
 AM_CONDITIONAL(ENABLE_FMHASH_XXHASH, test x$enable_fmhash_xxhash = xyes)
-if test "$enable_fmhash_xxhash" = "yes"; then  
+if test "$enable_fmhash_xxhash" = "yes"; then
 	AC_CHECK_LIB([xxhash], [XXH64], [
 		AC_CHECK_HEADER([xxhash.h], [
 			AC_DEFINE(USE_HASH_XXHASH, 1,
 				  [Using XXHASH for hash64.])
 			HASH_XXHASH_LIBS="-lxxhash"
-			AC_SUBST(HASH_XXHASH_LIBS)], 
+			AC_SUBST(HASH_XXHASH_LIBS)],
 			[AC_MSG_ERROR([Unable to add XXHASH support for hash64.])])
 	])
 fi
@@ -389,7 +389,7 @@ case "${os_type}" in
 solaris) GSSLIB=gss ;;
 *)       GSSLIB=gssapi_krb5 ;;
 esac
-  
+
 if test $enable_gssapi_krb5 = yes; then
 	AC_CHECK_LIB($GSSLIB, gss_acquire_cred, [
 		AC_CHECK_HEADER(gssapi/gssapi.h, [
@@ -429,7 +429,7 @@ then
 		[
 		  PTHREADS_LIBS="-lpthread"
 		  if test "$unamestr" = "AIX"; then
-			  PTHREADS_CFLAGS="-lpthreads" 
+			  PTHREADS_CFLAGS="-lpthreads"
 		  else
 			  case "${os_type}" in
 			  solaris) PTHREADS_CFLAGS="-pthreads -std=c99" ;;
@@ -675,7 +675,7 @@ AC_ARG_ENABLE(debug_symbols,
 )
 
 
-# total debugless: highest performance, but no way at all to enable debug 
+# total debugless: highest performance, but no way at all to enable debug
 # logging
 AC_ARG_ENABLE(debugless,
         [AS_HELP_STRING([--enable-debugless],[Enable runtime instrumentation mode @<:@default=no@:>@])],
@@ -936,7 +936,7 @@ AM_CONDITIONAL(ENABLE_OMHTTP, test x$enable_omhttp = xyes)
 
 
 # capability to enable elasticsearch testbench tests. This requries that an ES test
-# environment is present on the local (127.0.0.1) machine. 
+# environment is present on the local (127.0.0.1) machine.
 # we support a "minimal" mode to take care of travis where we cannot run all tests
 # due to runtime constraints
 AC_ARG_ENABLE(elasticsearch_tests,
@@ -2249,6 +2249,39 @@ AC_ARG_ENABLE(generate-man-pages,
         [have_to_generate_man_pages=no]
 )
 
+# settings for the pcap input module
+AC_ARG_ENABLE(impcap,
+        [AS_HELP_STRING([--enable-impcap],[libpcap input module enabled @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_impcap="yes" ;;
+          no) enable_impcap="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-impcap) ;;
+         esac],
+        [enable_impcap=no]
+)
+
+if test "x$enable_impcap" = "xyes"; then
+				AC_CHECK_HEADERS([pcap.h],
+				[AC_MSG_NOTICE([pcap found])],
+				AC_MSG_ERROR([libpcap library and headers not found])
+				)
+fi
+AM_CONDITIONAL(ENABLE_IMPCAP, test x$enable_impcap = xyes)
+
+# settings for the mmcapture parser module
+AC_ARG_ENABLE(mmcapture,
+        [AS_HELP_STRING([--enable-mmcapture],[mmcapture parser module enabled @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_mmcapture="yes" ;;
+          no) enable_mmcapture="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-mmcapture) ;;
+         esac],
+        [enable_mmcapture=no]
+)
+
+AM_CONDITIONAL(ENABLE_MMCAPTURE, test x$enable_mmcapture = xyes)
+
+
 
 # This provides a work-around to use "make distcheck" without
 # running tests (mode used pre 2018-07-02)
@@ -2369,6 +2402,8 @@ AC_CONFIG_FILES([Makefile \
 		contrib/omtcl/Makefile \
 		contrib/omfile-hardened/Makefile \
 		contrib/mmkubernetes/Makefile \
+		plugins/impcap/Makefile \
+		plugins/mmcapture/Makefile \
 		tests/Makefile])
 AC_OUTPUT
 
@@ -2405,6 +2440,7 @@ echo "    imzmq3 input module enabled:              $enable_imzmq3"
 echo "    imczmq input module enabled:              $enable_imczmq"
 echo "    imjournal input module enabled:           $enable_imjournal"
 echo "    imkafka module will be compiled:          $enable_imkafka"
+echo "    impcap input module enabled:              $enable_impcap"
 echo
 echo "---{ output plugins }---"
 echo "    Mail support enabled:                     $enable_mail"
@@ -2435,6 +2471,7 @@ echo "    pmnormalize module will be compiled:      $enable_pmnormalize"
 echo "    pmaixforwardedfrom module w.be compiled:  $enable_pmaixforwardedfrom"
 echo "    pmsnare module will be compiled:          $enable_pmsnare"
 echo "    pmpanngfw module will be compiled:        $enable_pmpanngfw"
+echo "    mmcapture parser module enabled:          $enable_mmcapture"
 echo
 echo "---{ message modification modules }---"
 echo "    mmnormalize module will be compiled:      $enable_mmnormalize"

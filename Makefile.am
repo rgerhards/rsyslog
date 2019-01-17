@@ -1,5 +1,5 @@
 sbin_PROGRAMS =
-pkglib_LTLIBRARIES = 
+pkglib_LTLIBRARIES =
 
 pkgconfigdir = $(libdir)/pkgconfig
 
@@ -212,7 +212,7 @@ SUBDIRS += contrib/fmhash
 endif
 
 if ENABLE_OMKAFKA
-SUBDIRS += plugins/omkafka 
+SUBDIRS += plugins/omkafka
 endif
 
 if ENABLE_IMKAFKA
@@ -300,6 +300,14 @@ if ENABLE_MMKUBERNETES
 SUBDIRS += contrib/mmkubernetes
 endif
 
+if ENABLE_IMPCAP
+SUBDIRS += plugins/impcap
+endif
+
+if ENABLE_MMCAPTURE
+SUBDIRS += plugins/mmcapture
+endif
+
 # tests are added as last element, because tests may need different
 # modules that need to be generated first
 SUBDIRS += tests
@@ -322,7 +330,7 @@ DISTCHECK_CONFIGURE_FLAGS+= \
 	--enable-testbench \
 	--enable-valgrind
 # currently not supported in make distcheck:
-# --enable-pgsql-tests 
+# --enable-pgsql-tests
 # --enable-extended-tests --> should probably never be enabled due to runtime
 
 if ENABLE_DEFAULT_TESTS
@@ -355,7 +363,7 @@ DISTCHECK_CONFIGURE_FLAGS+= \
 endif  # if ENABLE_DEFAULT_TESTS
 
 if ENABLE_OMPROG
-DISTCHECK_CONFIGURE_FLAGS+= --enable-omprog 
+DISTCHECK_CONFIGURE_FLAGS+= --enable-omprog
 endif
 
 # Note: [io]mzmq3 cannot be built any longer, according to Brian Knox they require an
