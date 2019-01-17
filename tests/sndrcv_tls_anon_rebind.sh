@@ -34,9 +34,9 @@ export RSYSLOG_DEBUGLOG="log2"
 generate_conf 2
 add_conf '
 global(
-	defaultNetstreamDriverCAFile="'$srcdir/testsuites/x.509/ca.pem'"
-	defaultNetstreamDriverCertFile="'$srcdir/testsuites/x.509/client-cert.pem'"
-	defaultNetstreamDriverKeyFile="'$srcdir/testsuites/x.509/client-key.pem'"
+	defaultNetstreamDriverCAFile="'$srcdir/tls-certs/ca.pem'"
+	defaultNetstreamDriverCertFile="'$srcdir/tls-certs/cert.pem'"
+	defaultNetstreamDriverKeyFile="'$srcdir/tls-certs/key.pem'"
 	defaultNetstreamDriver="gtls"
 )
 
@@ -52,7 +52,6 @@ startup 2
 # and that instance will record the data.
 injectmsg2 1 25000
 # shut down sender when everything is sent, receiver continues to run concurrently
-# may be needed by TLS (once we do it): sleep 60
 shutdown_when_empty 2
 wait_shutdown 2
 # now it is time to stop the receiver as well

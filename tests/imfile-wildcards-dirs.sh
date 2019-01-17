@@ -3,7 +3,7 @@
 . $srcdir/diag.sh check-inotify
 . ${srcdir:=.}/diag.sh init
 export IMFILEINPUTFILES="10"
-export IMFILECHECKTIMEOUT="20"
+export IMFILECHECKTIMEOUT="60"
 
 generate_conf
 add_conf '
@@ -48,7 +48,7 @@ if $msg contains "msgnum:" then
 # Start rsyslog now before adding more files
 startup
 
-for i in `seq 1 $IMFILEINPUTFILES`;
+for i in $(seq 1 $IMFILEINPUTFILES);
 do
 	mkdir $RSYSLOG_DYNNAME.input.dir$i
 	touch $RSYSLOG_DYNNAME.input.dir$i/file.logfile

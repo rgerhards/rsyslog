@@ -2,7 +2,9 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([rsyslog],[8.40.0.master],[rsyslog@lists.adiscon.com])
+AC_INIT([rsyslog],[8.1901.0.master],[rsyslog@lists.adiscon.com])
+AC_DEFINE(VERSION_YEAR, 19, [year part of real rsyslog version])
+AC_DEFINE(VERSION_MONTH, 1, [month part of real rsyslog version])
 
 # AIXPORT START: Detect the underlying OS
 unamestr=$(uname)
@@ -918,6 +920,23 @@ fi
 AM_CONDITIONAL(ENABLE_ELASTICSEARCH, test x$enable_elasticsearch = xyes)
 
 
+# clickhouse support
+AC_ARG_ENABLE(clickhouse,
+        [AS_HELP_STRING([--enable-clickhouse],[Enable clickhouse output module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_clickhouse="yes" ;;
+          no) enable_clickhouse="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-clickhouse) ;;
+         esac],
+        [enable_clickhouse=no]
+)
+if test "x$enable_clickhouse" = "xyes"; then
+	PKG_CHECK_MODULES([CURL], [libcurl])
+	LT_LIB_M
+fi
+AM_CONDITIONAL(ENABLE_CLICKHOUSE, test x$enable_clickhouse = xyes)
+
+
 # omhttp support
 AC_ARG_ENABLE(omhttp,
         [AS_HELP_STRING([--enable-omhttp],[Enable http output module @<:@default=no@:>@])],
@@ -951,6 +970,20 @@ AC_ARG_ENABLE(elasticsearch_tests,
 )
 AM_CONDITIONAL(ENABLE_ELASTICSEARCH_TESTS, test x$enable_elasticsearch_tests = xyes)
 AM_CONDITIONAL(ENABLE_ELASTICSEARCH_TESTS_MINIMAL, test x$enable_elasticsearch_tests = xminimal -o x$enable_elasticsearch_tests = xyes)
+
+
+# capability to enable clickhouse testbench tests. This requries that a test
+# environment is present on the local (127.0.0.1) machine. 
+AC_ARG_ENABLE(clickhouse_tests,
+        [AS_HELP_STRING([--enable-clickhouse-tests],[enable Elasticsearch specific tests in testbench @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_clickhouse_tests="yes" ;;
+          no) enable_clickhouse_tests="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-clickhouse-tests) ;;
+         esac],
+        [enable_clickhouse_tests=no]
+)
+AM_CONDITIONAL(ENABLE_CLICKHOUSE_TESTS, test x$enable_clickhouse_tests = xyes)
 
 
 # openssl support
@@ -1545,6 +1578,18 @@ else
 fi
 AM_CONDITIONAL([HAVE_VALGRIND], [test "x$with_valgrind_testbench" != "xno" && test "x$VALGRIND" != "xno"])
 
+# ability to disable helgrind tests - we at least need this for
+# clang coverage reports, where we cannot suppress the races
+AC_ARG_ENABLE(helgrind,
+        [AS_HELP_STRING([--enable-helgrind],[valgrind helgrind enabled @<:@default=yes@:>@])],
+        [case "${enableval}" in
+         yes) enable_helgrind="yes" ;;
+          no) enable_helgrind="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-helgrind) ;;
+         esac],
+        [enable_helgrind=yes]
+)
+AM_CONDITIONAL(ENABLE_HELGRIND, test x$enable_helgrind = xyes)
 
 # settings for the file input module
 AC_ARG_ENABLE(imfile,
@@ -2006,22 +2051,6 @@ fi
 AM_CONDITIONAL(ENABLE_OMMONGODB, test x$enable_ommongodb = xyes)
 # end of mongodb code
 
-# BEGIN ZMQ3 INPUT SUPPORT
-AC_ARG_ENABLE(imzmq3,
-        [AS_HELP_STRING([--enable-imzmq3],[Compiles imzmq3 output module @<:@default=no@:>@])],
-        [case "${enableval}" in
-         yes) enable_imzmq3="yes" ;;
-          no) enable_imzmq3="no" ;;
-           *) AC_MSG_ERROR(bad value ${enableval} for --enable-imzmq3) ;;
-         esac],
-        [enable_imzmq3=no]
-)
-if test "x$enable_imzmq3" = "xyes"; then
-	PKG_CHECK_MODULES(CZMQ, libczmq >= 1.1.0)
-fi
-AM_CONDITIONAL(ENABLE_IMZMQ3, test x$enable_imzmq3 = xyes)
-
-# END ZMQ3 INPUT SUPPORT
 
 # BEGIN CZMQ INPUT SUPPORT
 AC_ARG_ENABLE(imczmq,
@@ -2040,22 +2069,6 @@ AM_CONDITIONAL(ENABLE_IMCZMQ, test x$enable_imczmq = xyes)
 
 # END CZMQ INPUT
 
-# BEGIN ZMQ3 OUTPUT SUPPORT
-AC_ARG_ENABLE(omzmq3,
-        [AS_HELP_STRING([--enable-omzmq3],[Compiles omzmq3 output module @<:@default=no@:>@])],
-        [case "${enableval}" in
-         yes) enable_omzmq3="yes" ;;
-          no) enable_omzmq3="no" ;;
-           *) AC_MSG_ERROR(bad value ${enableval} for --enable-omzmq3) ;;
-         esac],
-        [enable_omzmq3=no]
-)
-if test "x$enable_omzmq3" = "xyes"; then
-	PKG_CHECK_MODULES(CZMQ, libczmq >= 1.1.0)
-fi
-AM_CONDITIONAL(ENABLE_OMZMQ3, test x$enable_omzmq3 = xyes)
-
-# END ZMQ3 SUPPORT
 
 # BEGIN CZMQ OUTPUT SUPPORT
 AC_ARG_ENABLE(omczmq,
@@ -2063,7 +2076,7 @@ AC_ARG_ENABLE(omczmq,
         [case "${enableval}" in
          yes) enable_omczmq="yes" ;;
           no) enable_omczmq="no" ;;
-           *) AC_MSG_ERROR(bad value ${enableval} for --enable-omzmq3) ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-omczmq) ;;
          esac],
         [enable_omczmq=no]
 )
@@ -2377,6 +2390,7 @@ AC_CONFIG_FILES([Makefile \
 		plugins/mmfields/Makefile \
 		plugins/mmpstrucdata/Makefile \
 		plugins/omelasticsearch/Makefile \
+		plugins/omclickhouse/Makefile \
 		plugins/mmsnmptrapd/Makefile \
 		plugins/pmlastmsg/Makefile \
 		plugins/mmdblookup/Makefile \
@@ -2390,9 +2404,7 @@ AC_CONFIG_FILES([Makefile \
 		contrib/imkmsg/Makefile \
 		contrib/mmgrok/Makefile \
 		contrib/mmcount/Makefile \
-		contrib/omzmq3/Makefile \
 		contrib/omczmq/Makefile \
-		contrib/imzmq3/Makefile \
 		contrib/imczmq/Makefile \
 		contrib/mmsequence/Makefile \
 		contrib/mmrfc5424addhmac/Makefile \
@@ -2436,7 +2448,6 @@ echo "    imdiag enabled:                           $enable_imdiag"
 echo "    file input module enabled:                $enable_imfile"
 echo "    Solaris input module enabled:             $enable_imsolaris"
 echo "    periodic statistics module enabled:       $enable_impstats"
-echo "    imzmq3 input module enabled:              $enable_imzmq3"
 echo "    imczmq input module enabled:              $enable_imczmq"
 echo "    imjournal input module enabled:           $enable_imjournal"
 echo "    imkafka module will be compiled:          $enable_imkafka"
@@ -2450,11 +2461,11 @@ echo "    omstdout module will be compiled:         $enable_omstdout"
 echo "    omjournal module will be compiled:        $enable_omjournal"
 echo "    omhdfs module will be compiled:           $enable_omhdfs"
 echo "    omelasticsearch module will be compiled:  $enable_elasticsearch"
+echo "    omclickhouse module will be compiled:     $enable_clickhouse"
 echo "    omhttp module will be compiled:           $enable_omhttp"
 echo "    omruleset module will be compiled:        $enable_omruleset"
 echo "    omudpspoof module will be compiled:       $enable_omudpspoof"
 echo "    omuxsock module will be compiled:         $enable_omuxsock"
-echo "    omzmq3 module will be compiled:           $enable_omzmq3"
 echo "    omczmq module will be compiled:           $enable_omczmq"
 echo "    omrabbitmq module will be compiled:       $enable_omrabbitmq"
 echo "    omhttpfs module will be compiled:         $enable_omhttpfs"
@@ -2510,11 +2521,14 @@ echo
 echo "---{ debugging support }---"
 echo "    distcheck workaround enabled:             $enable_distcheck_workaround"
 echo "    Testbench enabled:                        $enable_testbench"
+echo "    valgrind tests enabled:                   $with_valgrind_testbench"
+echo "    valgrind helgrind tests enabled:          $enable_helgrind"
 echo "    Default tests enabled:                    $enable_default_tests"
 echo "    Testbench libfaketime tests enabled:      $enable_libfaketime"
 echo "    Extended Testbench enabled:               $enable_extended_tests"
 echo "    MySQL Tests enabled:                      $enable_mysql_tests"
 echo "    Elasticsearch Tests:                      $enable_elasticsearch_tests"
+echo "    ClickHouse Tests:                         $enable_clickhouse_tests"
 echo "    PostgreSQL Tests enabled:                 $enable_pgsql_tests"
 echo "    Kafka Tests enabled:                      $enable_kafka_tests"
 echo "    systemd journal tests enabled:            $enable_journal_tests"

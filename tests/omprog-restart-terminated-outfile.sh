@@ -37,11 +37,11 @@ cp -f $srcdir/testsuites/omprog-restart-terminated-bin.sh $RSYSLOG_DYNNAME.ompro
 # On Solaris 10, the output of ps is truncated for long process names; use /usr/ucb/ps instead:
 if [[ $(uname) = "SunOS" && $(uname -r) = "5.10" ]]; then
     function get_child_pid {
-        echo $(/usr/ucb/ps -awwx | grep "$RSYSLOG_DYNNAME.[o]mprog-restart-terminated-bin.sh" | awk '{ print $1 }')
+        /usr/ucb/ps -awwx | grep "$RSYSLOG_DYNNAME.[o]mprog-restart-terminated-bin.sh" | awk '{ print $1 }'
     }
 else
     function get_child_pid {
-        echo $(ps -ef | grep "$RSYSLOG_DYNNAME.[o]mprog-restart-terminated-bin.sh" | awk '{ print $2 }')
+        ps -ef | grep "$RSYSLOG_DYNNAME.[o]mprog-restart-terminated-bin.sh" | awk '{ print $2 }'
     }
 fi
 
@@ -49,7 +49,7 @@ startup
 injectmsg 0 1
 wait_queueempty
 
-. $srcdir/diag.sh getpid
+pid=$(getpid)
 start_fd_count=$(lsof -p $pid | wc -l)
 
 injectmsg 1 1
@@ -71,7 +71,7 @@ injectmsg 6 1
 injectmsg 7 1
 wait_queueempty
 
-kill -s USR1 $(get_child_pid)
+kill -s KILL $(get_child_pid)
 ./msleep 100
 
 injectmsg 8 1
@@ -98,9 +98,6 @@ Starting
 Received msgnum:00000005:
 Received msgnum:00000006:
 Received msgnum:00000007:
-Received SIGUSR1, will terminate after the next message
-Received msgnum:00000008:
-Terminating without confirming the last message
 Starting
 Received msgnum:00000008:
 Received msgnum:00000009:
@@ -123,9 +120,6 @@ export EXPECTED="[stderr] Starting
 [stderr] Received msgnum:00000005:
 [stderr] Received msgnum:00000006:
 [stderr] Received msgnum:00000007:
-[stderr] Received SIGUSR1, will terminate after the next message
-[stderr] Received msgnum:00000008:
-[stderr] Terminating without confirming the last message
 [stderr] Starting
 [stderr] Received msgnum:00000008:
 [stderr] Received msgnum:00000009:

@@ -113,7 +113,6 @@ typedef struct instanceConf_s {
 	struct instanceConf_s *next;
 } instanceData;
 
-typedef instanceConf_t instanceData;
 
 struct modConfData_s {
 	rsconf_t *pConf;		/* our overall config object */
@@ -420,7 +419,7 @@ checkConn(wrkrInstanceData_t *const pWrkrData)
 
 		es_emptyStr(urlBuf);
 		r = es_addBuf(&urlBuf, serverUrl, strlen(serverUrl));
-		if(r == 0)
+		if(r == 0 && checkPath != NULL)
 			r = es_addBuf(&urlBuf, checkPath, sizeof(checkPath)-1);
 		if(r == 0)
 			healthUrl = es_str2cstr(urlBuf, NULL);
@@ -507,7 +506,11 @@ setPostURL(wrkrInstanceData_t *const pWrkrData, uchar **const tpls)
 	}
 
 	getRestPath(pData, tpls, &restPath);
-	r = es_addBuf(&url, (char*)restPath, ustrlen(restPath));
+
+	r = 0;
+	if (restPath != NULL)
+		r = es_addBuf(&url, (char*)restPath, ustrlen(restPath));
+
 	if(r != 0) {
 		LogError(0, RS_RET_ERR, "omhttp: failure in creating restURL, "
 				"error code: %d", r);
@@ -590,10 +593,10 @@ static rsRetVal
 getSection(const char* bulkRequest, const char **bulkRequestNextSectionStart )
 {
 		DEFiRet;
-		char* index =0;
-		if( (index = strchr(bulkRequest,'\n')) != 0)/*intermediate section*/
+		char* idx =0;
+		if( (idx = strchr(bulkRequest,'\n')) != 0)/*intermediate section*/
 		{
-			*bulkRequestNextSectionStart = ++index;
+			*bulkRequestNextSectionStart = ++idx;
 		}
 		else
 		{

@@ -111,6 +111,9 @@ static uchar template_StdJSONFmt[] = "\"{\\\"message\\\":\\\"%msg:::json%\\\",\\
 "%HOSTNAME:::json%\\\",\\\"facility\\\":\\\"%syslogfacility-text%\\\",\\\"priority\\\":\\\""
 "%syslogpriority-text%\\\",\\\"timereported\\\":\\\"%timereported:::date-rfc3339%\\\",\\\"timegenerated\\\":\\\""
 "%timegenerated:::date-rfc3339%\\\"}\"";
+static uchar template_StdClickHouseFmt[] = "\"INSERT INTO rsyslog.SystemEvents (severity, facility, "
+"timestamp, hostname, tag, message) VALUES (%syslogseverity%, %syslogfacility%, "
+"'%timereported:::date-unixtimestamp%', '%hostname%', '%syslogtag%', '%msg%')\"";
 /* end templates */
 
 /* tables for interfacing with the v6 config system (as far as we need to) */
@@ -505,7 +508,7 @@ void cnfDoBSDTag(char *ln)
 	DBGPRINTF("cnf:global:BSD tag: %s\n", ln);
 	LogError(0, RS_RET_BSD_BLOCKS_UNSUPPORTED,
 			"BSD-style blocks are no longer supported in rsyslog, "
-			"see http://www.rsyslog.com/g/BSD for details and a "
+			"see https://www.rsyslog.com/g/BSD for details and a "
 			"solution (Block '%s')", ln);
 	free(ln);
 }
@@ -515,7 +518,7 @@ void cnfDoBSDHost(char *ln)
 	DBGPRINTF("cnf:global:BSD host: %s\n", ln);
 	LogError(0, RS_RET_BSD_BLOCKS_UNSUPPORTED,
 			"BSD-style blocks are no longer supported in rsyslog, "
-			"see http://www.rsyslog.com/g/BSD for details and a "
+			"see https://www.rsyslog.com/g/BSD for details and a "
 			"solution (Block '%s')", ln);
 	free(ln);
 }
@@ -1247,6 +1250,8 @@ initLegacyConf(void)
 	tplAddLine(ourConf, " StdPgSQLFmt", &pTmp);
 	pTmp = template_StdJSONFmt;
 	tplAddLine(ourConf, " StdJSONFmt", &pTmp);
+	pTmp = template_StdClickHouseFmt;
+	tplAddLine(ourConf, " StdClickHouseFmt", &pTmp);
 	pTmp = template_spoofadr;
 	tplLastStaticInit(ourConf, tplAddLine(ourConf, "RSYSLOG_omudpspoofDfltSourceTpl", &pTmp));
 

@@ -52,6 +52,84 @@ check_PROGRAMS += journal_print
 endif
 TESTS = $(TESTRUNS)
 
+if ENABLE_ELASTICSEARCH_TESTS_MINIMAL
+TESTS +=  \
+	es-basic.sh \
+	es-basic-es6.0.sh \
+	es-basic-bulk.sh
+es-basic-es6.0.log: es-basic.log
+es-basic-bulk.log: es-basic-es6.0.log
+es-basic-server.log: es-basic-bulk.log
+if HAVE_VALGRIND
+TESTS += \
+	es-basic-vg.sh
+es-basic-vg.log: es-basic-bulk.log
+# for next if block:
+es-basic-server.log: es-basic-vg.log
+if ENABLE_HELGRIND
+TESTS += \
+	es-basic-vgthread.sh
+es-basic-vgthread.log: es-basic-vg.log
+# for next if block:
+es-basic-server.log: es-basic-vgthread.log
+endif # ENABLE_HELGRIND
+endif # HAVE_VALGRIND
+endif # ENABLE_ELASTICSEARCH_TESTS_MINIMAL
+
+if ENABLE_ELASTICSEARCH_TESTS
+TESTS +=  \
+	es-basic-server.sh \
+	es-execOnlyWhenPreviousSuspended.sh \
+	es-maxbytes-bulk.sh \
+	es-basic-errfile-empty.sh \
+	es-basic-errfile-popul.sh \
+	es-bulk-errfile-empty.sh \
+	es-bulk-errfile-popul.sh \
+	es-writeoperation.sh
+
+es-basic-server.log: es-basic-bulk.log
+es-execOnlyWhenPreviousSuspended.log: es-basic-server.log
+es-maxbytes-bulk.log: es-execOnlyWhenPreviousSuspended.log
+es-basic-errfile-empty.log: es-maxbytes-bulk.log
+es-basic-errfile-popul.log: es-basic-errfile-empty.log
+es-bulk-errfile-empty.log: es-basic-errfile-popul.log
+es-bulk-errfile-popul.log: es-bulk-errfile-empty.log
+es-writeoperation.log: es-bulk-errfile-popul.log
+
+if ENABLE_IMPSTATS
+TESTS +=  \
+	es-basic-ha.sh \
+	es-bulk-retry.sh
+
+es-basic-ha.log: es-writeoperation.log
+es-bulk-retry.log: es-basic-ha.log
+endif
+if ENABLE_IMFILE
+TESTS +=  \
+	es-bulk-errfile-popul-def-format.sh \
+	es-bulk-errfile-popul-erronly.sh \
+	es-bulk-errfile-popul-erronly-interleaved.sh \
+	es-bulk-errfile-popul-def-interleaved.sh
+
+es-bulk-errfile-popul-def-format.log: es-bulk-retry.log
+es-bulk-errfile-popul-erronly.log: es-bulk-errfile-popul-def-format.log
+es-bulk-errfile-popul-erronly-interleaved.log: es-bulk-errfile-popul-erronly.log
+es-bulk-errfile-popul-def-interleaved.log: es-bulk-errfile-popul-erronly-interleaved.log
+endif
+if HAVE_VALGRIND
+TESTS +=  \
+	es-basic-bulk-vg.sh \
+	es-basic-ha-vg.sh
+
+es-basic-bulk-vg.log: es-writeoperation.log
+es-basic-bulk-vg.log: es-bulk-retry.log
+es-basic-bulk-vg.log: es-bulk-errfile-popul-def-interleaved.log
+es-basic-ha-vg.log: es-basic-bulk-vg.log
+endif
+endif # if ENABLE_ELASTICSEARCH_TESTS
+
+
+
 if ENABLE_DEFAULT_TESTS
 TESTS +=  \
 	operatingstate-basic.sh \
@@ -60,6 +138,8 @@ TESTS +=  \
 	empty-hostname.sh \
 	hostname-getaddrinfo-fail.sh \
 	msleep_usage_output.sh \
+	mangle_qi_usage_output.sh \
+	minitcpsrv_usage_output.sh \
 	test_id_usage_output.sh \
 	prop-programname.sh \
 	prop-programname-with-slashes.sh \
@@ -140,10 +220,6 @@ TESTS +=  \
 	imtcp-NUL-rawmsg.sh \
 	imtcp-multiport.sh \
 	imtcp_incomplete_frame_at_end.sh \
-	queue-encryption-disk.sh \
-	queue-encryption-disk_keyfile.sh \
-	queue-encryption-disk_keyprog.sh \
-	queue-encryption-da.sh \
 	daqueue-persist.sh \
 	daqueue-invld-qi.sh \
 	daqueue-dirty-shutdown.sh \
@@ -294,7 +370,7 @@ TESTS +=  \
 	lookup_table_rscript_reload.sh \
 	lookup_table_rscript_reload_without_stub.sh \
 	include-obj-text-from-file.sh \
-	multiple_lookup_tables.sh
+	multiple_lookup_tables.sh \
 	parsertest-parse1.sh \
 	parsertest-parse1-udp.sh \
 	parsertest-parse2.sh \
@@ -311,13 +387,19 @@ TESTS +=  \
 	parsertest-parse-nodate-udp.sh \
 	parsertest-snare_ccoff_udp.sh \
 	parsertest-snare_ccoff_udp2.sh
+if ENABLE_LIBGCRYPT
+TESTS +=  \
+	queue-encryption-disk.sh \
+	queue-encryption-disk_keyfile.sh \
+	queue-encryption-disk_keyprog.sh \
+	queue-encryption-da.sh
+endif # ENABLE_LIBGCRYPT
 if HAVE_VALGRIND
 TESTS +=  \
 	tcpflood_wrong_option_output.sh \
 	include-obj-outside-control-flow-vg.sh \
 	include-obj-in-if-vg.sh \
 	include-obj-text-vg.sh \
-	queue-encryption-disk_keyfile-vg.sh \
 	rscript_parse_json-vg.sh \
 	rscript_backticks-vg.sh \
 	rscript_backticks_empty_envvar-vg.sh \
@@ -355,6 +437,10 @@ TESTS +=  \
 	threadingmq.sh \
 	threadingmqaq.sh \
 	rscript_trim-vg.sh
+if ENABLE_LIBGCRYPT
+TESTS +=  \
+	queue-encryption-disk_keyfile-vg.sh
+endif # ENABLE_LIBGCRYPT
 endif # HAVE_VALGRIND
 endif # ENABLE_DEFAULT_TESTS
 
@@ -397,55 +483,51 @@ TESTS +=  \
 	mmanon_random_cons_128_ipembedded.sh
 endif # if ENABLE_MMANON
 
-if ENABLE_ELASTICSEARCH_TESTS
+if ENABLE_CLICKHOUSE_TESTS
 TESTS +=  \
-	es-basic-server.sh \
-	es-maxbytes-bulk.sh \
-	es-basic-errfile-empty.sh \
-	es-basic-errfile-popul.sh \
-	es-bulk-errfile-empty.sh \
-	es-bulk-errfile-popul.sh \
-	es-writeoperation.sh
+	clickhouse-retry-error.sh \
+	clickhouse-start.sh \
+	clickhouse-basic.sh \
+	clickhouse-load.sh \
+	clickhouse-bulk.sh \
+	clickhouse-bulk-load.sh \
+	clickhouse-limited-batch.sh \
+	clickhouse-select.sh \
+	clickhouse-errorfile.sh \
+	clickhouse-wrong-quotation-marks.sh \
+	clickhouse-wrong-template-option.sh \
+	clickhouse-wrong-insert-syntax.sh
 
-es-basic-server.log: es-basic-bulk.log
-es-maxbytes-bulk.log: es-basic-server.log
-es-basic-errfile-empty.log: es-maxbytes-bulk.log
-es-basic-errfile-popul.log: es-basic-errfile-empty.log
-es-bulk-errfile-empty.log: es-basic-errfile-popul.log
-es-bulk-errfile-popul.log: es-bulk-errfile-empty.log
-es-writeoperation.log: es-bulk-errfile-popul.log
+clickhouse-start.log: clickhouse-retry-error.log
+clickhouse-basic.log: clickhouse-start.log
+clickhouse-load.log: clickhouse-basic.log
+clickhouse-bulk.log: clickhouse-load.log
+clickhouse-bulk-load.log: clickhouse-bulk.log
+clickhouse-limited-batch.log: clickhouse-bulk-load.log
+clickhouse-select.log: clickhouse-limited-batch.log
+clickhouse-errorfile.log: clickhouse-select.log
+clickhouse-wrong-quotation-marks.log: clickhouse-errorfile.log
+clickhouse-wrong-template-option.log: clickhouse-wrong-quotation-marks.log
+clickhouse-wrong-insert-syntax.log: clickhouse-wrong-template-option.log
+clickhouse-stop.log: clickhouse-wrong-insert-syntax.log
 
-if ENABLE_IMPSTATS
-TESTS +=  \
-	es-basic-ha.sh \
-	es-bulk-retry.sh
-
-es-basic-ha.log: es-writeoperation.log
-es-bulk-retry.log: es-basic-ha.log
-endif
-if ENABLE_IMFILE
-TESTS +=  \
-	es-bulk-errfile-popul-def-format.sh \
-	es-bulk-errfile-popul-erronly.sh \
-	es-bulk-errfile-popul-erronly-interleaved.sh \
-	es-bulk-errfile-popul-def-interleaved.sh
-
-es-bulk-errfile-popul-def-format.log: es-bulk-retry.log
-es-bulk-errfile-popul-erronly.log: es-bulk-errfile-popul-def-format.log
-es-bulk-errfile-popul-erronly-interleaved.log: es-bulk-errfile-popul-erronly.log
-es-bulk-errfile-popul-def-interleaved.log: es-bulk-errfile-popul-erronly-interleaved.log
-endif
 if HAVE_VALGRIND
 TESTS +=  \
-	es-basic-bulk-vg.sh \
-	es-basic-ha-vg.sh
+	clickhouse-basic-vg.sh \
+	clickhouse-load-vg.sh \
+	clickhouse-bulk-vg.sh \
+	clickhouse-bulk-load-vg.sh
 
-es-basic-bulk-vg.log: es-writeoperation.log
-es-basic-bulk-vg.log: es-bulk-retry.log
-es-basic-bulk-vg.log: es-bulk-errfile-popul-def-interleaved.log
-es-basic-ha-vg.log: es-basic-bulk-vg.log
-endif
-endif # if ENABLE_ELASTICSEARCH_TESTS
+clickhouse-basic-vg.log: clickhouse-wrong-insert-syntax.log
+clickhouse-load-vg.log: clickhouse-basic-vg.log
+clickhouse-bulk-vg.log: clickhouse-load-vg.log
+clickhouse-bulk-load-vg.log: clickhouse-bulk-vg.log
+clickhouse-stop.log: clickhouse-bulk-load-vg.log
+endif # VALGRIND
+
+TESTS += clickhouse-stop.sh
+endif # CLICKHOUSE_TESTS
+
 
 if ENABLE_LIBFAKETIME
 TESTS +=  \
@@ -525,6 +607,8 @@ mysql-actq-mt-withpause.log: mysql-actq-mt.log
 action-tx-single-processing.log: mysql-actq-mt-withpause.log
 action-tx-errfile.log: action-tx-single-processing.log
 
+mysqld-stop.log: action-tx-errfile.log
+
 if HAVE_VALGRIND
 TESTS +=  \
 	mysql-basic-vg.sh \
@@ -535,6 +619,7 @@ mysql-asyn-vg.log: mysql-basic-vg.log
 mysql-actq-mt-withpause-vg.log: mysql-asyn-vg.log
 
 libdbi-basic.log: mysql-actq-mt-withpause-vg.log # for next block!
+mysqld-stop.log: mysql-actq-mt-withpause-vg.log
 endif
 
 if ENABLE_OMLIBDBI # we piggy-back on MYSQL_TESTS as we need the same environment
@@ -543,10 +628,12 @@ TESTS +=  \
 	libdbi-asyn.sh
 libdbi-basic.log: action-tx-errfile.log
 libdbi-asyn.log: libdbi-basic.log
+mysqld-stop.log: libdbi-asyn.log
 if HAVE_VALGRIND
 TESTS +=  \
 	libdbi-basic-vg.sh
 libdbi-basic-vg.log: libdbi-asyn.log
+mysqld-stop.log: libdbi-basic-vg.log
 endif
 endif
 TESTS += mysqld-stop.sh
@@ -647,10 +734,24 @@ TESTS += \
 #	sndrcv_kafka_failresume.sh \
 # needs properly to much mempory on arm devices!
 #	sndrcv_kafka_multi.sh
+omkafka.log: kafka-selftest.log
+imkafka.log: omkafka.log
+imkafka-backgrounded.log: imkafka.log
+imkafka-config-err-ruleset.log: imkafka-backgrounded.log
+imkafka-config-err-param.log: imkafka-config-err-ruleset.log
+imkafka-hang-on-no-kafka.log: imkafka-config-err-param.log
+imkafka-hang-other-action-on-no-kafka.log: imkafka-hang-on-no-kafka.log
+imkafka_multi_single.log: imkafka-hang-other-action-on-no-kafka.log
+sndrcv_kafka.log: imkafka_multi_single.log
+sndrcv_kafka_multi_topics.log: sndrcv_kafka.log
+
 if HAVE_VALGRIND
 TESTS += \
 	omkafka-vg.sh \
 	imkafka-vg.sh
+
+omkafka-vg.log: sndrcv_kafka_multi_topics.log
+imkafka-vg.log: omkafka-vg.log
 endif
 endif
 endif
@@ -717,24 +818,6 @@ TESTS +=  \
 	rscript_hash64-vg.sh
 endif # ENABLE_FMHASH
 endif # HAVE_VALGRIND
-endif
-
-if ENABLE_ELASTICSEARCH_TESTS_MINIMAL
-TESTS +=  \
-	es-basic.sh \
-	es-basic-es6.0.sh \
-	es-basic-bulk.sh
-es-basic-es6.0.log: es-basic.log
-es-basic-bulk.log: es-basic-es6.0.log
-if HAVE_VALGRIND
-TESTS += \
-	es-basic-vg.sh \
-	es-basic-vgthread.sh
-es-basic-vg.log: es-basic-bulk.log
-es-basic-vgthread.log: es-basic-vg.log
-# for next if block:
-es-basic-server.log: es-basic-vgthread.log
-endif
 endif
 
 if ENABLE_MMPSTRUCDATA
@@ -850,11 +933,18 @@ endif
 if ENABLE_GNUTLS
 TESTS +=  \
 	imtcp_conndrop_tls.sh \
+	sndrcv_tls_anon_rebind.sh \
 	sndrcv_tls_anon_hostname.sh \
 	sndrcv_tls_anon_ipv4.sh \
+	sndrcv_tls_anon_ipv6.sh \
 	sndrcv_tls_priorityString.sh \
-	imtcp-tls-basic.sh \
-	sndrcv_tls_anon_rebind.sh
+	sndrcv_tls_certvalid.sh \
+	sndrcv_tls_certvalid_expired.sh \
+	imtcp-tls-gtls-x509fingerprint-invld.sh \
+	imtcp-tls-gtls-x509fingerprint.sh \
+	imtcp-tls-gtls-x509name-invld.sh \
+	imtcp-tls-gtls-x509name.sh \
+	imtcp-tls-basic.sh
 if HAVE_VALGRIND
 TESTS += \
 	imtcp-tls-basic-vg.sh \
@@ -869,6 +959,8 @@ TESTS +=  \
 	sndrcv_tls_ossl_anon_ipv4.sh \
 	sndrcv_tls_ossl_anon_ipv6.sh \
 	sndrcv_tls_ossl_anon_rebind.sh \
+	sndrcv_tls_ossl_certvalid.sh \
+	sndrcv_tls_ossl_certvalid_expired.sh \
 	imtcp-tls-ossl-x509valid.sh \
 	imtcp-tls-ossl-x509name.sh \
 	imtcp-tls-ossl-x509fingerprint.sh \
@@ -890,6 +982,7 @@ endif
 if ENABLE_RELP
 TESTS += sndrcv_relp.sh \
 	 sndrcv_relp_rebind.sh \
+	 omrelp_errmsg_no_connect.sh \
 	 imrelp-basic.sh \
 	 imrelp-basic-oldstyle.sh \
 	 imrelp-manyconn.sh \
@@ -908,7 +1001,11 @@ TESTS += \
          sndrcv_relp_tls_prio.sh \
          relp_tls_certificate_not_found.sh \
 	 omrelp_wrong_authmode.sh
-endif
+endif # ENABLE_GNUTLS
+if HAVE_VALGRIND
+TESTS += \
+	 imrelp-manyconn-vg.sh
+endif # HAVE_VALGRIND
 endif
 
 if ENABLE_OMUDPSPOOF
@@ -926,6 +1023,7 @@ TESTS += \
 	tabescape_dflt-udp.sh \
 	tabescape_off.sh \
 	tabescape_off-udp.sh \
+	tabescape_on.sh \
 	inputname-imtcp.sh \
 	fieldtest.sh \
 	fieldtest-udp.sh \
@@ -1029,6 +1127,8 @@ TESTS += \
 	imfile-symlink.sh \
 	imfile-symlink-multi.sh \
 	imfile-logrotate.sh \
+	imfile-logrotate-copytruncate.sh \
+	imfile-logrotate-nocopytruncate.sh \
 	imfile-growing-file-id.sh \
 	glbl-oversizeMsg-truncate-imfile.sh
 
@@ -1043,17 +1143,21 @@ TESTS += \
 	imfile-endregex-vg.sh \
 	imfile-endmsg.regex-vg.sh \
 	imfile-readmode0-vg.sh \
-	imfile-readmode2-vg.sh \
+	imfile-readmode2-vg.sh
+
+if ENABLE_HELGRIND
+TESTS += \
 	imfile-basic-vgthread.sh
+endif #  ENABLE_HELGRIND
 
 if ENABLE_MMNORMALIZE
 TESTS += \
 	imfile-endmsg.regex-with-example-vg.sh
-endif
+endif # ENABLE_MMNORMALIZE
 
-endif
+endif # HAVE_VALGRIND
 
-endif
+endif # ENABLE_IMFILE
 
 if ENABLE_OMTCL
 TESTS += \
@@ -1135,6 +1239,8 @@ EXTRA_DIST= \
 	testsuites/x.509/client-key.pem \
 	testsuites/x.509/machine-cert.pem \
 	testsuites/x.509/machine-key.pem \
+	testsuites/x.509/client-expired-cert.pem \
+	testsuites/x.509/client-expired-key.pem \
 	cfg.sh \
 	cfg1.cfgtest \
 	cfg1.testin \
@@ -1239,6 +1345,8 @@ EXTRA_DIST= \
 	mmutf8fix_no_error.sh \
 	tcpflood_wrong_option_output.sh \
 	msleep_usage_output.sh \
+	mangle_qi_usage_output.sh \
+	minitcpsrv_usage_output.sh \
 	test_id_usage_output.sh \
 	mmanon_with_debug.sh \
 	mmanon_random_32_ipv4.sh \
@@ -1388,12 +1496,30 @@ EXTRA_DIST= \
 	incltest_dir_empty_wildcard.sh \
 	incltest_dir_wildcard.sh \
 	testsuites/es.yml \
+	clickhouse-retry-error.sh \
+	clickhouse-start.sh \
+	clickhouse-stop.sh \
+	clickhouse-basic.sh \
+	clickhouse-load.sh \
+	clickhouse-bulk.sh \
+	clickhouse-bulk-load.sh \
+	clickhouse-limited-batch.sh \
+	clickhouse-select.sh \
+	clickhouse-wrong-quotation-marks.sh \
+	clickhouse-wrong-template-option.sh \
+	clickhouse-errorfile.sh \
+	clickhouse-wrong-insert-syntax.sh \
+	clickhouse-basic-vg.sh \
+	clickhouse-load-vg.sh \
+	clickhouse-bulk-vg.sh \
+	clickhouse-bulk-load-vg.sh \
 	es_response_get_msgnum.py \
 	elasticsearch-error-format-check.py \
 	es-basic-es6.0.sh \
 	es-basic.sh \
 	es-basic-vgthread.sh \
 	es-basic-server.sh \
+	es-execOnlyWhenPreviousSuspended.sh \
 	es-basic-ha.sh \
 	es-basic-bulk.sh \
 	es-basic-errfile-empty.sh \
@@ -1421,6 +1547,10 @@ EXTRA_DIST= \
 	imtcp-msg-truncation-on-number2.sh \
 	imtcp-NUL.sh \
 	imtcp-NUL-rawmsg.sh \
+	imtcp-tls-gtls-x509fingerprint-invld.sh \
+	imtcp-tls-gtls-x509fingerprint.sh \
+	imtcp-tls-gtls-x509name-invld.sh \
+	imtcp-tls-gtls-x509name.sh \
 	imtcp-tls-basic.sh \
 	imtcp-tls-basic-vg.sh \
 	imtcp_incomplete_frame_at_end.sh \
@@ -1432,6 +1562,8 @@ EXTRA_DIST= \
 	sndrcv_tls_ossl_anon_ipv4.sh \
 	sndrcv_tls_ossl_anon_ipv6.sh \
 	sndrcv_tls_ossl_anon_rebind.sh \
+	sndrcv_tls_ossl_certvalid.sh \
+	sndrcv_tls_ossl_certvalid_expired.sh \
 	imtcp-tls-ossl-x509valid.sh \
 	imtcp-tls-ossl-x509name.sh \
 	imtcp-tls-ossl-x509fingerprint.sh \
@@ -1506,9 +1638,11 @@ EXTRA_DIST= \
 	sndrcv_drvr_noexit.sh \
 	sndrcv_failover.sh \
 	sndrcv.sh \
+	omrelp_errmsg_no_connect.sh \
 	imrelp-basic.sh \
 	imrelp-basic-oldstyle.sh \
 	imrelp-manyconn.sh \
+	imrelp-manyconn-vg.sh \
 	imrelp-maxDataSize-error.sh \
 	imrelp-long-msg.sh \
 	imrelp-oversizeMode-truncate.sh \
@@ -1648,6 +1782,8 @@ EXTRA_DIST= \
 	imfile-symlink.sh \
 	imfile-symlink-multi.sh \
 	imfile-logrotate.sh \
+	imfile-logrotate-copytruncate.sh \
+	imfile-logrotate-nocopytruncate.sh \
 	imfile-growing-file-id.sh \
 	glbl-oversizeMsg-truncate-imfile.sh \
 	dynfile_invld_async.sh \
@@ -1660,7 +1796,6 @@ EXTRA_DIST= \
 	badqi.sh \
 	bad_qi/dbq.qi \
 	execonlyonce.sh \
-	testsuites/execonlyonce.data \
 	execonlywhenprevsuspended.sh \
 	execonlywhenprevsuspended2.sh \
 	execonlywhenprevsuspended3.sh \
@@ -1673,6 +1808,7 @@ EXTRA_DIST= \
 	tabescape_dflt-udp.sh \
 	tabescape_off.sh \
 	tabescape_off-udp.sh \
+	tabescape_on.sh \
 	dircreate_dflt.sh \
 	dircreate_off.sh \
 	imuxsock_logger_parserchain.sh \
@@ -1870,6 +2006,8 @@ EXTRA_DIST= \
 	sndrcv_tls_anon_ipv4.sh \
 	sndrcv_tls_anon_ipv6.sh \
 	sndrcv_tls_priorityString.sh \
+	sndrcv_tls_certvalid.sh \
+	sndrcv_tls_certvalid_expired.sh \
 	omtcl.sh \
 	omtcl.tcl \
 	pmsnare-default.sh \
@@ -1902,6 +2040,7 @@ EXTRA_DIST= \
 	pgsql-template-cnf6-vg.sh \
 	pgsql-actq-mt-withpause-vg.sh \
 	../devtools/prep-mysql-db.sh \
+	../devtools/prepare_clickhouse.sh \
 	mmkubernetes-basic.sh \
 	mmkubernetes-basic-vg.sh \
 	mmkubernetes_test_server.py \

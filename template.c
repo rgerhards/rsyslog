@@ -1,7 +1,7 @@
 /* This is the template processing code of rsyslog.
  * begun 2004-11-17 rgerhards
  *
- * Copyright 2004-2018 Rainer Gerhards and Adiscon
+ * Copyright 2004-2019 Rainer Gerhards and Adiscon
  *
  * This file is part of rsyslog.
  *
@@ -2116,19 +2116,14 @@ void tplDeleteAll(rsconf_t *conf)
 
 	pTpl = conf->templates.root;
 	while(pTpl != NULL) {
-		/* dbgprintf("Delete Template: Name='%s'\n ", pTpl->pszName == NULL? "NULL" : pTpl->pszName);*/
 		pTpe = pTpl->pEntryRoot;
 		while(pTpe != NULL) {
 			pTpeDel = pTpe;
 			pTpe = pTpe->pNext;
-			/*dbgprintf("\tDelete Entry(%x): type %d, ", (unsigned) pTpeDel, pTpeDel->eEntryType);*/
 			switch(pTpeDel->eEntryType) {
 			case UNDEFINED:
-				/*dbgprintf("(UNDEFINED)");*/
 				break;
 			case CONSTANT:
-				/*dbgprintf("(CONSTANT), value: '%s'",
-					pTpeDel->data.constant.pConstant);*/
 				free(pTpeDel->data.constant.pConstant);
 				break;
 			case FIELD:
@@ -2144,7 +2139,6 @@ void tplDeleteAll(rsconf_t *conf)
 				break;
 			}
 			free(pTpeDel->fieldName);
-			/*dbgprintf("\n");*/
 			free(pTpeDel);
 		}
 		pTplDel = pTpl;
@@ -2251,8 +2245,6 @@ void tplPrintList(rsconf_t *conf)
 					dbgprintf("[EE-Property: '%s'] ", pTpe->data.field.msgProp.name);
 				} else if(pTpe->data.field.msgProp.id == PROP_LOCAL_VAR) {
 					dbgprintf("[Local Var: '%s'] ", pTpe->data.field.msgProp.name);
-				//} else if(pTpe->data.field.propid == PROP_GLOBAL_VAR) {
-				//	dbgprintf("[Global Var: '%s'] ", pTpe->data.field.propName);
 				}
 				switch(pTpe->data.field.eDateFormat) {
 				case tplFmtDefault:
@@ -2277,6 +2269,45 @@ void tplPrintList(rsconf_t *conf)
 					break;
 				case tplFmtRFC3164BuggyDate:
 					dbgprintf("[Format as buggy RFC3164-Date] ");
+					break;
+				case tplFmtWDayName:
+					dbgprintf("[Format as weekday name] ");
+					break;
+				case tplFmtYear:
+					dbgprintf("[Format as year] ");
+					break;
+				case tplFmtMonth:
+					dbgprintf("[Format as month] ");
+					break;
+				case tplFmtDay:
+					dbgprintf("[Format as day] ");
+					break;
+				case tplFmtHour:
+					dbgprintf("[Format as hour] ");
+					break;
+				case tplFmtMinute:
+					dbgprintf("[Format as minute] ");
+					break;
+				case tplFmtSecond:
+					dbgprintf("[Format as second] ");
+					break;
+				case tplFmtTZOffsHour:
+					dbgprintf("[Format as offset hour] ");
+					break;
+				case tplFmtTZOffsMin:
+					dbgprintf("[Format as offset minute] ");
+					break;
+				case tplFmtTZOffsDirection:
+					dbgprintf("[Format as offset direction] ");
+					break;
+				case tplFmtWDay:
+					dbgprintf("[Format as weekday] ");
+					break;
+				case tplFmtOrdinal:
+					dbgprintf("[Format as ordinal] ");
+					break;
+				case tplFmtWeek:
+					dbgprintf("[Format as week] ");
 					break;
 				default:
 					dbgprintf("[UNKNOWN eDateFormat %d] ", pTpe->data.field.eDateFormat);

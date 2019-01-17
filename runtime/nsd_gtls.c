@@ -2,7 +2,7 @@
  *
  * An implementation of the nsd interface for GnuTLS.
  *
- * Copyright (C) 2007-2016 Rainer Gerhards and Adiscon GmbH.
+ * Copyright (C) 2007-2018 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of the rsyslog runtime library.
  *
@@ -538,11 +538,34 @@ gtlsRecordRecv(nsd_gtls_t *pThis)
 	DEFiRet;
 
 	ISOBJ_TYPE_assert(pThis, nsd_gtls);
+	DBGPRINTF("gtlsRecordRecv: start\n");
+
 	lenRcvd = gnutls_record_recv(pThis->sess, pThis->pszRcvBuf, NSD_GTLS_MAX_RCVBUF);
 	if(lenRcvd >= 0) {
+		DBGPRINTF("gtlsRecordRecv: gnutls_record_recv received %zd bytes\n", lenRcvd);
 		pThis->lenRcvBuf = lenRcvd;
 		pThis->ptrRcvBuf = 0;
+
+		/* Check for additional data in SSL buffer */
+		size_t stBytesLeft = gnutls_record_check_pending(pThis->sess);
+		if (stBytesLeft > 0 ){
+			DBGPRINTF("gtlsRecordRecv: %zd Bytes pending after gnutls_record_recv, expand buffer.\n",
+				stBytesLeft);
+			/* realloc buffer size and preserve char content */
+			CHKmalloc(pThis->pszRcvBuf = realloc(pThis->pszRcvBuf, NSD_GTLS_MAX_RCVBUF+stBytesLeft));
+
+			/* 2nd read will read missing bytes from the current SSL Packet */
+			lenRcvd = gnutls_record_recv(pThis->sess, pThis->pszRcvBuf+NSD_GTLS_MAX_RCVBUF, stBytesLeft);
+			if(lenRcvd > 0) {
+				DBGPRINTF("gtlsRecordRecv: 2nd SSL_read received %zd bytes\n",
+					(NSD_GTLS_MAX_RCVBUF+lenRcvd));
+				pThis->lenRcvBuf = NSD_GTLS_MAX_RCVBUF+lenRcvd;
+			} else {
+				goto sslerr;
+			}
+		}
 	} else if(lenRcvd == GNUTLS_E_AGAIN || lenRcvd == GNUTLS_E_INTERRUPTED) {
+sslerr:
 		pThis->rtryCall = gtlsRtry_recv;
 		dbgprintf("GnuTLS receive requires a retry (this most probably is OK and no error condition)\n");
 		ABORT_FINALIZE(RS_RET_RETRY);
@@ -1024,6 +1047,8 @@ gtlsChkPeerCertValidity(nsd_gtls_t *pThis)
 	unsigned i;
 	time_t ttCert;
 	time_t ttNow;
+	sbool bAbort = RSFALSE;
+	int iAbortCode = RS_RET_OK;
 
 	ISOBJ_TYPE_assert(pThis, nsd_gtls);
 
@@ -1039,26 +1064,51 @@ gtlsChkPeerCertValidity(nsd_gtls_t *pThis)
 	CHKgnutls(gnutls_certificate_verify_peers2(pThis->sess, &stateCert));
 
 	if(stateCert & GNUTLS_CERT_INVALID) {
+		/* Default abort code */
+		iAbortCode = RS_RET_CERT_INVALID;
+
 		/* provide error details if we have them */
-		if(stateCert & GNUTLS_CERT_SIGNER_NOT_FOUND) {
+		if (stateCert & GNUTLS_CERT_EXPIRED ) {
+			dbgprintf("GnuTLS returned GNUTLS_CERT_EXPIRED, handling mode %d ...\n",
+				pThis->permitExpiredCerts);
+			/* Handle expired certs */
+			if (pThis->permitExpiredCerts == GTLS_EXPIRED_DENY) {
+				bAbort = RSTRUE;
+				iAbortCode = RS_RET_CERT_EXPIRED;
+			} else if (pThis->permitExpiredCerts == GTLS_EXPIRED_WARN) {
+				LogMsg(0, RS_RET_NO_ERRCODE, LOG_WARNING,
+					"Warning, certificate expired but expired certs are permitted");
+			} else {
+				dbgprintf("GnuTLS returned GNUTLS_CERT_EXPIRED, but expired certs are permitted.\n");
+			}
+			pszErrCause = "certificate expired";
+		} else if(stateCert & GNUTLS_CERT_SIGNER_NOT_FOUND) {
 			pszErrCause = "signer not found";
+			bAbort = RSTRUE;
 		} else if(stateCert & GNUTLS_CERT_SIGNER_NOT_CA) {
 			pszErrCause = "signer is not a CA";
+			bAbort = RSTRUE;
 		} else if(stateCert & GNUTLS_CERT_INSECURE_ALGORITHM) {
 			pszErrCause = "insecure algorithm";
+			bAbort = RSTRUE;
 		} else if(stateCert & GNUTLS_CERT_REVOKED) {
 			pszErrCause = "certificate revoked";
+			bAbort = RSTRUE;
 		} else {
 			pszErrCause = "GnuTLS returned no specific reason";
 			dbgprintf("GnuTLS returned no specific reason for GNUTLS_CERT_INVALID, certificate "
 				 "status is %d\n", stateCert);
+			bAbort = RSTRUE;
 		}
+	}
+
+	if (bAbort == RSTRUE) {
 		LogError(0, NO_ERRCODE, "not permitted to talk to peer, certificate invalid: %s",
 				pszErrCause);
 		gtlsGetCertInfo(pThis, &pStr);
 		LogError(0, NO_ERRCODE, "invalid cert info: %s", cstrGetSzStrNoNULL(pStr));
 		cstrDestruct(&pStr);
-		ABORT_FINALIZE(RS_RET_CERT_INVALID);
+		ABORT_FINALIZE(iAbortCode);
 	}
 
 	/* get current time for certificate validation */
@@ -1085,18 +1135,8 @@ gtlsChkPeerCertValidity(nsd_gtls_t *pThis)
 			ABORT_FINALIZE(RS_RET_CERT_NOT_YET_ACTIVE);
 		}
 
-		ttCert = gnutls_x509_crt_get_expiration_time(cert);
-		if(ttCert == -1)
-			ABORT_FINALIZE(RS_RET_TLS_CERT_ERR);
-		else if(ttCert < ttNow) {
-			LogError(0, RS_RET_CERT_EXPIRED, "not permitted to talk to peer: certificate"
-				" %d expired", i);
-			gtlsGetCertInfo(pThis, &pStr);
-			LogError(0, RS_RET_CERT_EXPIRED, "invalid cert info: %s", cstrGetSzStrNoNULL(pStr));
-			cstrDestruct(&pStr);
-			ABORT_FINALIZE(RS_RET_CERT_EXPIRED);
-		}
 		gnutls_x509_crt_deinit(cert);
+
 	}
 
 finalize_it:
@@ -1289,6 +1329,41 @@ finalize_it:
 }
 
 
+/* Set the PermitExpiredCerts mode. For us, the following is supported:
+ * on - fail if certificate is expired
+ * off - ignore expired certificates
+ * warn - warn if certificate is expired
+ * alorbach, 2018-12-20
+ */
+static rsRetVal
+SetPermitExpiredCerts(nsd_t *pNsd, uchar *mode)
+{
+	DEFiRet;
+	nsd_gtls_t *pThis = (nsd_gtls_t*) pNsd;
+
+	ISOBJ_TYPE_assert((pThis), nsd_gtls);
+	/* default is set to warn! */
+	if(mode == NULL || !strcasecmp((char*)mode, "warn")) {
+		pThis->permitExpiredCerts = GTLS_EXPIRED_WARN;
+	} else if(!strcasecmp((char*) mode, "off")) {
+		pThis->permitExpiredCerts = GTLS_EXPIRED_DENY;
+	} else if(!strcasecmp((char*) mode, "on")) {
+		pThis->permitExpiredCerts = GTLS_EXPIRED_PERMIT;
+	} else {
+		LogError(0, RS_RET_VALUE_NOT_SUPPORTED, "error: permitexpiredcerts mode '%s' not supported by "
+				"ossl netstream driver", mode);
+		ABORT_FINALIZE(RS_RET_VALUE_NOT_SUPPORTED);
+	}
+
+	dbgprintf("SetPermitExpiredCerts: Set Mode %s/%d\n", mode, pThis->permitExpiredCerts);
+
+/* TODO: clear stored IDs! */
+
+finalize_it:
+	RETiRet;
+}
+
+
 /* Set permitted peers. It is depending on the auth mode if this are
  * fingerprints or names. -- rgerhards, 2008-05-19
  */
@@ -1448,6 +1523,7 @@ CheckConnection(nsd_t __attribute__((unused)) *pNsd)
 	nsd_gtls_t *pThis = (nsd_gtls_t*) pNsd;
 	ISOBJ_TYPE_assert(pThis, nsd_gtls);
 
+	dbgprintf("CheckConnection for %p\n", pNsd);
 	return nsd_ptcp.CheckConnection(pThis->pTcp);
 }
 
@@ -1521,6 +1597,7 @@ AcceptConnReq(nsd_t *pNsd, nsd_t **ppNew)
 	CHKiRet(gtlsInitSession(pNew));
 	gtlsSetTransportPtr(pNew, ((nsd_ptcp_t*) (pNew->pTcp))->sock);
 	pNew->authMode = pThis->authMode;
+	pNew->permitExpiredCerts = pThis->permitExpiredCerts;
 	pNew->pPermPeers = pThis->pPermPeers;
 	pNew->gnutlsPriorityString = pThis->gnutlsPriorityString;
 	/* here is the priorityString set */
@@ -1882,6 +1959,7 @@ CODESTARTobjQueryInterface(nsd_gtls)
 	pIf->SetSock = SetSock;
 	pIf->SetMode = SetMode;
 	pIf->SetAuthMode = SetAuthMode;
+	pIf->SetPermitExpiredCerts = SetPermitExpiredCerts;
 	pIf->SetPermPeers =SetPermPeers;
 	pIf->CheckConnection = CheckConnection;
 	pIf->GetRemoteHName = GetRemoteHName;

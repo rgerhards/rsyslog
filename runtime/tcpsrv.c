@@ -673,7 +673,7 @@ wrkr(void *const myself)
 	sigset_t sigSet;
 	sigfillset(&sigSet);
 	pthread_sigmask(SIG_SETMASK, &sigSet, NULL);
-	
+
 	pthread_mutex_lock(&wrkrMut);
 	while(1) {
 		// wait for work, in which case pSrv will be populated
@@ -836,8 +836,6 @@ RunSelect(tcpsrv_t *pThis, nsd_epworkset_t workset[], size_t sizeWorkset)
 					processWorkset(pThis, NULL, iWorkset, workset);
 					iWorkset = 0;
 				}
-				//DBGPRINTF("New connect on NSD %p.\n", pThis->ppLstn[i]);
-				//SessAccept(pThis, pThis->ppLstnPort[i], &pNewSess, pThis->ppLstn[i]);
 				--nfds; /* indicate we have processed one */
 			}
 		}
@@ -1023,6 +1021,8 @@ tcpsrvConstructFinalize(tcpsrv_t *pThis)
 	CHKiRet(netstrms.SetDrvrMode(pThis->pNS, pThis->iDrvrMode));
 	if(pThis->pszDrvrAuthMode != NULL)
 		CHKiRet(netstrms.SetDrvrAuthMode(pThis->pNS, pThis->pszDrvrAuthMode));
+	if(pThis->pszDrvrPermitExpiredCerts != NULL)
+		CHKiRet(netstrms.SetDrvrPermitExpiredCerts(pThis->pNS, pThis->pszDrvrPermitExpiredCerts));
 	if(pThis->pPermPeers != NULL)
 		CHKiRet(netstrms.SetDrvrPermPeers(pThis->pNS, pThis->pPermPeers));
 	if(pThis->gnutlsPriorityString != NULL)
@@ -1057,6 +1057,7 @@ CODESTARTobjDestruct(tcpsrv)
 		netstrms.Destruct(&pThis->pNS);
 	free(pThis->pszDrvrName);
 	free(pThis->pszDrvrAuthMode);
+	free(pThis->pszDrvrPermitExpiredCerts);
 	free(pThis->ppLstn);
 	free(pThis->ppLstnPort);
 	free(pThis->pszInputName);
@@ -1391,6 +1392,18 @@ finalize_it:
 	RETiRet;
 }
 
+/* set the driver permitexpiredcerts mode -- alorbach, 2018-12-20
+ */
+static rsRetVal
+SetDrvrPermitExpiredCerts(tcpsrv_t *pThis, uchar *mode)
+{
+	DEFiRet;
+	ISOBJ_TYPE_assert(pThis, tcpsrv);
+	CHKmalloc(pThis->pszDrvrPermitExpiredCerts = ustrdup(mode));
+finalize_it:
+	RETiRet;
+}
+
 
 /* set the driver's permitted peers -- rgerhards, 2008-05-19 */
 static rsRetVal
@@ -1501,6 +1514,7 @@ CODESTARTobjQueryInterface(tcpsrv)
 	pIf->SetLstnMax = SetLstnMax;
 	pIf->SetDrvrMode = SetDrvrMode;
 	pIf->SetDrvrAuthMode = SetDrvrAuthMode;
+	pIf->SetDrvrPermitExpiredCerts = SetDrvrPermitExpiredCerts;
 	pIf->SetDrvrName = SetDrvrName;
 	pIf->SetDrvrPermPeers = SetDrvrPermPeers;
 	pIf->SetCBIsPermittedHost = SetCBIsPermittedHost;

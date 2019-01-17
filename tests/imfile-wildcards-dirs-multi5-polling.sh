@@ -3,7 +3,7 @@
 . ${srcdir:=.}/diag.sh init
 export IMFILEINPUTFILES="8"
 export IMFILEINPUTFILESSTEPS="5"
-export IMFILECHECKTIMEOUT="5"
+export IMFILECHECKTIMEOUT="15"
 # generate input files first. Note that rsyslog processes it as
 # soon as it start up (so the file should exist at that point).
 
@@ -48,7 +48,7 @@ for j in $(seq 1 $IMFILEINPUTFILESSTEPS); do
 	cp log log.$j
 	echo "Loop Num $j"
 
-	for i in `seq 1 $IMFILEINPUTFILES`;
+	for i in $(seq 1 $IMFILEINPUTFILES);
 	do
 		mkdir $RSYSLOG_DYNNAME.input.dir$i
 		mkdir $RSYSLOG_DYNNAME.input.dir$i/dir$i
@@ -59,10 +59,10 @@ for j in $(seq 1 $IMFILEINPUTFILESSTEPS); do
 	ls -d $RSYSLOG_DYNNAME.input.*
 	
 	# Check correct amount of input files each time
-	let IMFILEINPUTFILESALL=$((IMFILEINPUTFILES * j))
+	IMFILEINPUTFILESALL=$((IMFILEINPUTFILES * j))
 	content_check_with_count "HEADER msgnum:000000" $IMFILEINPUTFILESALL $IMFILECHECKTIMEOUT
 	# Delete all but first!
-	for i in `seq 1 $IMFILEINPUTFILES`;
+	for i in $(seq 1 $IMFILEINPUTFILES);
 	do
 		rm -rf $RSYSLOG_DYNNAME.input.dir$i/dir$i/file.logfile
 		rm -rf $RSYSLOG_DYNNAME.input.dir$i

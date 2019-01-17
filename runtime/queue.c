@@ -5,7 +5,7 @@
  * File begun on 2008-01-03 by RGerhards
  *
  * There is some in-depth documentation available in doc/dev_queue.html
- * (and in the web doc set on http://www.rsyslog.com/doc). Be sure to read it
+ * (and in the web doc set on https://www.rsyslog.com/doc/). Be sure to read it
  * if you are getting aquainted to the object.
  *
  * NOTE: as of 2009-04-22, I have begin to remove the qqueue* prefix from static
@@ -81,6 +81,13 @@ DEFobjCurrIf(statsobj)
 #ifdef ENABLE_IMDIAG
 unsigned int iOverallQueueSize = 0;
 #endif
+
+/* overridable default values (via global config) */
+int actq_dflt_toQShutdown = 10;		/* queue shutdown */
+int actq_dflt_toActShutdown = 1000;	/* action shutdown (in phase 2) */
+int actq_dflt_toEnq = 2000;		/* timeout for queue enque */
+int actq_dflt_toWrkShutdown = 60000;	/* timeout for worker thread shutdown */
+
 
 /* forward-definitions */
 static rsRetVal doEnqSingleObj(qqueue_t *pThis, flowControl_t flowCtlType, smsg_t *pMsg);
@@ -581,7 +588,7 @@ finalize_it:
 static rsRetVal qDestructFixedArray(qqueue_t *pThis)
 {
 	DEFiRet;
-	
+
 	assert(pThis != NULL);
 
 	queueDrain(pThis); /* discard any remaining queue entries */
@@ -820,7 +827,7 @@ qqueueTryLoadPersistedInfo(qqueue_t *pThis)
 
 	/* first, we try to read the property bag for ourselfs */
 	CHKiRet(obj.DeserializePropBag((obj_t*) pThis, psQIF));
-	
+
 	/* then the stream objects (same order as when persisted!) */
 	CHKiRet(obj.Deserialize(&pThis->tVars.disk.pWrite, (uchar*) "strm", psQIF,
 			       (rsRetVal(*)(obj_t*,void*))qqueueLoadPersStrmInfoFixup, pThis));
@@ -945,7 +952,7 @@ finalize_it:
 static rsRetVal qDestructDisk(qqueue_t *pThis)
 {
 	DEFiRet;
-	
+
 	assert(pThis != NULL);
 
 	free(pThis->pszQIFNam);
@@ -1495,10 +1502,10 @@ qqueueSetDefaultsActionQueue(qqueue_t *pThis)
 	pThis->iMaxFileSize = 1024*1024;
 	pThis->iPersistUpdCnt = 0;		/* persist queue info every n updates */
 	pThis->bSyncQueueFiles = 0;
-	pThis->toQShutdown = 0;			/* queue shutdown */
-	pThis->toActShutdown = 1000;		/* action shutdown (in phase 2) */
-	pThis->toEnq = 2000;			/* timeout for queue enque */
-	pThis->toWrkShutdown = 60000;		/* timeout for worker thread shutdown */
+	pThis->toQShutdown = actq_dflt_toQShutdown;	/* queue shutdown */
+	pThis->toActShutdown = actq_dflt_toActShutdown;	/* action shutdown (in phase 2) */
+	pThis->toEnq = actq_dflt_toEnq;			/* timeout for queue enque */
+	pThis->toWrkShutdown = actq_dflt_toWrkShutdown;	/* timeout for worker thread shutdown */
 	pThis->iMinMsgsPerWrkr = -1;		/* minimum messages per worker needed to start a new one */
 	pThis->bSaveOnShutdown = 1;		/* save queue on shutdown (when DA enabled)? */
 	pThis->sizeOnDiskMax = 0;		/* unlimited */
@@ -2314,7 +2321,7 @@ qqueueStart(qqueue_t *pThis) /* this is the ConstructionFinalizer */
 	   && (pThis->qType == QUEUETYPE_LINKEDLIST || pThis->qType == QUEUETYPE_FIXED_ARRAY)) {
 		LogMsg(0, RS_RET_OK_WARN, LOG_WARNING, "Note: queue.size=\"%d\" is very "
 			"low and can lead to unpredictable results. See also "
-			"http://www.rsyslog.com/lower-bound-for-queue-sizes/",
+			"https://www.rsyslog.com/lower-bound-for-queue-sizes/",
 			pThis->iMaxQueueSize);
 	}
 
@@ -2617,7 +2624,7 @@ qqueuePersist(qqueue_t *pThis, int bIsCheckpoint)
 			ABORT_FINALIZE(RS_RET_RENAME_TMP_QI_ERROR);
 		}
 	}
-	
+
 	/* tell the input file object that it must not delete the file on close if the queue
 	 * is non-empty - but only if we are not during a simple checkpoint
 	 */
@@ -2849,7 +2856,7 @@ qqueueSetMaxFileSize(qqueue_t *pThis, size_t iMaxFileSize)
 	DEFiRet;
 
 	ISOBJ_TYPE_assert(pThis, qqueue);
-	
+
 	if(iMaxFileSize < 1024) {
 		ABORT_FINALIZE(RS_RET_VALUE_TOO_LOW);
 	}

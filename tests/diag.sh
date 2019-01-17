@@ -36,6 +36,8 @@
 #			export USE_VALGRIND="YES"
 #			source original-test.sh
 #		sample can be seen in imjournal-basic[.vg].sh
+#		You may also use USE_VALGRIND="YES-NOLEAK" to request valgrind without
+#		leakcheck (this sometimes is needed).
 #
 #
 # EXIT STATES
@@ -43,6 +45,7 @@
 # 1 - FAIL
 # 77 - SKIP
 # 100 - Testbench failure
+export TB_ERR_TIMEOUT=101
 # 177 - internal state: test failed, but in a way that makes us strongly believe
 #       this is caused by environment. This will lead to exit 77 (SKIP), but report
 #       the failure if failure reporting is active
@@ -72,8 +75,10 @@ export ZOOPIDFILE="$(pwd)/zookeeper.pid"
 #export RSYSLOG_DEBUG="debug nologfuncflow noprintmutexaction nostdout"
 #export RSYSLOG_DEBUGLOG="log"
 TB_TIMEOUT_STARTSTOP=400 # timeout for start/stop rsyslogd in tenths (!) of a second 400 => 40 sec
-TB_TEST_TIMEOUT=90  # number of seconds after which test checks timeout (eg. waits)
 # note that 40sec for the startup should be sufficient even on very slow machines. we changed this from 2min on 2017-12-12
+TB_TEST_TIMEOUT=90  # number of seconds after which test checks timeout (eg. waits)
+TB_TEST_MAX_RUNTIME=500 # maximum runtuime in seconds for a test; testbench will abort test
+			# after that time (iff it has a chance to, not strictly enforced)
 export RSYSLOG_DEBUG_TIMEOUTS_TO_STDERR="on"  # we want to know when we loose messages due to timeouts
 if [ "$TESTTOOL_DIR" == "" ]; then
 	export TESTTOOL_DIR="${srcdir:-.}"
@@ -105,7 +110,7 @@ rsyslog_testbench_test_url_access() {
 # $1 is what we check in uname, $2 (optional) is a reason message
 skip_platform() {
 	if [ "$(uname)" == "$1" ]; then
-		printf 'platform is "%" - test does not work under "%s"\n' "$(uname $(uname))" "$1"
+		printf 'platform is "%s" - test does not work under "%s"\n' "$(uname)" "$1"
 		if [ "$2" != "" ]; then
 			printf 'reason: %s\n' "$2"
 		fi
@@ -117,7 +122,7 @@ skip_platform() {
 
 # a consistent format to output testbench timestamps
 tb_timestamp() {
-	date +%H:%M:%S
+	printf '%s[%s] ' "$(date +%H:%M:%S)" "$(( $(date +%s) - TB_STARTTEST ))"
 }
 
 # override the test timeout, but only if the new value is higher
@@ -163,7 +168,7 @@ $template hostname,"%hostname%"
 local0.* ./'${RSYSLOG_DYNNAME}'.HOSTNAME;hostname
 '
 	rm -f "${RSYSLOG_DYNNAME}.HOSTNAME"
-	startup
+	startup ""
 	tcpflood -m1 -M "\"<128>\""
 	shutdown_when_empty
 	wait_shutdown ""
@@ -181,6 +186,12 @@ generate_conf() {
 	if [ "$RSTB_GLOBAL_INPUT_SHUTDOWN_TIMEOUT" == "" ]; then
 		RSTB_GLOBAL_INPUT_SHUTDOWN_TIMEOUT="60000"
 	fi
+	if [ "$RSTB_ACTION_DEFAULT_Q_TO_SHUTDOWN" == "" ]; then
+		RSTB_ACTION_DEFAULT_Q_TO_SHUTDOWN="20000"
+	fi
+	if [ "$RSTB_ACTION_DEFAULT_Q_TO_ENQUEUE" == "" ]; then
+		RSTB_ACTION_DEFAULT_Q_TO_ENQUEUE="20000"
+	fi
 	export TCPFLOOD_PORT="$(get_free_port)"
 	if [ "$1" == "" ]; then
 		export TESTCONF_NM="${RSYSLOG_DYNNAME}_" # this basename is also used by instance 2!
@@ -190,9 +201,13 @@ generate_conf() {
 		mkdir $RSYSLOG_DYNNAME.spool
 	fi
 	echo 'module(load="../plugins/imdiag/.libs/imdiag")
-global(inputs.timeout.shutdown="'$RSTB_GLOBAL_INPUT_SHUTDOWN_TIMEOUT'")
+global(inputs.timeout.shutdown="'$RSTB_GLOBAL_INPUT_SHUTDOWN_TIMEOUT'"
+       default.action.queue.timeoutshutdown="'$RSTB_ACTION_DEFAULT_Q_TO_SHUTDOWN'"
+       default.action.queue.timeoutEnqueue="'$RSTB_ACTION_DEFAULT_Q_TO_ENQUEUE'")
+$MainmsgQueueTimeoutEnqueue 20000 # use legacy-style so that we can override if needed
 $IMDiagListenPortFileName '$RSYSLOG_DYNNAME.imdiag$1.port'
 $IMDiagServerRun 0
+$IMDiagAbortTimeout '$TB_TEST_MAX_RUNTIME'
 
 :syslogtag, contains, "rsyslogd"  ./'${RSYSLOG_DYNNAME}$1'.started
 ###### end of testbench instrumentation part, test conf follows:' > ${TESTCONF_NM}$1.conf
@@ -211,25 +226,26 @@ rst_msleep() {
 
 
 # compare file to expected exact content
-# $1 is file to compare
+# $1 is file to compare, default $RSYSLOG_OUT_LOG
 cmp_exact() {
-	if [ "$1" == "" ]; then
-		printf 'Testbench ERROR, cmp_exact() needs filename as %s\n' "$1"
+	filename=${1:-"$RSYSLOG_OUT_LOG"}
+	if [ "$filename" == "" ]; then
+		printf 'Testbench ERROR, cmp_exact() does not have a filename at ALL!\n'
 		error_exit 100
 	fi
 	if [ "$EXPECTED" == "" ]; then
 		printf 'Testbench ERROR, cmp_exact() needs to have env var EXPECTED set!\n'
 		error_exit 100
 	fi
-	printf '%s\n' "$EXPECTED" | cmp - "$1"
+	printf '%s\n' "$EXPECTED" | cmp - "$filename"
 	if [ $? -ne 0 ]; then
 		printf 'invalid response generated\n'
-		printf '################# %s is:\n' "$1"
-		cat -n $1
+		printf '################# %s is:\n' "$filename"
+		cat -n $filename
 		printf '################# EXPECTED was:\n'
 		cat -n <<< "$EXPECTED"
 		printf '\n#################### diff is:\n'
-		diff - "$1" <<< "$EXPECTED"
+		diff - "$filename" <<< "$EXPECTED"
 		error_exit  1
 	fi;
 }
@@ -449,7 +465,7 @@ wait_startup() {
 		   error_exit 1
 		fi
 	done
-	echo "rsyslogd$1 startup msg seen, pid " $(cat $RSYSLOG_PIDBASE$1.pid)
+	echo "$(tb_timestamp) rsyslogd$1 startup msg seen, pid " $(cat $RSYSLOG_PIDBASE$1.pid)
 	wait_file_exists $RSYSLOG_DYNNAME.imdiag$1.port
 	eval export IMDIAG_PORT$1=$(cat $RSYSLOG_DYNNAME.imdiag$1.port)
 	eval PORT=$IMDIAG_PORT$1
@@ -471,6 +487,9 @@ startup() {
 	if [ "$USE_VALGRIND" == "YES" ]; then
 		startup_vg "$1" "$2"
 		return
+	elif [ "$USE_VALGRIND" == "YES-NOLEAK" ]; then
+		startup_vg_noleak "$1" "$2"
+		return
 	fi
 	startup_common "$1" "$2"
 	if [ "$RSTB_DAEMONIZE" == "YES" ]; then
@@ -486,8 +505,8 @@ startup() {
 # same as startup_vg, BUT we do NOT wait on the startup message!
 startup_vg_waitpid_only() {
 	startup_common "$1" "$2"
-	if [ "x$RS_TESTBENCH_LEAK_CHECK" == "x" ]; then
-	    RS_TESTBENCH_LEAK_CHECK=full
+	if [ "$RS_TESTBENCH_LEAK_CHECK" == "" ]; then
+		RS_TESTBENCH_LEAK_CHECK=full
 	fi
 	LD_PRELOAD=$RSYSLOG_PRELOAD valgrind $RS_TEST_VALGRIND_EXTRA_OPTS $RS_TESTBENCH_VALGRIND_EXTRA_OPTS --suppressions=$srcdir/known_issues.supp ${EXTRA_VALGRIND_SUPPRESSIONS:-} --gen-suppressions=all --log-fd=1 --error-exitcode=10 --malloc-fill=ff --free-fill=fe --leak-check=$RS_TESTBENCH_LEAK_CHECK ../tools/rsyslogd -C -n -i$RSYSLOG_PIDBASE$2.pid -M../runtime/.libs:../.libs -f$CONF_FILE &
 	wait_rsyslog_startup_pid $1
@@ -529,8 +548,9 @@ startup_vgthread() {
 
 # inject messages via our inject interface (imdiag)
 injectmsg() {
-	echo injecting $2 messages
-	echo injectmsg $1 $2 $3 $4 | $TESTTOOL_DIR/diagtalker -p$IMDIAG_PORT || error_exit  $?
+	msgs=${2:-$NUMMESSAGES}
+	echo injecting $msgs messages
+	echo injectmsg ${1:-0} $msgs $3 $4 | $TESTTOOL_DIR/diagtalker -p$IMDIAG_PORT || error_exit  $?
 }
 
 # inject messages in INSTANCE 2 via our inject interface (imdiag)
@@ -548,6 +568,11 @@ get_mainqueuesize() {
 	else
 		echo getmainmsgqueuesize | $TESTTOOL_DIR/diagtalker -p$IMDIAG_PORT || error_exit  $?
 	fi
+}
+
+# get pid of rsyslog instance $1
+getpid() {
+		printf '%s' "$(cat $RSYSLOG_PIDBASE$1.pid)"
 }
 
 # grep for (partial) content. $1 is the content to check for, $2 the file to check
@@ -580,7 +605,7 @@ content_check_with_count() {
 	while [  $timecounter -lt $timeoutend ]; do
 		(( timecounter=timecounter+1 ))
 		count=$(grep -c -F -- "$1" <${RSYSLOG_OUT_LOG})
-		if [ $count -eq $2 ]; then
+		if [ ${count:=0} -eq $2 ]; then
 			echo content_check_with_count success, \"$1\" occured $2 times
 			break
 		else
@@ -588,7 +613,7 @@ content_check_with_count() {
 				shutdown_when_empty ""
 				wait_shutdown ""
 
-				echo content_check_with_count failed, expected \"$1\" to occur $2 times, but found it $count times
+				echo content_check_with_count failed, expected \"$1\" to occur $2 times, but found it "$count" times
 				echo file ${RSYSLOG_OUT_LOG} content is:
 				sort < ${RSYSLOG_OUT_LOG}
 				error_exit 1
@@ -611,7 +636,7 @@ custom_content_check() {
 	fi
 }
 
-# check that given content $1 is not present in file $2 (default: RSYSLOG_OUTLOG)
+# check that given content $1 is not present in file $2 (default: RSYSLOG_OUT_LOG)
 # regular expressions may be used
 check_not_present() {
 	if [ "$2" == "" ]; then
@@ -685,12 +710,26 @@ check_journal_testmsg_received() {
 }
 
 # wait for main message queue to be empty. $1 is the instance.
+# we run in a loop to ensure rsyslog is *really* finished when a
+# function for the "finished predicate" is defined. This is done
+# by setting env var QUEUE_EMPTY_CHECK_FUNCTION to the bash
+# function name.
 wait_queueempty() {
-	if [ "$1" == "2" ]; then
-		echo WaitMainQueueEmpty | $TESTTOOL_DIR/diagtalker -p$IMDIAG_PORT2 || error_exit  $?
-	else
-		echo WaitMainQueueEmpty | $TESTTOOL_DIR/diagtalker -p$IMDIAG_PORT || error_exit  $?
-	fi
+	while [ $(date +%s) -le $(( TB_STARTTEST + TB_TEST_MAX_RUNTIME )) ]; do
+		if [ "$1" == "2" ]; then
+			echo WaitMainQueueEmpty | $TESTTOOL_DIR/diagtalker -p$IMDIAG_PORT2 || error_exit  $?
+		else
+			echo WaitMainQueueEmpty | $TESTTOOL_DIR/diagtalker -p$IMDIAG_PORT || error_exit  $?
+		fi
+		if [ "$QUEUE_EMPTY_CHECK_FUNC" == "" ]; then
+			return
+		else
+			if $QUEUE_EMPTY_CHECK_FUNC ; then
+				return
+			fi
+		fi
+	done
+	error_exit $TB_ERR_TIMEOUT
 }
 
 
@@ -718,7 +757,7 @@ shutdown_immediate() {
 # actually, we wait for rsyslog.pid to be deleted.
 # $1 is the instance
 wait_shutdown() {
-	if [ "$USE_VALGRIND" == "YES" ]; then
+	if [ "$USE_VALGRIND" == "YES" ] || [ "$USE_VALGRIND" == "YES-NOLEAK" ]; then
 		wait_shutdown_vg "$1"
 		return
 	fi
@@ -779,8 +818,11 @@ await_lookup_table_reload() {
 # $2 expected nbr of lines, default $NUMMESSAGES
 # $3 timout in seconds
 # options (need to be specified in THIS ORDER if multiple given):
-# --delay ms - if given, delay to use between retries
-# --abort-on-oversize - error_exit if more lines than expected are present
+# --delay ms              -- if given, delay to use between retries
+# --abort-on-oversize     -- error_exit if more lines than expected are present
+# --count-function func   -- function to call to obtain current count
+#                    this permits to override the default predicate and makes
+#                    the wait really universally usable.
 wait_file_lines() {
 	delay=200
 	if [ "$1" == "--delay" ]; then
@@ -792,6 +834,11 @@ wait_file_lines() {
 		abort_oversize="YES"
 		shift
 	fi
+	count_function=
+	if [ "$1" == "--count-function" ]; then
+		count_function="$2"
+		shift 2
+	fi
 	timeout=${3:-$TB_TEST_TIMEOUT}
 	timeoutbegin=$(date +%s)
 	timeoutend=$(( timeoutbegin + timeout ))
@@ -800,15 +847,27 @@ wait_file_lines() {
 	waitlines=${2:-$NUMMESSAGES}
 
 	while true ; do
-		if [ -f "$file" ]; then
-			count=$(wc -l < "$file")
+		count=0
+		if [ "$count_function" == "" ]; then
+			if [ -f "$file" ]; then
+				count=$(wc -l < "$file")
+			fi
+		else
+			count=$($count_function)
 		fi
-		if [ $abort_oversize == "YES" ] && [ ${count:=0} -gt $waitlines ]; then
-			printf 'FAIL: wait_file_lines, too many lines, expected %d, current %s, took %s seconds\n'  $waitlines $count, "$(( $(date +%s) - timeoutbegin ))"
-			error_exit 1
+		if [ ${count} -gt $waitlines ]; then
+			if [ $abort_oversize == "YES" ] && [ ${count} -gt $waitlines ]; then
+				printf 'FAIL: wait_file_lines, too many lines, expected %d, current %s, took %s seconds\n' \
+					$waitlines $count "$(( $(date +%s) - timeoutbegin ))"
+				error_exit 1
+			else
+				printf 'wait_file_lines success, target %d or more lines, have %d, took %d seconds\n' \
+					"$waitlines" $count "$(( $(date +%s) - timeoutbegin ))"
+				return
+			fi
 		fi
-		if [ ${count:=0} -eq $waitlines ]; then
-			echo wait_file_lines success, have $waitlines lines, took $(( $(date +%s) - timeoutbegin )) seconds
+		if [ ${count} -eq $waitlines ]; then
+			echo wait_file_lines success, have $waitlines lines, took $(( $(date +%s) - timeoutbegin )) seconds, file "$file"
 			break
 		else
 			if [ $(date +%s) -ge $timeoutend  ]; then
@@ -820,8 +879,9 @@ wait_file_lines() {
 			fi
 		fi
 	done
-	unset count
 }
+
+
 
 
 # wait until seq_check succeeds. This is used to synchronize various
@@ -878,6 +938,7 @@ wait_content() {
 			error_exit 1
 		else
 			printf 'wait_content still waiting... (%d lines)\n' "$count"
+			tail "$file"
 			$TESTTOOL_DIR/msleep 500
 		fi
 	done
@@ -917,12 +978,12 @@ wait_shutdown_vg() {
 	export RSYSLOGD_EXIT=$?
 	echo rsyslogd run exited with $RSYSLOGD_EXIT
 
-	if [ $(ls vgcore.* 2> /dev/null | wc -l) -gt 0 ]; then
+	if [ "$(ls vgcore.* 2>/dev/null)" != "" ]; then
 	   printf 'ABORT! core file exists:\n'
 	   ls -l vgcore.*
 	   error_exit 1
 	fi
-	if [ "$USE_VALGRIND" == "YES" ]; then
+	if [ "$USE_VALGRIND" == "YES" ] || [ "$USE_VALGRIND" == "YES-NOLEAK" ]; then
 		check_exit_vg
 	fi
 }
@@ -982,6 +1043,9 @@ do_cleanup() {
 #       call it immeditely before termination. This may be used to cleanup
 #       some things or emit additional diagnostic information.
 error_exit() {
+	if [ $1 -eq $TB_ERR_TIMEOUT ]; then
+		printf '%s Test %s exceeded max runtime of %d seconds\n' "$(tb_timestamp)" "$0" $TB_TEST_MAX_RUNTIME
+	fi
 	if [ "$(ls core* 2>/dev/null)" != "" ]; then
 		echo trying to obtain crash location info
 		echo note: this may not be the correct file, check it
@@ -994,20 +1058,17 @@ error_exit() {
 	fi
 	if [[ "$2" == 'stacktrace' || ( ! -e IN_AUTO_DEBUG &&  "$USE_AUTO_DEBUG" == 'on' ) ]]; then
 		if [ "$(ls core* 2>/dev/null)" != "" ]; then
-			echo trying to analyze core for main rsyslogd binary
-			echo note: this may not be the correct file, check it
 			CORE=$(ls core*)
-			#echo "set pagination off" >gdb.in
-			#echo "core $CORE" >>gdb.in
-			echo "bt" >> gdb.in
-			echo "echo === THREAD INFO ===" >> gdb.in
-			echo "info thread" >> gdb.in
-			echo "echo === thread apply all bt full ===" >> gdb.in
-			echo "thread apply all bt full" >> gdb.in
-			echo "q" >> gdb.in
-			gdb ../tools/rsyslogd $CORE -batch -x gdb.in
-			CORE=
-			rm gdb.in
+			printf 'trying to analyze core "%s" for main rsyslogd binary\n' "$CORE"
+			printf 'note: this may not be the correct file, check it\n'
+			$SUDO gdb ../tools/rsyslogd "$CORE" -batch <<- EOF
+				bt
+				echo === THREAD INFO ===
+				info thread
+				echo === thread apply all bt full ===
+				thread apply all bt full
+				q
+				EOF
 		fi
 	fi
 	if [[ ! -e IN_AUTO_DEBUG &&  "$USE_AUTO_DEBUG" == 'on' ]]; then
@@ -1047,17 +1108,19 @@ error_exit() {
 	error_stats $1 # Report error to rsyslog testbench stats
 	do_cleanup
 
+	exitval=$1
 	if [ "$TEST_STATUS" == "unreliable" ] && [ "$1" -ne 100 ]; then
 		# TODO: log github issue
 		printf 'Test flagged as unreliable, exiting with SKIP. Original exit code was %d\n' "$1"
 		printf 'GitHub ISSUE: %s\n' "$TEST_GITHUB_ISSUE"
-		exit 77
+		exitval=77
 	else
 		if [ "$1" -eq 177 ]; then
-			exit 77
+			exitval=77
 		fi
-		exit $1
 	fi
+	printf '%s Test %s FAILED (took %s seconds)\n' "$(tb_timestamp)" "$0" "$(( $(date +%s) - TB_STARTTEST ))"
+	exit $exitval
 }
 
 
@@ -1235,12 +1298,30 @@ get_inode() {
 }
 
 
+# check that logger supports -d option, if not skip test
+# right now this is a bit dirty, we check distros which do not support it
+check_logger_has_option_d() {
+	skip_platform "FreeBSD"  "We need logger -p option, which we do not have on FreeBSD"
+	skip_platform "SunOS"  "We need logger -p option, which we do not have on (all flavors of) Solaris"
+}
+
+
 # check if command $1 is available - will exit 77 when not OK
 check_command_available() {
-	command -v $1
-	if [ $? -ne 0 ] ; then
-		echo Testbench requires unavailable command: $1
-		exit 77
+	have_cmd=0
+	if [ "$1" == "timeout" ]; then
+		if timeout --version &>/dev/null ; then
+			have_cmd=1
+		fi
+	else
+		command -v $1
+		if [ $? -eq 0 ]; then
+			have_cmd=1
+		fi
+	fi
+	if [ $have_cmd -eq 0 ] ; then
+		printf 'Testbench requires unavailable command: %s\n' "$1"
+		exit 77 # do NOT error_exit here!
 	fi
 }
 
@@ -1806,8 +1887,22 @@ start_elasticsearch() {
 # $1 - number of records (ES does not return all records unless you tell it explicitely).
 # $2 - ES port
 es_getdata() {
-	curl --silent localhost:${2:-9200}/rsyslog_testbench/_search?size=$1 > $RSYSLOG_DYNNAME.work
+	curl --silent localhost:${2:-$ES_PORT}/rsyslog_testbench/_search?size=${1:-$NUMMESSAGES} > $RSYSLOG_DYNNAME.work
 	python $srcdir/es_response_get_msgnum.py > ${RSYSLOG_OUT_LOG}
+}
+
+# a standard method to support shutdown & queue empty check for a wide range
+# of elasticsearch tests. This works if we assume that ES has delivered messages
+# to the default location.
+es_shutdown_empty_check() {
+	es_getdata $NUMMESSAGES $ES_PORT
+	lines=$(wc -l < "$RSYSLOG_OUT_LOG")
+	if [ "$lines"  -eq $NUMMESSAGES ]; then
+		printf '%s es_shutdown_empty_check: success, have %d lines\n' "$(tb_timestamp)" $lines
+		return 0
+	fi
+	printf '%s es_shutdown_empty_check: have %d lines, expecting %d\n' "$(tb_timestamp)" $lines $NUMMESSAGES
+	return 1
 }
 
 
@@ -1858,14 +1953,6 @@ case $1 in
 			#pwd
 			#kill -9 $pid
 		#done
-		# cleanup hanging uxsockrcvr processes
-		for pid in $(ps -eo pid,args|grep 'uxsockrcvr' |grep -v grep |sed -e 's/\( *\)\([0-9]*\).*/\2/');
-		do
-			echo "ERROR: left-over previous uxsockrcvr instance $pid, killing it"
-			ps -fp $pid
-			pwd
-			kill -9 $pid
-		done
 		# end cleanup
 
 		# some default names (later to be set in other parts, once we support fully
@@ -1877,9 +1964,9 @@ case $1 in
 			exit 2
 		fi
 		export RSYSLOG_DYNNAME="rstb_$(./test_id $(basename $0))"
-		export RSYSLOG2_OUT_LOG=rsyslog2.out.log # TODO: remove
-		export RSYSLOG_OUT_LOG=rsyslog.out.log # TODO: remove
-		export RSYSLOG_PIDBASE="rsyslog" # TODO: remove
+		export RSYSLOG_OUT_LOG="${RSYSLOG_DYNNAME}.out.log"
+		export RSYSLOG2_OUT_LOG="${RSYSLOG_DYNNAME}_2.out.log"
+		export RSYSLOG_PIDBASE="${RSYSLOG_DYNNAME}:" # also used by instance 2!
 		export IMDIAG_PORT=13500
 		export IMDIAG_PORT2=13501
 		export TCPFLOOD_PORT=13514
@@ -1951,9 +2038,6 @@ case $1 in
 			exit 77
 		fi
 		;;
-   'getpid')
-		pid=$(cat $RSYSLOG_PIDBASE$2.pid)
-		;;
    'kill-immediate') # kill rsyslog unconditionally
 		kill -9 $(cat $RSYSLOG_PIDBASE.pid)
 		# note: we do not wait for the actual termination!
@@ -2011,7 +2095,7 @@ case $1 in
 				echo waiting for stats file "'$2'" to be created
 				$TESTTOOL_DIR/msleep 100
 		done
-		prev_count=$(grep 'BEGIN$' <$2 | wc -l)
+		prev_count=$(grep -c 'BEGIN$' <$2)
 		new_count=$prev_count
 		while [[ "x$prev_count" == "x$new_count" ]]; do
 				# busy spin, because it allows as close timing-coordination in actual test run as possible

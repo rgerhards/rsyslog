@@ -4,7 +4,7 @@
 export IMFILEINPUTFILES="1"
 export IMFILEINPUTFILESSTEPS="5"
 #export IMFILEINPUTFILESALL=$(($IMFILEINPUTFILES * $IMFILEINPUTFILESSTEPS))
-export IMFILECHECKTIMEOUT="20"
+export IMFILECHECKTIMEOUT="60"
 
 generate_conf
 add_conf '
@@ -46,7 +46,7 @@ if $msg contains "msgnum:" then
 # generate input files first. Note that rsyslog processes it as
 # soon as it start up (so the file should exist at that point).
 
-for i in `seq 1 $IMFILEINPUTFILES`;
+for i in $(seq 1 $IMFILEINPUTFILES);
 do
 	echo "Make $RSYSLOG_DYNNAME.input.dir$i"
 	mkdir $RSYSLOG_DYNNAME.input.dir$i
@@ -55,10 +55,10 @@ done
 # Start rsyslog now before adding more files
 startup
 
-for j in `seq 1 $IMFILEINPUTFILESSTEPS`;
+for j in $(seq 1 $IMFILEINPUTFILESSTEPS);
 do
 	echo "Loop Num $j"
-	for i in `seq 1 $IMFILEINPUTFILES`;
+	for i in $(seq 1 $IMFILEINPUTFILES);
 	do
 		echo "Make $RSYSLOG_DYNNAME.input.dir$i/dir$j/testdir"
 		mkdir $RSYSLOG_DYNNAME.input.dir$i/dir$j
@@ -69,11 +69,11 @@ do
 	ls -d $RSYSLOG_DYNNAME.input.*
 
 	# Check correct amount of input files each time
-	let IMFILEINPUTFILESALL=$(($IMFILEINPUTFILES * $j))
+	IMFILEINPUTFILESALL=$((IMFILEINPUTFILES * j))
 	content_check_with_count "HEADER msgnum:00000000:" $IMFILEINPUTFILESALL $IMFILECHECKTIMEOUT
 
 	# Delete all but first!
-	for i in `seq 1 $IMFILEINPUTFILES`;
+	for i in $(seq 1 $IMFILEINPUTFILES);
 	do
 		rm -rf $RSYSLOG_DYNNAME.input.dir$i/dir$j/testdir/file.logfile
 		rm -rr $RSYSLOG_DYNNAME.input.dir$i/dir$j

@@ -4,7 +4,7 @@
 export IMFILEINPUTFILES="10"
 export IMFILEINPUTFILESSTEPS="5"
 #export IMFILEINPUTFILESALL=$(($IMFILEINPUTFILES * $IMFILEINPUTFILESSTEPS))
-export IMFILECHECKTIMEOUT="20"
+export IMFILECHECKTIMEOUT="60"
 
 generate_conf
 add_conf '
@@ -65,7 +65,7 @@ do
 	ls -d $RSYSLOG_DYNNAME.input.*
 
 	# Check correct amount of input files each time
-	let IMFILEINPUTFILESALL=$(($IMFILEINPUTFILES * $j))
+	IMFILEINPUTFILESALL=$((IMFILEINPUTFILES * j))
 	content_check_with_count "HEADER msgnum:00000000:" $IMFILEINPUTFILESALL $IMFILECHECKTIMEOUT
 	
 	# Delete all but first!

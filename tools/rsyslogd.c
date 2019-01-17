@@ -196,7 +196,7 @@ rsyslogd_usage(void)
 			"use \"man rsyslogd\" for details. To run rsyslog "
 			"interactively, use \"rsyslogd -n\"\n"
 			"to run it in debug mode use \"rsyslogd -dn\"\n"
-			"For further information see http://www.rsyslog.com/doc\n");
+			"For further information see https://www.rsyslog.com/doc/\n");
 	exit(1); /* "good" exit - done to terminate usage() */
 }
 
@@ -516,8 +516,8 @@ tellChildReady(const int pipefd, const char *const msg)
 static void
 printVersion(void)
 {
-	printf("rsyslogd %s, ", VERSION);
-	printf("compiled with:\n");
+	printf("rsyslogd  " VERSION " (aka %4d.%2.2d) compiled with:\n",
+		2000 + VERSION_YEAR, VERSION_MONTH);
 	printf("\tPLATFORM:\t\t\t\t%s\n", PLATFORM_ID);
 	printf("\tPLATFORM (lsb_release -d):\t\t%s\n", PLATFORM_ID_LSB);
 #ifdef FEATURE_REGEXP
@@ -569,7 +569,7 @@ printVersion(void)
 	 * to wonder.
 	 */
 	printf("\tNumber of Bits in RainerScript integers: 64\n");
-	printf("\nSee http://www.rsyslog.com for more information.\n");
+	printf("\nSee https://www.rsyslog.com for more information.\n");
 }
 
 static rsRetVal
@@ -1627,7 +1627,7 @@ initAll(int argc, char **argv)
 		char bufStartUpMsg[512];
 		snprintf(bufStartUpMsg, sizeof(bufStartUpMsg),
 			 " [origin software=\"rsyslogd\" " "swVersion=\"" VERSION \
-			 "\" x-pid=\"%d\" x-info=\"http://www.rsyslog.com\"] start",
+			 "\" x-pid=\"%d\" x-info=\"https://www.rsyslog.com\"] start",
 			 (int) glblGetOurPid());
 		logmsgInternal(NO_ERRCODE, LOG_SYSLOG|LOG_INFO, (uchar*)bufStartUpMsg, 0);
 	}
@@ -1653,7 +1653,7 @@ finalize_it:
 		exit(0);
 	} else if(iRet != RS_RET_OK) {
 		fprintf(stderr, "rsyslogd: run failed with error %d (see rsyslog.h "
-				"or try http://www.rsyslog.com/e/%d to learn what that number means)\n",
+				"or try https://www.rsyslog.com/e/%d to learn what that number means)\n",
 				iRet, iRet*-1);
 		exit(1);
 	}
@@ -1762,7 +1762,7 @@ doHUP(void)
 	if(ourConf->globals.bLogStatusMsgs) {
 		snprintf(buf, sizeof(buf),
 			 " [origin software=\"rsyslogd\" " "swVersion=\"" VERSION
-			 "\" x-pid=\"%d\" x-info=\"http://www.rsyslog.com\"] rsyslogd was HUPed",
+			 "\" x-pid=\"%d\" x-info=\"https://www.rsyslog.com\"] rsyslogd was HUPed",
 			 (int) glblGetOurPid());
 			errno = 0;
 		logmsgInternal(NO_ERRCODE, LOG_SYSLOG|LOG_INFO, (uchar*)buf, 0);
@@ -1884,7 +1884,7 @@ wait_timeout(void)
 						dosrcpacket(SRC_OK,NULL,sizeof(struct srcrep));
 						(void) snprintf(buf, sizeof(buf) / sizeof(char), " [origin "
 							"software=\"rsyslogd\" " "swVersion=\"" VERSION \
-							"\" x-pid=\"%d\" x-info=\"http://www.rsyslog.com\"]"
+							"\" x-pid=\"%d\" x-info=\"https://www.rsyslog.com\"]"
 							" exiting due to stopsrc.",
 							(int) glblGetOurPid());
 						errno = 0;
@@ -1908,6 +1908,21 @@ wait_timeout(void)
 #endif /* AIXPORT : SRC end */
 }
 
+
+static void
+reapChild(void)
+{
+	pid_t child;
+	do {
+		int status;
+		child = waitpid(-1, &status, WNOHANG);
+		if(child != -1 && child != 0) {
+			glblReportChildProcessExit(NULL, child, status);
+		}
+	} while(child > 0);
+}
+
+
 /* This is the main processing loop. It is called after successful initialization.
  * When it returns, the syslogd terminates.
  * Its sole function is to provide some housekeeping things. The real work is done
@@ -1918,21 +1933,12 @@ mainloop(void)
 {
 	time_t tTime;
 
-
 	do {
 		processImInternal();
 		wait_timeout();
+
 		if(bChildDied) {
-			pid_t child;
-			do {
-				child = waitpid(-1, NULL, WNOHANG);
-				DBGPRINTF("rsyslogd: mainloop waitpid (with-no-hang) returned %u\n",
-					(unsigned) child);
-				if (child != -1 && child != 0) {
-					LogMsg(0, RS_RET_OK, LOG_INFO, "Child %d has terminated, reaped "
-						"by main-loop.", (unsigned) child);
-				}
-			} while(child > 0);
+			reapChild();
 			bChildDied = 0;
 		}
 
@@ -1992,7 +1998,7 @@ deinitAll(void)
 	if(bFinished && runConf->globals.bLogStatusMsgs) {
 		(void) snprintf(buf, sizeof(buf),
 		 " [origin software=\"rsyslogd\" " "swVersion=\"" VERSION \
-		 "\" x-pid=\"%d\" x-info=\"http://www.rsyslog.com\"]" " exiting on signal %d.",
+		 "\" x-pid=\"%d\" x-info=\"https://www.rsyslog.com\"]" " exiting on signal %d.",
 		 (int) glblGetOurPid(), bFinished);
 		errno = 0;
 		logmsgInternal(NO_ERRCODE, LOG_SYSLOG|LOG_INFO, (uchar*)buf, 0);
