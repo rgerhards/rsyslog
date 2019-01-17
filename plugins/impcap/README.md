@@ -47,6 +47,7 @@ The instances parameters are the following:
 - **buffer_timeout** [int/default=10] sets the maximum timeout (in ms) between each packet buffering. Buffer will be processed if either this or **packet_count** is reached. This applies only when **no_buffer** is *off*.
 - **packet_count** [int/default=5] sets the number of packets to wait for during buffering. Buffer will be processed if either this or **buffer_timeout** is reached. This applies only when **no_buffer** is *off*.
 - **tag** [string/default=none] sets a specific tag to apply to messages, for rsyslog filtering.
+- **ruleset** [string/default=none] sets a specific ruleset to apply to messages, for rsyslog filtering.
 
 ##Getting parsed metadata
 The metadata created by impcap is added to rsyslog messages adding a custom json field.
