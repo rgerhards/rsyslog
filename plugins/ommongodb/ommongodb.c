@@ -403,6 +403,13 @@ BSONAppendJSONObject(bson_t *doc, const char *name, struct json_object *json)
 				ts = 1000 * (int64) epoch;
 				return BSON_APPEND_DATE_TIME (doc, name, ts);
 			}
+			else if (strptime(json_object_get_string(json), "%Y-%m-%dT%H:%M:%S%Z", &tm) != NULL ) {
+				time_t epoch;
+				int64 ts;
+				epoch = mktime(&tm) ;
+				ts = 1000 * (int64) epoch;
+				return BSON_APPEND_DATE_TIME (doc, name, ts);
+			}
 		}
 		else {
 			return BSON_APPEND_UTF8(doc, name, json_object_get_string(json));
