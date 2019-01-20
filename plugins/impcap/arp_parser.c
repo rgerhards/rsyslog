@@ -29,12 +29,12 @@
 #include "parser.h"
 
 struct arp_header_s {
-  uint16_t hwType;
-  uint16_t pType;
-  uint8_t hwAddrLen;
-  uint8_t pAddrLen;
-  uint16_t opCode;
-  uint8_t pAddr[];
+    uint16_t hwType;
+    uint16_t pType;
+    uint8_t hwAddrLen;
+    uint8_t pAddrLen;
+    uint16_t opCode;
+    uint8_t pAddr[];
 };
 
 typedef struct arp_header_s arp_header_t;
@@ -58,7 +58,7 @@ data_ret_t* arp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 
     if(pktSize < 28) { /* too small for ARP header*/
         DBGPRINTF("ARP packet too small : %d\n", pktSize);
-        RETURN_DATA_AFTER(0)
+        RETURN_DATA_AFTER(0);
     }
 
     arp_header_t *arp_header = (arp_header_t *)packet;
@@ -87,7 +87,7 @@ data_ret_t* arp_parse(const uchar *packet, int pktSize, struct json_object *jpar
         json_object_object_add(jparent, "ARP_pDst", json_object_new_string((char*)pAddrDst));
     }
 
-    RETURN_DATA_AFTER(28)
+    RETURN_DATA_AFTER(28);
 }
 
 /*
@@ -110,7 +110,7 @@ data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jpa
 
     if(pktSize < 28) { /* too small for RARP header*/
         DBGPRINTF("RARP packet too small : %d\n", pktSize);
-        RETURN_DATA_AFTER(0)
+        RETURN_DATA_AFTER(0);
     }
 
     arp_header_t *rarp_header = (arp_header_t *)packet;
@@ -137,5 +137,5 @@ data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jpa
         json_object_object_add(jparent, "RARP_pDst", json_object_new_string((char*)pAddrDst));
     }
 
-    RETURN_DATA_AFTER(28)
+    RETURN_DATA_AFTER(28);
 }
