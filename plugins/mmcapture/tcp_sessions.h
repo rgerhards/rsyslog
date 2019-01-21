@@ -41,22 +41,22 @@
 #define HAS_TCP_FLAG(flags, flag) ((strchr(flags, flag) == NULL) ? 0 : 1)
 
 typedef struct tcp_connection_s{
-  uint16_t hPort;
-  uint32_t seqNum;
-  uint32_t ackNum;
+    uint16_t hPort;
+    uint32_t seqNum;
+    uint32_t ackNum;
 }tcp_connection;
 
 typedef struct tcp_session_s{
-  struct tcp_session_s *prevSession;
-  tcp_connection *cCon;
-  tcp_connection *sCon;
-  struct tcp_session_s *nextSession;
+    struct tcp_session_s *prevSession;
+    tcp_connection *cCon;
+    tcp_connection *sCon;
+    struct tcp_session_s *nextSession;
 }tcp_session;
 
 typedef struct tcp_session_list_s{
-  uint32_t activeSessions;
-  tcp_session *head;
-  tcp_session *tail;
+    uint32_t activeSessions;
+    tcp_session *head;
+    tcp_session *tail;
 }tcp_session_list;
 
 tcp_session_list* initTcp();

@@ -59,25 +59,25 @@ DEF_OMOD_STATIC_DATA
 #define IMPCAP_METADATA "!impcap"
 #define IMPCAP_DATA     "!data"
 
-static char* proto_list[] = {
-  "http",
-  "ftp",
-  "smb"
+static char *proto_list[] = {
+	"http",
+	"ftp",
+	"smb"
 };
 
 /* conf structures */
 
 typedef struct instanceData_s {
-  uchar* protocol;
-  uchar* folder;
+	uchar *protocol;
+	uchar *folder;
 } instanceData;
 
 typedef struct wrkrInstanceData {
-  instanceData *pData;
+	instanceData *pData;
 } wrkrInstanceData_t;
 
 struct modConfData_s {
-  rsconf_t *pConf;
+	rsconf_t *pConf;
 };
 
 static modConfData_t *loadModConf = NULL;
@@ -85,108 +85,107 @@ static modConfData_t *runModConf = NULL;
 
 /* input instance parameters */
 static struct cnfparamdescr actpdescr[] = {
-	{ "protocol", eCmdHdlrString, 0 },
-  { "folder", eCmdHdlrString, 0 }
+	{"protocol", eCmdHdlrString, 0},
+	{"folder",   eCmdHdlrString, 0}
 };
-static struct cnfparamblk actpblk =
-{ CNFPARAMBLK_VERSION,
-  sizeof(actpdescr)/sizeof(struct cnfparamdescr),
-  actpdescr
+static struct cnfparamblk actpblk = {
+	CNFPARAMBLK_VERSION,
+	sizeof(actpdescr) / sizeof(struct cnfparamdescr),
+	actpdescr
 };
 
 /* init instance, set parameters */
 
 BEGINbeginCnfLoad
-  DBGPRINTF("entering beginCnfLoad\n");
+	DBGPRINTF("entering beginCnfLoad\n");
 CODESTARTbeginCnfLoad
 	loadModConf = pModConf;
 	pModConf->pConf = pConf;
 ENDbeginCnfLoad
 
 BEGINendCnfLoad
-DBGPRINTF("entering endCnfLoad\n");
+	DBGPRINTF("entering endCnfLoad\n");
 CODESTARTendCnfLoad
 ENDendCnfLoad
 
 BEGINcheckCnf
-DBGPRINTF("entering checkCnf\n");
+	DBGPRINTF("entering checkCnf\n");
 CODESTARTcheckCnf
 ENDcheckCnf
 
 BEGINactivateCnf
-DBGPRINTF("entering activateCnf\n");
+	DBGPRINTF("entering activateCnf\n");
 CODESTARTactivateCnf
 	runModConf = pModConf;
 ENDactivateCnf
 
 BEGINfreeCnf
-DBGPRINTF("entering freeCnf\n");
+	DBGPRINTF("entering freeCnf\n");
 CODESTARTfreeCnf
 ENDfreeCnf
 
 /* create instances */
 
 BEGINcreateInstance
-DBGPRINTF("entering createInstance\n");
+	DBGPRINTF("entering createInstance\n");
 CODESTARTcreateInstance
-  pData->protocol = NULL;
-  pData->folder = "/var/log/rsyslog/";  /* default folder for captured files */
+	pData->protocol = NULL;
+	pData->folder = "/var/log/rsyslog/";  /* default folder for captured files */
 ENDcreateInstance
 
 BEGINcreateWrkrInstance
-DBGPRINTF("entering createWrkrInstance\n");
+	DBGPRINTF("entering createWrkrInstance\n");
 CODESTARTcreateWrkrInstance
 ENDcreateWrkrInstance
 
 BEGINfreeInstance
-DBGPRINTF("entering freeInstance\n");
+	DBGPRINTF("entering freeInstance\n");
 CODESTARTfreeInstance
 ENDfreeInstance
 
 BEGINfreeWrkrInstance
-DBGPRINTF("entering freeWrkrInstance\n");
+	DBGPRINTF("entering freeWrkrInstance\n");
 CODESTARTfreeWrkrInstance
 ENDfreeWrkrInstance
 
 BEGINnewActInst
-DBGPRINTF("entering newActInst\n");
-  struct cnfparamvals *pvals;
-  uint16_t i;
+	DBGPRINTF("entering newActInst\n");
+	struct cnfparamvals *pvals;
+	uint16_t i;
 CODESTARTnewActInst
-  if((pvals = nvlstGetParams(lst, &actpblk, NULL)) == NULL) {
-    ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
-  }
+	if((pvals = nvlstGetParams(lst, &actpblk, NULL)) == NULL) {
+		ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
+	}
 
-CODE_STD_STRING_REQUESTnewActInst(1)
-  CHKiRet(OMSRsetEntry(*ppOMSR, 0, NULL, OMSR_TPL_AS_MSG));
-  CHKiRet(createInstance(&pData));
+	CODE_STD_STRING_REQUESTnewActInst(1)
+	CHKiRet(OMSRsetEntry(*ppOMSR, 0, NULL, OMSR_TPL_AS_MSG));
+	CHKiRet(createInstance(&pData));
 
-  for(i = 0; i < actpblk.nParams; ++i) {
-    if(!pvals[i].bUsed)
-      continue;
+	for(i = 0 ; i<actpblk.nParams ; ++i) {
+		if(!pvals[i].bUsed)
+			continue;
 
-    if(!strcmp(actpblk.descr[i].name, "protocol")) {
-      pData->protocol = es_str2cstr(pvals[i].val.d.estr, NULL);
-      DBGPRINTF("protocol set to '%s'", pData->protocol);
-    }
-    else if(!strcmp(actpblk.descr[i].name, "folder")) {
-      pData->folder = es_str2cstr(pvals[i].val.d.estr, NULL);
-      DBGPRINTF("folder set to '%s'", pData->folder);
+		if(!strcmp(actpblk.descr[i].name, "protocol")) {
+			pData->protocol = es_str2cstr(pvals[i].val.d.estr, NULL);
+			DBGPRINTF("protocol set to '%s'", pData->protocol);
+		}
+		else if(!strcmp(actpblk.descr[i].name, "folder")) {
+			pData->folder = es_str2cstr(pvals[i].val.d.estr, NULL);
+			DBGPRINTF("folder set to '%s'", pData->folder);
+		}
+		else {
+			LogError(0, RS_RET_PARAM_ERROR, "mmcapture: unhandled parameter '%s'", actpblk.descr[i].name);
+		}
+	}
 
-    }
-    else {
-      LogError(0, RS_RET_PARAM_ERROR, "mmcapture: unhandled parameter '%s'", actpblk.descr[i].name);
-    }
-  }
+	if(createFolder(pData->folder)){
+		ABORT_FINALIZE(RS_RET_ERR);
+	}
 
-  if(createFolder(pData->folder)){
-    ABORT_FINALIZE(RS_RET_ERR);
-  }
-
-  if(initTcp() == NULL){
-    ABORT_FINALIZE(RS_RET_ERR);
-  }
-CODE_STD_FINALIZERnewActInst
+	if(initTcp() == NULL){
+		ABORT_FINALIZE(RS_RET_ERR);
+	}
+	CODE_STD_FINALIZERnewActInst
 ENDnewActInst
 
 /* runtime functions */
@@ -203,32 +202,29 @@ ENDnewActInst
  *  The length of this array is always half the length given in parameter
 */
 char *hexToData(char *hex, uint32_t length) {
-  char *retBuf = malloc(length/2*sizeof(char));
-  int i;
-  DBGPRINTF("hexToData\n");
-  DBGPRINTF("length %d\n", length);
+	char *retBuf = malloc(length / 2 * sizeof(char));
+	int i;
+	DBGPRINTF("hexToData\n");
+	DBGPRINTF("length %d\n", length);
 
-  for(i = 0; i < length; ++i) {
-    if(i%2) {
-      retBuf[i/2] <<= 4;  /* bitwise left shift */
-      if(hex[i] >= '0' && hex[i] <= '9') {
-        retBuf[i/2] += hex[i] - '0';
-      }
-      else if(hex[i] >= 'A' && hex[i] <= 'F') {
-        retBuf[i/2] += hex[i] - 'A' + 10;
-      }
-    }
-    else {
-      if(hex[i] >= '0' && hex[i] <= '9') {
-        retBuf[i/2] = hex[i] - '0';
-      }
-      else if(hex[i] >= 'A' && hex[i] <= 'F') {
-        retBuf[i/2] = hex[i] - 'A' + 10;
-      }
-    }
-  }
+	for (i = 0; i < length; ++i) {
+		if (i % 2) {
+			retBuf[i / 2] <<= 4;  /* bitwise left shift */
+			if (hex[i] >= '0' && hex[i] <= '9') {
+				retBuf[i / 2] += hex[i] - '0';
+			} else if (hex[i] >= 'A' && hex[i] <= 'F') {
+				retBuf[i / 2] += hex[i] - 'A' + 10;
+			}
+		} else {
+			if (hex[i] >= '0' && hex[i] <= '9') {
+				retBuf[i / 2] = hex[i] - '0';
+			} else if (hex[i] >= 'A' && hex[i] <= 'F') {
+				retBuf[i / 2] = hex[i] - 'A' + 10;
+			}
+		}
+	}
 
-  return retBuf;
+	return retBuf;
 }
 
 /*
@@ -246,33 +242,33 @@ char *hexToData(char *hex, uint32_t length) {
  *  or zero if no impcap payload data was found
 */
 int getImpcapPayload(smsg_t *pMsg, tcp_packet *pData) {
-  struct json_object *pJson = NULL;
-  struct json_object *obj = NULL;
-  int localRet;
-  size_t contentLength;
-  char *content;
+	struct json_object *pJson = NULL;
+	struct json_object *obj = NULL;
+	int localRet;
+	size_t contentLength;
+	char *content;
 
-  DBGPRINTF("entered getImpcapPayload\n");
+	DBGPRINTF("entered getImpcapPayload\n");
 
-  assert(pData->pload != NULL);
+	assert(pData->pload != NULL);
 
-  msgPropDescr_t *pDesc = malloc(sizeof(msgPropDescr_t));
-  msgPropDescrFill(pDesc, (uchar*)IMPCAP_DATA, strlen(IMPCAP_DATA));
-  localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
+	msgPropDescr_t *pDesc = malloc(sizeof(msgPropDescr_t));
+	msgPropDescrFill(pDesc, (uchar *) IMPCAP_DATA, strlen(IMPCAP_DATA));
+	localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
 
-  if(localRet == 0) {
-    if(fjson_object_object_get_ex(pJson, "length", &obj)) {
-      contentLength = fjson_object_get_int64(obj);
-      if(fjson_object_object_get_ex(pJson, "content", &obj)) {
-        content = fjson_object_get_string(obj);
-        pData->pload->data = hexToData(content, contentLength);
-        pData->pload->length = contentLength/2;
-        return pData->pload->length;
-      }
-    }
-  }
+	if (localRet == 0) {
+		if (fjson_object_object_get_ex(pJson, "length", &obj)) {
+			contentLength = fjson_object_get_int64(obj);
+			if (fjson_object_object_get_ex(pJson, "content", &obj)) {
+				content = fjson_object_get_string(obj);
+				pData->pload->data = hexToData(content, contentLength);
+				pData->pload->length = contentLength / 2;
+				return pData->pload->length;
+			}
+		}
+	}
 
-  return 0;
+	return 0;
 }
 
 /*
@@ -290,85 +286,86 @@ int getImpcapPayload(smsg_t *pMsg, tcp_packet *pData) {
  *  or zero if no impcap metadata was found
 */
 int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData) {
-  int iRet = 0;
-  int localRet;
-  struct json_object *pJson = NULL;
-  struct json_object *obj = NULL;
+	int iRet = 0;
+	int localRet;
+	struct json_object *pJson = NULL;
+	struct json_object *obj = NULL;
 
-  DBGPRINTF("entered getImpcapMetadata\n");
+	DBGPRINTF("entered getImpcapMetadata\n");
 
-  msgPropDescr_t *pDesc = malloc(sizeof(msgPropDescr_t));
+	msgPropDescr_t *pDesc = malloc(sizeof(msgPropDescr_t));
 
-  msgPropDescrFill(pDesc, (uchar*)IMPCAP_METADATA, strlen(IMPCAP_METADATA));
-  localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
+	msgPropDescrFill(pDesc, (uchar *) IMPCAP_METADATA, strlen(IMPCAP_METADATA));
+	localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
 
-  if(localRet == 0) {
-    if(fjson_object_object_get_ex(pJson, "IP_proto", &obj)) {
-      if(fjson_object_get_int(obj) == TCP_PROTO) {
-        getImpcapPayload(pMsg, pData);
-        iRet = getTCPMetadata(pJson, pData);
-      }
-    }
-  }
+	if (localRet == 0) {
+		if (fjson_object_object_get_ex(pJson, "IP_proto", &obj)) {
+			if (fjson_object_get_int(obj) == TCP_PROTO) {
+				getImpcapPayload(pMsg, pData);
+				iRet = getTCPMetadata(pJson, pData);
+			}
+		}
+	}
 
-  msgPropDescrDestruct(pDesc);
-  return iRet;
+	msgPropDescrDestruct(pDesc);
+	return iRet;
 }
 
 BEGINdoAction_NoStrings
-DBGPRINTF("entering doAction\n");
-  smsg_t **ppMsg = (smsg_t **)pMsgData;
-  smsg_t *pMsg = *ppMsg;
+	DBGPRINTF("entering doAction\n");
+	smsg_t **ppMsg = (smsg_t **) pMsgData;
+	smsg_t *pMsg = *ppMsg;
 CODESTARTdoAction
-  tcp_packet *pData = createPacket();
+	tcp_packet *pData = createPacket();
 
-  if(getImpcapMetadata(pMsg, pData)){
-    checkTcpSessions(pData);
-  }
+	if(getImpcapMetadata(pMsg, pData)){
+		checkTcpSessions(pData);
+	}
 
-  freePacket(pData);
+	freePacket(pData);
 ENDdoAction
 
 BEGINparseSelectorAct
-DBGPRINTF("entering parseSelectorAct\n");
+	DBGPRINTF("entering parseSelectorAct\n");
 CODESTARTparseSelectorAct
-CODE_STD_STRING_REQUESTparseSelectorAct(1)
-CODE_STD_FINALIZERparseSelectorAct
+	CODE_STD_STRING_REQUESTparseSelectorAct(1)
+	CODE_STD_FINALIZERparseSelectorAct
 ENDparseSelectorAct
 
 BEGINtryResume
-DBGPRINTF("entering tryResume\n");
+	DBGPRINTF("entering tryResume\n");
 CODESTARTtryResume
 ENDtryResume
 
 BEGINisCompatibleWithFeature
-DBGPRINTF("entering isCompatibleWithFeature\n");
+	DBGPRINTF("entering isCompatibleWithFeature\n");
 CODESTARTisCompatibleWithFeature
 ENDisCompatibleWithFeature
 
 BEGINdbgPrintInstInfo
-DBGPRINTF("entering dbgPrintInstInfo\n");
+	DBGPRINTF("entering dbgPrintInstInfo\n");
 CODESTARTdbgPrintInstInfo
 	DBGPRINTF("mmcapture\n");
 ENDdbgPrintInstInfo
 
 BEGINmodExit
 CODESTARTmodExit
-  DBGPRINTF("mmcapture: exit\n");
+	DBGPRINTF("mmcapture: exit\n");
 ENDmodExit
 
 /* declaration of functions */
 
 BEGINqueryEtryPt
 CODESTARTqueryEtryPt
-CODEqueryEtryPt_STD_OMOD_QUERIES
-CODEqueryEtryPt_STD_OMOD8_QUERIES
-CODEqueryEtryPt_STD_CONF2_OMOD_QUERIES
-CODEqueryEtryPt_STD_CONF2_QUERIES
+	CODEqueryEtryPt_STD_OMOD_QUERIES
+	CODEqueryEtryPt_STD_OMOD8_QUERIES
+	CODEqueryEtryPt_STD_CONF2_OMOD_QUERIES
+	CODEqueryEtryPt_STD_CONF2_QUERIES
 ENDqueryEtryPt
 
 BEGINmodInit()
+
 CODESTARTmodInit
-  DBGPRINTF("mmcapture: init\n");
-  *ipIFVersProvided = CURR_MOD_IF_VERSION;
+	DBGPRINTF("mmcapture: init\n");
+	*ipIFVersProvided = CURR_MOD_IF_VERSION;
 ENDmodInit
