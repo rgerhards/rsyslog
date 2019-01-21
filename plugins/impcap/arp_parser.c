@@ -73,7 +73,8 @@ data_ret_t* arp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 		char hwAddrSrc[20], hwAddrDst[20];
 
 		ether_ntoa_r((struct eth_addr *)arp_header->pAddr, hwAddrSrc);
-		ether_ntoa_r((struct eth_addr *)(arp_header->pAddr+arp_header->hwAddrLen+arp_header->pAddrLen), hwAddrDst);
+		ether_ntoa_r((struct eth_addr *)(arp_header->pAddr+arp_header->hwAddrLen+arp_header->pAddrLen),
+		             hwAddrDst);
 
 		json_object_object_add(jparent, "ARP_hwSrc", json_object_new_string((char*)hwAddrSrc));
 		json_object_object_add(jparent, "ARP_hwDst", json_object_new_string((char*)hwAddrDst));
@@ -81,7 +82,8 @@ data_ret_t* arp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 
 	if(ntohs(arp_header->pType) == ETHERTYPE_IP) {
 		inet_ntop(AF_INET, (void *)(arp_header->pAddr+arp_header->hwAddrLen), pAddrSrc, 20);
-		inet_ntop(AF_INET, (void *)(arp_header->pAddr+2*arp_header->hwAddrLen+arp_header->pAddrLen), pAddrDst, 20);
+		inet_ntop(AF_INET, (void *)(arp_header->pAddr+2*arp_header->hwAddrLen+arp_header->pAddrLen),
+		          pAddrDst, 20);
 
 		json_object_object_add(jparent, "ARP_pSrc", json_object_new_string((char*)pAddrSrc));
 		json_object_object_add(jparent, "ARP_pDst", json_object_new_string((char*)pAddrDst));
@@ -123,7 +125,9 @@ data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jpa
 
 	if(ntohs(rarp_header->hwType) == 1) { /* ethernet addresses */
 		char *hwAddrSrc = ether_ntoa((struct eth_addr *)rarp_header->pAddr);
-		char *hwAddrDst = ether_ntoa((struct eth_addr *)(rarp_header->pAddr+rarp_header->hwAddrLen+rarp_header->pAddrLen));
+		char *hwAddrDst = ether_ntoa((struct eth_addr *)(rarp_header->pAddr +
+														rarp_header->hwAddrLen +
+														rarp_header->pAddrLen));
 
 		json_object_object_add(jparent, "RARP_hwSrc", json_object_new_string((char*)hwAddrSrc));
 		json_object_object_add(jparent, "RARP_hwDst", json_object_new_string((char*)hwAddrDst));
@@ -131,7 +135,8 @@ data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jpa
 
 	if(ntohs(rarp_header->pType) == ETHERTYPE_IP) {
 		inet_ntop(AF_INET, (void *)(rarp_header->pAddr+rarp_header->hwAddrLen), pAddrSrc, 20);
-		inet_ntop(AF_INET, (void *)(rarp_header->pAddr+2*rarp_header->hwAddrLen+rarp_header->pAddrLen), pAddrDst, 20);
+		inet_ntop(AF_INET, (void *)(rarp_header->pAddr+2*rarp_header->hwAddrLen+rarp_header->pAddrLen),
+		          					pAddrDst, 20);
 
 		json_object_object_add(jparent, "RARP_pSrc", json_object_new_string((char*)pAddrSrc));
 		json_object_object_add(jparent, "RARP_pDst", json_object_new_string((char*)pAddrDst));

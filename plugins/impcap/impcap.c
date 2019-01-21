@@ -340,7 +340,8 @@ CODESTARTactivateCnf
 		else if(inst->interface != NULL) {
 			dev = pcap_create((const char *) inst->interface, errBuf);
 			if(dev == NULL) {
-				LogError(0, RS_RET_LOAD_ERROR, "pcap: error while creating packet capture: '%s'", errBuf);
+				LogError(0, RS_RET_LOAD_ERROR, "pcap: error while creating packet capture: '%s'",
+												errBuf);
 				ABORT_FINALIZE(RS_RET_LOAD_ERROR);
 			}
 
@@ -399,10 +400,12 @@ CODESTARTactivateCnf
 					LogError(0, RS_RET_LOAD_ERROR, "device doesn't exist");
 					break;
 				case PCAP_ERROR_PERM_DENIED:
-					LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to open capture interface");
+					LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to open capture "
+												   "interface");
 					break;
 				case PCAP_ERROR_PROMISC_PERM_DENIED:
-					LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to put interface in promiscuous mode");
+					LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to put interface "
+												   "in promiscuous mode");
 					break;
 				case PCAP_ERROR_RFMON_NOTSUP:
 					LogError(0, RS_RET_LOAD_ERROR, "interface doesn't support monitor mode");
@@ -619,12 +622,10 @@ finalize_it:
 BEGINafterRun
 	instanceConf_t *inst;
 CODESTARTafterRun
-	for(inst = loadModConf->root ;
-            inst !=NULL ;
-			inst = inst->next) {
+	for(inst = loadModConf->root ; inst !=NULL ; inst = inst->next) {
 		pcap_close(inst->device);
 	}
-	if(pInputName != NULL){
+	if(pInputName != NULL) {
 		prop.Destruct(&pInputName);
 	}
 ENDafterRun
