@@ -126,8 +126,8 @@ data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jpa
 	if(ntohs(rarp_header->hwType) == 1) { /* ethernet addresses */
 		char *hwAddrSrc = ether_ntoa((struct eth_addr *)rarp_header->pAddr);
 		char *hwAddrDst = ether_ntoa((struct eth_addr *)(rarp_header->pAddr +
-														rarp_header->hwAddrLen +
-														rarp_header->pAddrLen));
+									 rarp_header->hwAddrLen +
+									 rarp_header->pAddrLen));
 
 		json_object_object_add(jparent, "RARP_hwSrc", json_object_new_string((char*)hwAddrSrc));
 		json_object_object_add(jparent, "RARP_hwDst", json_object_new_string((char*)hwAddrDst));

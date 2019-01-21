@@ -405,7 +405,7 @@ CODESTARTactivateCnf
 					break;
 				case PCAP_ERROR_PROMISC_PERM_DENIED:
 					LogError(0, RS_RET_LOAD_ERROR, "elevated privilege needed to put interface "
-												   "in promiscuous mode");
+						     "in promiscuous mode");
 					break;
 				case PCAP_ERROR_RFMON_NOTSUP:
 					LogError(0, RS_RET_LOAD_ERROR, "interface doesn't support monitor mode");
