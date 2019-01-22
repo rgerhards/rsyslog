@@ -96,6 +96,8 @@ else
 	--enable-usertools \
 	--enable-pmnull \
 	--enable-pmnormalize \
+	--enable-impcap \
+	--enable-mmcapture \
 	"
 fi
 pwd
