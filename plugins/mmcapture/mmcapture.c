@@ -58,6 +58,7 @@ DEF_OMOD_STATIC_DATA
 
 #define IMPCAP_METADATA "!impcap"
 #define IMPCAP_DATA     "!data"
+#define DEFAULT_LOG_DIR "/var/log/rsyslog/"
 
 static char *proto_list[] = {
 	"http",
@@ -80,8 +81,8 @@ struct modConfData_s {
 	rsconf_t *pConf;
 };
 
-static modConfData_t *loadModConf = NULL;
-static modConfData_t *runModConf = NULL;
+static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current load process */
+static modConfData_t *runModConf = NULL; /* modConf ptr to use for the current exec process */
 
 /* input instance parameters */
 static struct cnfparamdescr actpdescr[] = {
@@ -130,7 +131,7 @@ BEGINcreateInstance
 	DBGPRINTF("entering createInstance\n");
 CODESTARTcreateInstance
 	pData->protocol = NULL;
-	pData->folder = "/var/log/rsyslog/";  /* default folder for captured files */
+	pData->folder = (uchar *)DEFAULT_LOG_DIR;  /* default folder for captured files */
 ENDcreateInstance
 
 BEGINcreateWrkrInstance
@@ -166,11 +167,25 @@ CODESTARTnewActInst
 			continue;
 
 		if(!strcmp(actpblk.descr[i].name, "protocol")) {
-			pData->protocol = es_str2cstr(pvals[i].val.d.estr, NULL);
+			pData->protocol = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
+			int cpt = 0;
+			char *tmp = NULL;
+			short int protocol_ok = 0;
+			while( (tmp=proto_list[cpt++]) != NULL ) {
+				if( strncmp((const char *)pData->protocol, tmp, strlen(tmp)+1) == 0 ) {
+					protocol_ok = 1;
+					break;
+				}
+			}
+			if( !protocol_ok ) {
+				LogError(0, RS_RET_PARAM_NOT_PERMITTED, "mmcapture: protocol value '%s' "
+						 "is not allowed.", pData->protocol);
+				ABORT_FINALIZE(RS_RET_PARAM_NOT_PERMITTED);
+			}
 			DBGPRINTF("protocol set to '%s'", pData->protocol);
 		}
 		else if(!strcmp(actpblk.descr[i].name, "folder")) {
-			pData->folder = es_str2cstr(pvals[i].val.d.estr, NULL);
+			pData->folder = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
 			DBGPRINTF("folder set to '%s'", pData->folder);
 		}
 		else {
@@ -178,7 +193,7 @@ CODESTARTnewActInst
 		}
 	}
 
-	if(createFolder(pData->folder)){
+	if(createFolder((char *)pData->folder)){
 		ABORT_FINALIZE(RS_RET_ERR);
 	}
 
@@ -203,7 +218,7 @@ ENDnewActInst
 */
 char *hexToData(char *hex, uint32_t length) {
 	char *retBuf = malloc(length / 2 * sizeof(char));
-	int i;
+	uint32_t i;
 	DBGPRINTF("hexToData\n");
 	DBGPRINTF("length %d\n", length);
 
@@ -243,7 +258,7 @@ char *hexToData(char *hex, uint32_t length) {
 */
 int getImpcapPayload(smsg_t *pMsg, tcp_packet *pData) {
 	struct json_object *pJson = NULL;
-	struct json_object *obj = NULL;
+	struct json_object *tmpObj = NULL;
 	int localRet;
 	size_t contentLength;
 	char *content;
@@ -257,12 +272,12 @@ int getImpcapPayload(smsg_t *pMsg, tcp_packet *pData) {
 	localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
 
 	if (localRet == 0) {
-		if (fjson_object_object_get_ex(pJson, "length", &obj)) {
-			contentLength = fjson_object_get_int64(obj);
-			if (fjson_object_object_get_ex(pJson, "content", &obj)) {
-				content = fjson_object_get_string(obj);
-				pData->pload->data = hexToData(content, contentLength);
-				pData->pload->length = contentLength / 2;
+		if (fjson_object_object_get_ex(pJson, "length", &tmpObj)) {
+			contentLength = fjson_object_get_int64(tmpObj);
+			if (fjson_object_object_get_ex(pJson, "content", &tmpObj)) {
+				content = (char *)fjson_object_get_string(tmpObj);
+				pData->pload->data = (uint8_t *)hexToData(content, contentLength);
+				pData->pload->length = (uint16_t)contentLength / 2;
 				return pData->pload->length;
 			}
 		}
@@ -289,7 +304,7 @@ int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData) {
 	int iRet = 0;
 	int localRet;
 	struct json_object *pJson = NULL;
-	struct json_object *obj = NULL;
+	struct json_object *tmpObj = NULL;
 
 	DBGPRINTF("entered getImpcapMetadata\n");
 
@@ -299,8 +314,8 @@ int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData) {
 	localRet = msgGetJSONPropJSON(pMsg, pDesc, &pJson);
 
 	if (localRet == 0) {
-		if (fjson_object_object_get_ex(pJson, "IP_proto", &obj)) {
-			if (fjson_object_get_int(obj) == TCP_PROTO) {
+		if (fjson_object_object_get_ex(pJson, "IP_proto", &tmpObj)) {
+			if (fjson_object_get_int(tmpObj) == TCP_PROTO) {
 				getImpcapPayload(pMsg, pData);
 				iRet = getTCPMetadata(pJson, pData);
 			}

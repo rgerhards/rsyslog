@@ -80,12 +80,12 @@ static const char *ftp_cmds[] = {
  * This function searches for a valid command in the header (from the list defined in ftp_cmds[])
  * and returns either the command or a NULL pointer
 */
-uchar *check_Command_ftp(uchar *first_part_packet) {
+static const char *check_Command_ftp(uchar *first_part_packet) {
 	DBGPRINTF("in check_Command_ftp\n");
 	DBGPRINTF("first_part_packet : '%s' \n", first_part_packet);
 	int i = 0;
 	for (i = 0; ftp_cmds[i] != NULL; i++) {
-		if (strcmp(first_part_packet, ftp_cmds[i]) == 0) {
+		if (strncmp((const char *)first_part_packet, ftp_cmds[i], strlen((const char *)ftp_cmds[i])+1) == 0) {
 			return ftp_cmds[i];
 		}
 	}
@@ -96,12 +96,12 @@ uchar *check_Command_ftp(uchar *first_part_packet) {
  * This function searches for a valid code in the header (from the list defined in ftp_cds[])
  * and returns either the command or a NULL pointer
 */
-int check_Code_ftp(uchar *first_part_packet) {
+static int check_Code_ftp(uchar *first_part_packet) {
 	DBGPRINTF("in check_Code_ftp\n");
 	DBGPRINTF("first_part_packet : %s \n", first_part_packet);
 	int i = 0;
 	for (i = 0; ftp_cds[i] != 0; i++) {
-		if (strtol(first_part_packet, NULL, 10) == ftp_cds[i]) {
+		if (strtol((const char *)first_part_packet, NULL, 10) == ftp_cds[i]) {
 			return ftp_cds[i];
 		}
 	}
@@ -131,22 +131,21 @@ data_ret_t *ftp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	uchar *packet2 = malloc(pktSize * sizeof(char));
 
 	memcpy(packet2, packet, pktSize); // strtok changes original packet
-	const uchar *frst_part_ftp;
-	frst_part_ftp = strtok(packet2, " "); // Get first part of packet ftp
-	const uchar *data_part;
-	data_part = strtok(NULL, "\r\n");
+	uchar *frst_part_ftp;
+	frst_part_ftp = (uchar *)strtok((char *)packet2, " "); // Get first part of packet ftp
+	strtok(NULL, "\r\n");
 	int code = check_Code_ftp(frst_part_ftp);
-	uchar *command = check_Command_ftp(frst_part_ftp);
+	const char *command = check_Command_ftp(frst_part_ftp);
 	free(packet2);
 	if (code != 0) {
 		json_object_object_add(jparent, "response", json_object_new_int(code));
-		char *code_string[6];
-		sprintf(code_string, "%d", code);
-		RETURN_DATA_AFTER(strlen(code_string))
+		int nb_digits = 1;
+		while( (code/=10) > 0 ) nb_digits++;
+		RETURN_DATA_AFTER(nb_digits)
 
 	} else if (command != NULL) {
 		json_object_object_add(jparent, "request", json_object_new_string(command));
-		RETURN_DATA_AFTER(strlen(command) + 1)
+		RETURN_DATA_AFTER((int)strlen(command) + 1)
 
 	} else {
 		RETURN_DATA_AFTER(0)

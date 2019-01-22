@@ -47,7 +47,7 @@ char *catch_property(char *header, char *property);
 */
 data_ret_t *http_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
 	int oldpktSize = pktSize;
-	char *http = malloc(strlen(packet) * sizeof(char));
+	char *http = malloc(strlen((const char *)packet) * sizeof(char));
 	memcpy(http, packet, pktSize);
 
 	while (pktSize > 0) {
@@ -90,7 +90,7 @@ data_ret_t *http_parse(const uchar *packet, int pktSize, struct json_object *jpa
 char *catch_Status_Code(char *header) {
 	char *catched = malloc(strlen(header) * sizeof(char));
 	memcpy(catched,header, strlen(header));
-	char *a = strtok(catched," ");
+	strtok(catched," ");
 	char *b = strtok(NULL, " ");
 	free(catched);
 	return b;

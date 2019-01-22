@@ -72,8 +72,8 @@ data_ret_t* eth_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	char ethMacSrc[20], ethMacDst[20];
 	uint8_t hdrLen = 14;
 
-	ether_ntoa_r((struct eth_addr *)eth_header->addrSrc, ethMacSrc);
-	ether_ntoa_r((struct eth_addr *)eth_header->addrDst, ethMacDst);
+	ether_ntoa_r((struct ether_addr *)eth_header->addrSrc, ethMacSrc);
+	ether_ntoa_r((struct ether_addr *)eth_header->addrDst, ethMacDst);
 
 	json_object_object_add(jparent, "ETH_src", json_object_new_string((char*)ethMacSrc));
 	json_object_object_add(jparent, "ETH_dst", json_object_new_string((char*)ethMacDst));

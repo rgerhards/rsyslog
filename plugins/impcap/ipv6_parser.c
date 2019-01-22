@@ -29,9 +29,15 @@
 #include "parser.h"
 
 struct ipv6_header_s {
+#ifndef IPV6_VERSION_MASK
 	#define IPV6_VERSION_MASK 0xF0000000
+#endif
+#ifndef IPV6_TC_MASK
 	#define IPV6_TC_MASK			0x0FF00000
+#endif
+#ifndef IPV6_FLOW_MASK
 	#define IPV6_FLOW_MASK		0x000FFFFF
+#endif
 	uint32_t vtf;
 	uint16_t dataLength;
 	uint8_t nextHeader;
@@ -40,9 +46,15 @@ struct ipv6_header_s {
 	uint8_t addrDst[16];
 } __attribute__ ((__packed__));
 
-#define IPV6_VERSION(h) (ntohl(h->vtf) & IPV6_VERSION_MASK)>>28
-#define IPV6_TC(h)			(ntohl(h->vtf) & IPV6_TC_MASK)>>20
-#define IPV6_FLOW(h)		(ntohl(h->vtf) & IPV6_FLOW_MASK)
+#ifndef IPV6_VERSION
+	#define IPV6_VERSION(h) (ntohl(h->vtf) & IPV6_VERSION_MASK)>>28
+#endif
+#ifndef IPV6_TC
+	#define IPV6_TC(h)			(ntohl(h->vtf) & IPV6_TC_MASK)>>20
+#endif
+#ifndef IPV6_FLOW
+	#define IPV6_FLOW(h)		(ntohl(h->vtf) & IPV6_FLOW_MASK)
+#endif
 
 typedef struct ipv6_header_s ipv6_header_t;
 

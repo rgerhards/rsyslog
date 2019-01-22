@@ -105,6 +105,7 @@ struct modConfData_s {
 };
 
 static modConfData_t *loadModConf = NULL;/* modConf ptr to use for the current load process */
+static modConfData_t *runModConf = NULL; /* modConf ptr to use for the current exec process */
 
 /* input instance parameters */
 static struct cnfparamdescr inppdescr[] = {
@@ -317,6 +318,7 @@ ENDcheckCnf
 
 BEGINactivateCnfPrePrivDrop
 CODESTARTactivateCnfPrePrivDrop
+	runModConf = pModConf;
 ENDactivateCnfPrePrivDrop
 
 BEGINactivateCnf
@@ -467,7 +469,7 @@ ENDfreeCnf
 /*
  *  Mock function to do no parsing when protocol is not a valid number
 */
-data_ret_t *dont_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
+data_ret_t *dont_parse(const uchar *packet, int pktSize, __attribute__((unused)) struct json_object *jparent) {
 	DBGPRINTF("protocol not handled\n");
 	RETURN_DATA_AFTER(0)
 }

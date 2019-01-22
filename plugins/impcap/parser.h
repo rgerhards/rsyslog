@@ -111,7 +111,7 @@ data_ret_t *http_parse(const uchar *packet, int pktSize, struct json_object *jpa
 #define RETURN_DATA_AFTER(x)    data_ret_t *retData = malloc(sizeof(data_ret_t)); \
 	if(pktSize > x) { \
 		retData->size = pktSize - x;  \
-		retData->pData = packet + x;  \
+		retData->pData = (char *)packet + x;  \
 	} \
 	else {  \
 		retData->size = 0;  \

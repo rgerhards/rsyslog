@@ -72,8 +72,8 @@ data_ret_t* arp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	if(ntohs(arp_header->hwType) == 1) { /* ethernet addresses */
 		char hwAddrSrc[20], hwAddrDst[20];
 
-		ether_ntoa_r((struct eth_addr *)arp_header->pAddr, hwAddrSrc);
-		ether_ntoa_r((struct eth_addr *)(arp_header->pAddr+arp_header->hwAddrLen+arp_header->pAddrLen),
+		ether_ntoa_r((struct ether_addr *)arp_header->pAddr, hwAddrSrc);
+		ether_ntoa_r((struct ether_addr *)(arp_header->pAddr+arp_header->hwAddrLen+arp_header->pAddrLen),
 		             hwAddrDst);
 
 		json_object_object_add(jparent, "ARP_hwSrc", json_object_new_string((char*)hwAddrSrc));
@@ -124,8 +124,8 @@ data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jpa
 	json_object_object_add(jparent, "RARP_op", json_object_new_int(ntohs(rarp_header->opCode)));
 
 	if(ntohs(rarp_header->hwType) == 1) { /* ethernet addresses */
-		char *hwAddrSrc = ether_ntoa((struct eth_addr *)rarp_header->pAddr);
-		char *hwAddrDst = ether_ntoa((struct eth_addr *)(rarp_header->pAddr +
+		char *hwAddrSrc = ether_ntoa((struct ether_addr *)rarp_header->pAddr);
+		char *hwAddrDst = ether_ntoa((struct ether_addr *)(rarp_header->pAddr +
 									 rarp_header->hwAddrLen +
 									 rarp_header->pAddrLen));
 
