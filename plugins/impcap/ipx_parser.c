@@ -28,7 +28,7 @@
 
 #include "parser.h"
 
-struct ipx_header_s {
+struct ipx_header_s __attribute__ ((__packed__)) {
 	uint16_t chksum;
 	uint16_t pktLen;
 	uint8_t transCtrl;
@@ -39,7 +39,7 @@ struct ipx_header_s {
 	uint32_t srcNet;
 	uint8_t srcNode[6];
 	uint16_t srcSocket;
-}__attribute__ ((__packed__));
+};
 
 typedef struct ipx_header_s ipx_header_t;
 

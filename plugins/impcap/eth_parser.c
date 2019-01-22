@@ -28,21 +28,21 @@
 
 #include "parser.h"
 
-struct eth_header_s
+struct eth_header_s __attribute__ ((__packed__))
 {
 	uint8_t  addrDst[6];
 	uint8_t  addrSrc[6];
 	uint16_t type;
-} __attribute__ ((__packed__));
+};
 
-struct vlan_header_s
+struct vlan_header_s __attribute__ ((__packed__))
 {
 	uint8_t  addrDst[6];
 	uint8_t  addrSrc[6];
 	uint16_t vlanCode;
 	uint16_t vlanTag;
 	uint16_t type;
-} __attribute__ ((__packed__));
+};
 
 typedef struct eth_header_s eth_header_t;
 typedef struct vlan_header_s vlan_header_t;

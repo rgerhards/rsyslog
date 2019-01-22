@@ -28,7 +28,7 @@
 
 #include "parser.h"
 
-struct ipv6_header_s {
+struct ipv6_header_s __attribute__ ((__packed__)) {
 #ifndef IPV6_VERSION_MASK
 	#define IPV6_VERSION_MASK 0xF0000000
 #endif
@@ -44,7 +44,7 @@ struct ipv6_header_s {
 	uint8_t hopLimit;
 	uint8_t addrSrc[16];
 	uint8_t addrDst[16];
-} __attribute__ ((__packed__));
+};
 
 #ifndef IPV6_VERSION
 	#define IPV6_VERSION(h) (ntohl(h->vtf) & IPV6_VERSION_MASK)>>28
