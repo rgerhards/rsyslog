@@ -28,7 +28,7 @@
 
 #include "parser.h"
 
-struct ipv6_header_s __attribute__ ((__packed__)) {
+struct __attribute__ ((__packed__)) ipv6_header_s {
 #ifndef IPV6_VERSION_MASK
 	#define IPV6_VERSION_MASK 0xF0000000
 #endif

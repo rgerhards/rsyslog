@@ -28,7 +28,7 @@
 
 #include "parser.h"
 
-struct ipx_header_s __attribute__ ((__packed__)) {
+struct  __attribute__ ((__packed__)) ipx_header_s {
 	uint16_t chksum;
 	uint16_t pktLen;
 	uint8_t transCtrl;
