@@ -40,6 +40,7 @@
 */
 int getSMBMetadata(struct json_object *pJson, tcp_packet *pData){
 	struct json_object *obj = NULL;
+	int iRet = 0;
 	smb_metadata *session;
 
 	DBGPRINTF("entered getSMBMetadata\n");
@@ -54,32 +55,39 @@ int getSMBMetadata(struct json_object *pJson, tcp_packet *pData){
 	if(fjson_object_object_get_ex(pJson, "SMB_userID", &obj)) {
 		session->sessID = fjson_object_get_int64(obj);
 		DBGPRINTF("session ID: %lu\n", session->sessID);
+		iRet++;
 	}
 
 	if(fjson_object_object_get_ex(pJson, "SMB_operation", &obj)) {
 		session->opCode = fjson_object_get_int(obj);
 		DBGPRINTF("opCode: %d\n", session->opCode);
+		iRet++;
 	}
 
 	if(fjson_object_object_get_ex(pJson, "SMB_flags", &obj)) {
-		session->flags = fjson_object_get_string(obj);
+		session->flags = (char *)fjson_object_get_string(obj);
 		DBGPRINTF("flags: %s\n", session->flags);
+		iRet++;
 	}
 
 	if(fjson_object_object_get_ex(pJson, "SMB_seqNumber", &obj)) {
 		session->seqNum = fjson_object_get_int64(obj);
 		DBGPRINTF("sequence number: %lu\n", session->seqNum);
+		iRet++;
 	}
 
 	if(fjson_object_object_get_ex(pJson, "SMB_processID", &obj)) {
 		session->procID = fjson_object_get_int64(obj);
-		DBGPRINTF("process ID: %lu\n", session->procID);
+		DBGPRINTF("process ID: %u \n", session->procID);
+		iRet++;
 	}
 
 	if(fjson_object_object_get_ex(pJson, "SMB_treeID", &obj)) {
 		session->treeID = fjson_object_get_int64(obj);
-		DBGPRINTF("tree ID: %lu\n", session->treeID);
+		DBGPRINTF("tree ID: %u \n", session->treeID);
+		iRet++;
 	}
+	return iRet;
 }
 
 /*
@@ -120,18 +128,18 @@ int getTCPMetadata(struct json_object *pJson, tcp_packet *pData) {
 	if(fjson_object_object_get_ex(pJson, "TCP_seq_number", &obj)) {
 		iRet++;
 		pData->meta->seqNum = fjson_object_get_int64(obj);
-		DBGPRINTF("seq_number: %lu\n", pData->meta->seqNum);
+		DBGPRINTF("seq_number: %u \n", pData->meta->seqNum);
 	}
 
 	if(fjson_object_object_get_ex(pJson, "TCP_ack_number", &obj)) {
 		iRet++;
 		pData->meta->ackNum = fjson_object_get_int64(obj);
-		DBGPRINTF("ack_number: %lu\n", pData->meta->ackNum);
+		DBGPRINTF("ack_number: %u \n", pData->meta->ackNum);
 	}
 
 	if(fjson_object_object_get_ex(pJson, "net_flags", &obj)) {
 		iRet++;
-		pData->meta->flags = fjson_object_get_string(obj);
+		pData->meta->flags = (char *)fjson_object_get_string(obj);
 		DBGPRINTF("flags: %s\n", pData->meta->flags);
 	}
 

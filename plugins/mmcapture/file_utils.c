@@ -47,8 +47,8 @@ void addDataToFile(char* pData, uint32_t sizeData, uint32_t offSet, FILE* file){
 	uint32_t i;
 
 	fseek(file, 0, SEEK_END);
-	DBGPRINTF("file size: %d\n",ftell(file));
-	int diff = offSet - ftell(file);
+	DBGPRINTF("file size: %ld \n",ftell(file));
+	uint32_t diff = offSet - ftell(file);
 	if (diff > 0){
 		for(i = 0; i < diff; i++){
 			fwrite(&zero, sizeof(char), 1, file);
@@ -74,10 +74,9 @@ void addDataToFile(char* pData, uint32_t sizeData, uint32_t offSet, FILE* file){
  *  There is no error code returned, but simply a debug message
 */
 FILE* openFile(const char* path, const char* file_name){
-	DIR *dir;
+	DIR *dir = NULL;
 	FILE *file = NULL;
-	int ret;
-	char *new_file_comp_path;
+	char *new_file_comp_path = NULL;
 
 	assert(file_name != NULL);
 	assert(path != NULL);
@@ -93,27 +92,27 @@ FILE* openFile(const char* path, const char* file_name){
 		/* assuming file is created, opening */
 		file = fopen(new_file_comp_path,"r+");
 
-			if(file == NULL) {
-				DBGPRINTF("file %s doesn't exist\n", file_name);
-				/* creating file */
-				file = fopen(new_file_comp_path, "w");
-				if (file == NULL){
-					DBGPRINTF("file %s couldn't be created in %s\n", file_name, path);
-				}
-				else{
-					DBGPRINTF("File %s created successfully in %s\n", file_name, path);
-				}
+		if(file == NULL) {
+			DBGPRINTF("file %s doesn't exist\n", file_name);
+			/* creating file */
+			file = fopen(new_file_comp_path, "w");
+			if (file == NULL){
+				DBGPRINTF("file %s couldn't be created in %s\n", file_name, path);
 			}
 			else{
-				DBGPRINTF("existing file %s opened\n", new_file_comp_path);
+				DBGPRINTF("File %s created successfully in %s\n", file_name, path);
 			}
 		}
 		else{
-		  DBGPRINTF("Error: the folder %s doesn't exist\n", path);
+			DBGPRINTF("existing file %s opened\n", new_file_comp_path);
+		}
+		free(new_file_comp_path);
+	}
+	else{
+	  DBGPRINTF("Error: the folder %s doesn't exist\n", path);
 	}
 
 	closedir(dir);
-	free(new_file_comp_path);
 	return file;
 }
 
