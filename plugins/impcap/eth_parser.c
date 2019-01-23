@@ -28,6 +28,10 @@
 
 #include "parser.h"
 
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpacked"
+#endif
 struct __attribute__ ((__packed__)) eth_header_s
 {
 	uint8_t  addrDst[6];
@@ -43,6 +47,9 @@ struct __attribute__ ((__packed__)) vlan_header_s
 	uint16_t vlanTag;
 	uint16_t type;
 };
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 typedef struct eth_header_s eth_header_t;
 typedef struct vlan_header_s vlan_header_t;
