@@ -72,7 +72,14 @@ data_ret_t *tcp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 		RETURN_DATA_AFTER(0)
 	}
 
-	tcp_header_t *tcp_header = (tcp_header_t *) packet;
+	/* Union to prevent cast from uchar to tcp_header_t */
+	union {
+		const uchar *pck;
+		tcp_header_t *hdr;
+	} tcp_header_to_char;
+
+	tcp_header_to_char.pck = packet;
+	tcp_header_t *tcp_header = tcp_header_to_char.hdr;
 
 	uint8_t i, pos = 0;
 	char flags[10] = {0};

@@ -72,7 +72,14 @@ data_ret_t* ipv4_parse(const uchar *packet, int pktSize, struct json_object *jpa
 	  RETURN_DATA_AFTER(0)
 	}
 
-	ipv4_header_t *ipv4_header = (ipv4_header_t *)packet;
+	/* Union to prevent cast from uchar to ipv4_header_t */
+	union {
+		const uchar *pck;
+		ipv4_header_t *hdr;
+	} ipv4_header_to_char;
+
+	ipv4_header_to_char.pck = packet;
+	ipv4_header_t *ipv4_header = ipv4_header_to_char.hdr;
 
 	char addrSrc[20], addrDst[20];
 	uint8_t hdrLen = 4*ipv4_header->ihl;  /* 4 x length in words */

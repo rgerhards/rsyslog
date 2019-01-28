@@ -59,7 +59,14 @@ data_ret_t *icmp_parse(const uchar *packet, int pktSize, struct json_object *jpa
 		RETURN_DATA_AFTER(0);
 	}
 
-	icmp_header_t *icmp_header = (icmp_header_t *) packet;
+	/* Union to prevent cast from uchar to icmp_header_t */
+	union {
+		const uchar *pck;
+		icmp_header_t *hdr;
+	} icmp_header_to_char;
+
+	icmp_header_to_char.pck = packet;
+	icmp_header_t *icmp_header = icmp_header_to_char.hdr;
 
 	json_object_object_add(jparent, "net_icmp_type", json_object_new_int(icmp_header->type));
 	json_object_object_add(jparent, "net_icmp_code", json_object_new_int(icmp_header->code));

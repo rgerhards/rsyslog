@@ -59,7 +59,14 @@ data_ret_t *udp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 		RETURN_DATA_AFTER(0)
 	}
 
-	udp_header_t *udp_header = (udp_header_t *) packet;
+	/* Union to prevent cast from uchar to udp_header_t */
+	union {
+		const uchar *pck;
+		udp_header_t *hdr;
+	} udp_header_to_char;
+
+	udp_header_to_char.pck = packet;
+	udp_header_t *udp_header = udp_header_to_char.hdr;
 
 	json_object_object_add(jparent, "net_src_port", json_object_new_int(ntohs(udp_header->srcPort)));
 	json_object_object_add(jparent, "net_dst_port", json_object_new_int(ntohs(udp_header->dstPort)));

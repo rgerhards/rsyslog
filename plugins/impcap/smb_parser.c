@@ -103,7 +103,15 @@ data_ret_t *smb_parse(const uchar *packet, int pktSize, struct json_object *jpar
 		RETURN_DATA_AFTER(0)
 	}
 
-	smb_header_t *smb_header = (smb_header_t *) packet;
+	/* Union to prevent cast from uchar to smb_header_t */
+	union {
+		const uchar *pck;
+		smb_header_t *hdr;
+	} smb_header_to_char;
+
+	smb_header_to_char.pck = packet;
+	smb_header_t *smb_header = smb_header_to_char.hdr;
+	
 	char flags[5] = {0};
 	uint64_t seqNum, userID;
 	uint8_t version;

@@ -482,7 +482,7 @@ data_ret_t *dont_parse(const uchar *packet, int pktSize, __attribute__((unused))
  *  Initializes the function pointers' list for handled protocols
  *  contained within Ethernet II
 */
-void init_eth_proto_handlers() {
+void init_eth_proto_handlers(void) {
 	DBGPRINTF("begining init eth handlers\n");
 	// set all to blank function
 	for (int i = 0; i < ETH_PROTO_NUM; ++i) {
@@ -501,7 +501,7 @@ void init_eth_proto_handlers() {
  *  Initializes the function pointers' list for handled protocols
  *  contained within IP
 */
-void init_ip_proto_handlers() {
+void init_ip_proto_handlers(void) {
 	DBGPRINTF("begining init ip handlers\n");
 	// set all to blank function
 	for (int i = 0; i < IP_PROTO_NUM; ++i) {
@@ -546,7 +546,14 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
 	DBGPRINTF("impcap : entered packet_parse\n");
 	smsg_t *pMsg;
 
-	int *id = (int *) arg;
+	/* Prevent cast error from char to int with arg */
+	union {
+		uchar *buf;
+		int *id;
+	} aux;
+
+	aux.buf = arg;
+	int *id = aux.id;
 	msgConstruct(&pMsg);
 
 	MsgSetInputName(pMsg, pInputName);

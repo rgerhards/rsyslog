@@ -61,7 +61,14 @@ data_ret_t* arp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 		RETURN_DATA_AFTER(0);
 	}
 
-	arp_header_t *arp_header = (arp_header_t *)packet;
+	/* Union to prevent cast from uchar to arp_header_t */
+	union {
+		const uchar *pck;
+		arp_header_t *hdr;
+	} arp_header_to_char;
+
+	arp_header_to_char.pck = packet;
+	arp_header_t *arp_header = arp_header_to_char.hdr;
 
 	char pAddrSrc[20], pAddrDst[20];
 
@@ -115,7 +122,14 @@ data_ret_t* rarp_parse(const uchar *packet, int pktSize, struct json_object *jpa
 		RETURN_DATA_AFTER(0);
 	}
 
-	arp_header_t *rarp_header = (arp_header_t *)packet;
+	/* Union to prevent cast from uchar to arp_header_t */
+	union {
+		const uchar *pck;
+		arp_header_t *hdr;
+	} arp_header_to_char;
+
+	arp_header_to_char.pck = packet;
+	arp_header_t *rarp_header = arp_header_to_char.hdr;
 
 	char pAddrSrc[20], pAddrDst[20];
 
