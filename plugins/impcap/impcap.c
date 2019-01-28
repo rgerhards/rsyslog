@@ -74,9 +74,13 @@ DEFobjCurrIf(ruleset)
 static prop_t *pInputName = NULL;
 
 /* --- init prototypes --- */
-void init_eth_proto_handlers();
+void init_eth_proto_handlers(void);
 
-void init_ip_proto_handlers();
+void init_ip_proto_handlers(void);
+
+char *stringToHex(char *string, size_t length);
+
+void *startCaptureThread(void *instanceConf);
 
 /* conf structures */
 
