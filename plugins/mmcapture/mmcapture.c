@@ -176,7 +176,7 @@ CODESTARTnewActInst
 		if(!strcmp(actpblk.descr[i].name, "protocol")) {
 			pData->protocol = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
 			int cpt = 0;
-			char *tmp = NULL;
+			const char *tmp = NULL;
 			short int protocol_ok = 0;
 			while( (tmp=proto_list[cpt++]) != NULL ) {
 				if( strncmp((const char *)pData->protocol, tmp, strlen(tmp)+1) == 0 ) {
