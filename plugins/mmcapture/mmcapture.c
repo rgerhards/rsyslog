@@ -60,7 +60,7 @@ DEF_OMOD_STATIC_DATA
 #define IMPCAP_DATA     "!data"
 #define DEFAULT_LOG_DIR "/var/log/rsyslog/"
 
-static const char proto_list[][] = {
+static const char *proto_list[] = {
 	"http",
 	"ftp",
 	"smb"
