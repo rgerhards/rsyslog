@@ -33,7 +33,7 @@ static tcp_session_list *sessions = NULL;
 /*
  *	Initializes the linked list to contain TCP sessions
 */
-tcp_session_list* initTcp(){
+tcp_session_list* initTcp(void){
 	DBGPRINTF("initializing TCP sessions list\n");
 
 	if(sessions == NULL) {
@@ -146,7 +146,7 @@ void checkTcpSessions(tcp_packet *packet){
  *
  *	**TODO** This is a debug function and should be removed for production
 */
-void dbgPrintSessionsStats() {
+void dbgPrintSessionsStats(void) {
 	tcp_session *session;
 	DBGPRINTF("\ntcp sessions status:\n");
 	DBGPRINTF("number of active sessions %u\n", sessions->activeSessions);
