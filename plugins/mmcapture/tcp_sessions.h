@@ -27,10 +27,13 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
 #ifndef TCP_SESSIONS_H
 #define TCP_SESSIONS_H
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "rsyslog.h"
 #include "packets.h"

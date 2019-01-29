@@ -28,6 +28,8 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
 #ifndef PACKETS_H
 #define PACKETS_H
 

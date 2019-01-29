@@ -27,6 +27,8 @@
  * limitations under the License.
  */
 
+#include "config.h"
+
 #ifndef SMB_SESSIONS_H
 #define SMB_SESSIONS_H
 
