@@ -54,7 +54,7 @@ int getSMBMetadata(struct json_object *pJson, tcp_packet *pData){
 
 	if(fjson_object_object_get_ex(pJson, "SMB_userID", &obj)) {
 		session->sessID = fjson_object_get_int64(obj);
-		DBGPRINTF("session ID: %llu\n", session->sessID);
+		DBGPRINTF("session ID: %llu\n", (unsigned long long)session->sessID);
 		iRet++;
 	}
 
@@ -72,7 +72,7 @@ int getSMBMetadata(struct json_object *pJson, tcp_packet *pData){
 
 	if(fjson_object_object_get_ex(pJson, "SMB_seqNumber", &obj)) {
 		session->seqNum = fjson_object_get_int64(obj);
-		DBGPRINTF("sequence number: %llu\n", session->seqNum);
+		DBGPRINTF("sequence number: %llu\n", (unsigned long long)session->seqNum);
 		iRet++;
 	}
 
