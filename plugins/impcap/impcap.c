@@ -80,7 +80,7 @@ void init_ip_proto_handlers(void);
 
 char *stringToHex(char *string, size_t length);
 
-void *startCaptureThread(void *instanceConf);
+static ATTR_NORETURN void *startCaptureThread(void *instanceConf);
 
 /* conf structures */
 
@@ -597,7 +597,7 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
  *  This is the main function for each thread
  *  taking care of a specified network interface
 */
-void *startCaptureThread(void *instanceConf) ATTR_NORETURN {
+static ATTR_NORETURN void *startCaptureThread(void *instanceConf) {
 	int id = 0;
 	instanceConf_t * inst = (instanceConf_t * )instanceConf;
 	while (glbl.GetGlobalInputTermState() == 0) {
