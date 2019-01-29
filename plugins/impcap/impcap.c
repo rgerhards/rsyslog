@@ -597,15 +597,13 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
  *  This is the main function for each thread
  *  taking care of a specified network interface
 */
-void *startCaptureThread(void *instanceConf) {
+void *startCaptureThread(void *instanceConf) ATTR_NORETURN {
 	int id = 0;
 	instanceConf_t * inst = (instanceConf_t * )instanceConf;
 	while (glbl.GetGlobalInputTermState() == 0) {
 		pcap_dispatch(inst->device, inst->pktBatchCnt, packet_parse, (uchar * ) & id);
 	}
 	pthread_exit(0);
-	/* the function must return something - NULL will do */
-	return NULL;
 }
 
 BEGINrunInput
