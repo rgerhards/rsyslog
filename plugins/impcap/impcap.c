@@ -599,12 +599,13 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
 */
 void *startCaptureThread(void *instanceConf) {
 	int id = 0;
-	instanceConf_t * inst = (instanceConf_t * )
-	instanceConf;
+	instanceConf_t * inst = (instanceConf_t * )instanceConf;
 	while (glbl.GetGlobalInputTermState() == 0) {
 		pcap_dispatch(inst->device, inst->pktBatchCnt, packet_parse, (uchar * ) & id);
 	}
 	pthread_exit(0);
+	/* the function must return something - NULL will do */
+	return NULL;
 }
 
 BEGINrunInput

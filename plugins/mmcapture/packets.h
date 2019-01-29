@@ -80,7 +80,7 @@ int getTCPMetadata(struct json_object *pJson, tcp_packet *pData);
 
 int getSMBMetadata(struct json_object *pJson, tcp_packet *pData);
 
-tcp_packet *createPacket();
+tcp_packet *createPacket(void);
 
 void freePacket(tcp_packet *pPacket);
 

@@ -128,7 +128,7 @@ data_ret_t *ftp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	if (pktSize < 5) {  /* too short for ftp packet*/
 		RETURN_DATA_AFTER(0)
 	}
-	uchar *packet2 = malloc(pktSize * sizeof(char));
+	uchar *packet2 = (uchar *)malloc(pktSize * sizeof(uchar));
 
 	memcpy(packet2, packet, pktSize); // strtok changes original packet
 	uchar *frst_part_ftp;

@@ -60,7 +60,7 @@ DEF_OMOD_STATIC_DATA
 #define IMPCAP_DATA     "!data"
 #define DEFAULT_LOG_DIR "/var/log/rsyslog/"
 
-static char *proto_list[] = {
+static const char proto_list[][] = {
 	"http",
 	"ftp",
 	"smb"
@@ -94,6 +94,13 @@ static struct cnfparamblk actpblk = {
 	sizeof(actpdescr) / sizeof(struct cnfparamdescr),
 	actpdescr
 };
+
+
+/* Prototypes definition */
+static char *hexToData(char *hex, uint32_t length);
+static int getImpcapPayload(smsg_t *pMsg, tcp_packet *pData);
+static int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData);
+
 
 /* init instance, set parameters */
 
