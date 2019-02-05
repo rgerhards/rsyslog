@@ -48,6 +48,31 @@ tcp_session_list* initTcp(void){
 }
 
 /*
+ *	Initializes the linked list to contain TCP sessions
+*/
+tcp_session_list* destroyTcp(void){
+	DBGPRINTF("initializing TCP sessions list\n");
+
+	tcp_session *session = NULL;
+
+	for( session=sessions->tail ; session != sessions->head ; session=session->prevSession ) {
+		if( session != NULL ) {
+			removeSession(session);
+			freeSession(session);
+		}
+	}
+	session = sessions->head;
+	removeSession(session);
+	freeSession(session);
+	sessions->activeSessions = 0;
+	sessions->head = NULL;
+	sessions->tail = NULL;
+	free(sessions);
+	sessions = NULL;
+	return sessions;
+}
+
+/*
  *	Adds a session to the global linked list
  *
  *	Gets the pointer on the created tcp_session
@@ -147,7 +172,7 @@ void checkTcpSessions(tcp_packet *packet){
  *	**TODO** This is a debug function and should be removed for production
 */
 void dbgPrintSessionsStats(void) {
-	tcp_session *session;
+	tcp_session *session = NULL;
 	DBGPRINTF("\ntcp sessions status:\n");
 	DBGPRINTF("number of active sessions %u\n", sessions->activeSessions);
 

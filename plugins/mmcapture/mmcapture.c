@@ -148,6 +148,7 @@ ENDcreateWrkrInstance
 
 BEGINfreeInstance
 	DBGPRINTF("entering freeInstance\n");
+	destroyTCP();
 CODESTARTfreeInstance
 ENDfreeInstance
 
@@ -224,10 +225,13 @@ ENDnewActInst
  *  The length of this array is always half the length given in parameter
 */
 char *hexToData(char *hex, uint32_t length) {
-	char *retBuf = malloc(length / 2 * sizeof(char));
+	char *retBuf = NULL;
 	uint32_t i;
 	DBGPRINTF("hexToData\n");
 	DBGPRINTF("length %d\n", length);
+
+	retBuf = malloc((length / 2) * sizeof(char));
+	assert(retBuf != NULL);
 
 	for (i = 0; i < length; ++i) {
 		if (i % 2) {

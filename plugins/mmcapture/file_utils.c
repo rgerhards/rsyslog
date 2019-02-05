@@ -107,12 +107,13 @@ FILE* openFile(const char* path, const char* file_name){
 			DBGPRINTF("existing file %s opened\n", new_file_comp_path);
 		}
 		free(new_file_comp_path);
+		closedir(dir);
+		dir = NULL;
 	}
 	else{
 	  DBGPRINTF("Error: the folder %s doesn't exist\n", path);
 	}
 
-	closedir(dir);
 	return file;
 }
 

@@ -48,9 +48,11 @@ int getSMBMetadata(struct json_object *pJson, tcp_packet *pData){
 	app_header_metadata *appHdrMeta = pData->appHeader;
 	assert(appHdrMeta != NULL);
 
+	if(appHdrMeta->pHdr == NULL)
+		appHdrMeta->pHdr = malloc(sizeof(smb_metadata));
+	assert(appHdrMeta->pHdr != NULL);
+
 	session = (smb_metadata *)appHdrMeta->pHdr;
-	if(session == NULL)
-		session = malloc(sizeof(smb_metadata));
 
 	if(fjson_object_object_get_ex(pJson, "SMB_userID", &obj)) {
 		session->sessID = fjson_object_get_int64(obj);
