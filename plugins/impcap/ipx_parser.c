@@ -28,10 +28,9 @@
 
 #include "parser.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpacked"
-#endif
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpacked"
+#pragma GCC diagnostic ignored "-Werror=packed"
 struct  __attribute__ ((__packed__)) ipx_header_s {
 	uint16_t chksum;
 	uint16_t pktLen;
@@ -44,9 +43,7 @@ struct  __attribute__ ((__packed__)) ipx_header_s {
 	uint8_t srcNode[6];
 	uint16_t srcSocket;
 };
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
+#pragma GCC diagnostic pop
 
 typedef struct ipx_header_s ipx_header_t;
 

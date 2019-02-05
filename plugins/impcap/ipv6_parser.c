@@ -28,9 +28,9 @@
 
 #include "parser.h"
 
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wpacked"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpacked"
+#pragma GCC diagnostic ignored "-Werror=packed"
 #endif
 struct __attribute__ ((__packed__)) ipv6_header_s {
 #ifndef IPV6_VERSION_MASK
@@ -49,9 +49,7 @@ struct __attribute__ ((__packed__)) ipv6_header_s {
 	uint8_t addrSrc[16];
 	uint8_t addrDst[16];
 };
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
+#pragma GCC diagnostic pop
 
 #ifndef IPV6_VERSION
 	#define IPV6_VERSION(h) (ntohl(h->vtf) & IPV6_VERSION_MASK)>>28
