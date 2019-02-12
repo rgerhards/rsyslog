@@ -148,7 +148,7 @@ ENDcreateWrkrInstance
 
 BEGINfreeInstance
 	DBGPRINTF("entering freeInstance\n");
-	destroyTCP();
+	destroyTcp();
 CODESTARTfreeInstance
 ENDfreeInstance
 
