@@ -64,6 +64,7 @@ data_ret_t *http_parse(const uchar *packet, int pktSize, struct json_object *jpa
 		packet++, pktSize--;
 	}
 	if (pktSize < 6) {
+		free(http);
 		packet = old_packet;
 		pktSize = oldpktSize;
 		RETURN_DATA_AFTER(0)
