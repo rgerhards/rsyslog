@@ -230,7 +230,7 @@ uchar *hexToData(char *hex, uint32_t length) {
 	DBGPRINTF("hexToData\n");
 	DBGPRINTF("length %d\n", length);
 
-	retBuf = malloc((length / 2) * sizeof(char));
+	retBuf = malloc((length / 2) * sizeof(uchar));
 	assert(retBuf != NULL);
 
 	for (i = 0; i < length; ++i) {
