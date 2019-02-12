@@ -181,8 +181,10 @@ static const char *dns_types3[] = {
 };
 
 
-/*  */
-const char *get_type(uint16_t x) {
+/* This function takes an integer as parameter
+ *  and returns the corresponding string type of DNS query
+ */
+static const char *get_type(uint16_t x) {
 	const char **types = NULL;
 	if( x >= 32768 )
 		types = dns_types3;
@@ -197,8 +199,10 @@ const char *get_type(uint16_t x) {
 }
 
 
-/*  */
-const char *get_class(uint16_t x) {
+/* This function takes an integer as parameter
+ *  and returns the corresponding string class of DNS query
+ */
+static const char *get_class(uint16_t x) {
 	switch(x) {
 		case 1: return "IN";
 		case 3: return "CH";
