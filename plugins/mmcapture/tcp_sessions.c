@@ -54,14 +54,23 @@ tcp_session_list* destroyTcp(void){
 	DBGPRINTF("initializing TCP sessions list\n");
 
 	tcp_session *session = NULL;
+	tcp_session *next_session = NULL;
 
-	for( session=sessions->tail ; session != NULL ; session=session->prevSession ) {
+	session = session->tail;
+	while( session != NULL ) {
+		/* Backup next session in the chained list */
+		next_session = session->prevSession;
+		/* Free current session */
 		removeSession(session);
 		freeSession(session);
+		/* And restore backup to next session */
+		session = next_session;
 	}
+	/* Reset chained list values */
 	sessions->activeSessions = 0;
 	sessions->head = NULL;
 	sessions->tail = NULL;
+	/* And free it */
 	free(sessions);
 	sessions = NULL;
 	return sessions;
