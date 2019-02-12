@@ -56,7 +56,7 @@ tcp_session_list* destroyTcp(void){
 	tcp_session *session = NULL;
 	tcp_session *next_session = NULL;
 
-	session = session->tail;
+	session = sessions->tail;
 	while( session != NULL ) {
 		/* Backup next session in the chained list */
 		next_session = session->prevSession;
