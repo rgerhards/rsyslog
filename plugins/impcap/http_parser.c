@@ -47,7 +47,7 @@ char *catch_property(char *header, char *property);
 */
 data_ret_t *http_parse(const uchar *packet, int pktSize, struct json_object *jparent) {
 	int oldpktSize = pktSize;
-	uchar *old_packet = packet;
+	const uchar *old_packet = packet;
 	char *http = malloc(strlen((const char *)packet) * sizeof(char));
 	memcpy(http, packet, pktSize);
 

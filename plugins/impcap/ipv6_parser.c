@@ -30,8 +30,6 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpacked"
-#pragma GCC diagnostic ignored "-Werror=packed"
-#endif
 struct __attribute__ ((__packed__)) ipv6_header_s {
 #ifndef IPV6_VERSION_MASK
 	#define IPV6_VERSION_MASK 0xF0000000
