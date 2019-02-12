@@ -225,7 +225,7 @@ ENDnewActInst
  *  The length of this array is always half the length given in parameter
 */
 char *hexToData(char *hex, uint32_t length) {
-	char *retBuf = NULL;
+	unsigned char *retBuf = NULL;
 	uint32_t i;
 	DBGPRINTF("hexToData\n");
 	DBGPRINTF("length %d\n", length);
@@ -234,20 +234,17 @@ char *hexToData(char *hex, uint32_t length) {
 	assert(retBuf != NULL);
 
 	for (i = 0; i < length; ++i) {
-		if (i % 2) {
-			retBuf[i / 2] <<= 4;  /* bitwise left shift */
-			if (hex[i] >= '0' && hex[i] <= '9') {
-				retBuf[i / 2] += hex[i] - '0';
-			} else if (hex[i] >= 'A' && hex[i] <= 'F') {
-				retBuf[i / 2] += hex[i] - 'A' + 10;
-			}
+		uchar tmp = 0;
+		if (hex[i] >= '0' && hex[i] <= '9') {
+			tmp = hex[i] - '0';
+		} else if (hex[i] >= 'A' && hex[i] <= 'F') {
+			tmp = hex[i] - 'A' + 10;
 		} else {
-			if (hex[i] >= '0' && hex[i] <= '9') {
-				retBuf[i / 2] = hex[i] - '0';
-			} else if (hex[i] >= 'A' && hex[i] <= 'F') {
-				retBuf[i / 2] = hex[i] - 'A' + 10;
-			}
+			DBGPRINTF("mmcapture::hexToData: Unknown char : %c \n", hex[i]);
 		}
+		retBuf[i / 2] = tmp;
+		if( i%2 == 0 )
+			retBuf[i / 2] <<= 4;
 	}
 
 	return retBuf;
