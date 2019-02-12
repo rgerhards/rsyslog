@@ -63,6 +63,7 @@ typedef struct tcp_session_list_s{
 }tcp_session_list;
 
 tcp_session_list* initTcp(void);
+tcp_session_list* destroyTcp(void);
 uint8_t addSession(tcp_session *session);
 uint8_t removeSession(tcp_session *session);
 void checkTcpSessions(tcp_packet *packet);
