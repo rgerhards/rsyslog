@@ -108,6 +108,8 @@ data_ret_t *ftp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 
 data_ret_t *http_parse(const uchar *packet, int pktSize, struct json_object *jparent);
 
+data_ret_t *dns_parse(const uchar *packet, int pktSize, struct json_object *jparent);
+
 #define RETURN_DATA_AFTER(x)    data_ret_t *retData = malloc(sizeof(data_ret_t)); \
 	if(pktSize > x) { \
 		retData->size = pktSize - x;  \

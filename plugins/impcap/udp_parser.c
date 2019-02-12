@@ -28,6 +28,8 @@
 
 #include "parser.h"
 
+#define DNS_PORT 53
+
 struct udp_header_s {
 	uint16_t srcPort;
 	uint16_t dstPort;
@@ -68,10 +70,18 @@ data_ret_t *udp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	udp_header_to_char.pck = packet;
 	udp_header_t *udp_header = udp_header_to_char.hdr;
 
-	json_object_object_add(jparent, "net_src_port", json_object_new_int(ntohs(udp_header->srcPort)));
-	json_object_object_add(jparent, "net_dst_port", json_object_new_int(ntohs(udp_header->dstPort)));
+	// Prevent endianness issue
+	unsigned short int src_port = ntohs(udp_header->srcPort);
+	unsigned short int dst_port = ntohs(udp_header->dstPort);
+
+	json_object_object_add(jparent, "net_src_port", json_object_new_int(src_port));
+	json_object_object_add(jparent, "net_dst_port", json_object_new_int(dst_port));
 	json_object_object_add(jparent, "UDP_Length", json_object_new_int(ntohs(udp_header->totalLength)));
 	json_object_object_add(jparent, "UDP_Checksum", json_object_new_int(ntohs(udp_header->checksum)));
+
+	if( src_port == DNS_PORT || dst_port == DNS_PORT) {
+		return dns_parse(packet + sizeof(udp_header_t), pktSize - sizeof(udp_header_t), jparent);
+	}
 
 	RETURN_DATA_AFTER(8)
 }
