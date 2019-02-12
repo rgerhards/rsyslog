@@ -97,7 +97,7 @@ static struct cnfparamblk actpblk = {
 
 
 /* Prototypes definition */
-static char *hexToData(char *hex, uint32_t length);
+static uchar *hexToData(char *hex, uint32_t length);
 static int getImpcapPayload(smsg_t *pMsg, tcp_packet *pData);
 static int getImpcapMetadata(smsg_t *pMsg, tcp_packet *pData);
 
@@ -224,7 +224,7 @@ ENDnewActInst
  *  It returns another char array, containing the raw values
  *  The length of this array is always half the length given in parameter
 */
-char *hexToData(char *hex, uint32_t length) {
+uchar *hexToData(char *hex, uint32_t length) {
 	unsigned char *retBuf = NULL;
 	uint32_t i;
 	DBGPRINTF("hexToData\n");
