@@ -30,6 +30,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpacked"
+#pragma GCC diagnostic ignored "-Wattributes"
 struct __attribute__ ((__packed__)) eth_header_s
 {
 	uint8_t  addrDst[6];

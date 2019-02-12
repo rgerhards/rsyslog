@@ -30,6 +30,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpacked"
+#pragma GCC diagnostic ignored "-Wattributes"
 struct  __attribute__ ((__packed__)) ipx_header_s {
 	uint16_t chksum;
 	uint16_t pktLen;
