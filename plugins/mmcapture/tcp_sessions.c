@@ -55,15 +55,10 @@ tcp_session_list* destroyTcp(void){
 
 	tcp_session *session = NULL;
 
-	for( session=sessions->tail ; session != sessions->head ; session=session->prevSession ) {
-		if( session != NULL ) {
-			removeSession(session);
-			freeSession(session);
-		}
+	for( session=sessions->tail ; session != NULL ; session=session->prevSession ) {
+		removeSession(session);
+		freeSession(session);
 	}
-	session = sessions->head;
-	removeSession(session);
-	freeSession(session);
 	sessions->activeSessions = 0;
 	sessions->head = NULL;
 	sessions->tail = NULL;
@@ -87,7 +82,7 @@ uint8_t addSession(tcp_session *session) {
 		return 0;
 
 	if(sessions->activeSessions == MAX_TCP_SESSIONS)
-		return 0;
+		return -1;
 
 	if(sessions->activeSessions == 0) {
 		sessions->head = session;
@@ -95,6 +90,7 @@ uint8_t addSession(tcp_session *session) {
 	}
 	else {
 		sessions->tail->nextSession = session;
+		session->prevSession = sessions->tail;
 		sessions->tail = session;
 	}
 
@@ -160,7 +156,11 @@ void checkTcpSessions(tcp_packet *packet){
 	}
 	else if(HAS_TCP_FLAG(packet->meta->flags, 'S')){	/* if the TCP packet has a SYN flag */
 		session = createNewSession(packet);
-		addSession(session);
+		/* If MAX_SESSIONS reached, free session */
+		if( addSession(session) == -1 ) {
+			freeSession(session);
+			session = NULL;
+		}
 	}
 
 	dbgPrintSessionsStats();
@@ -226,6 +226,7 @@ void freeSession(tcp_session *session) {
 		if(session->sCon != NULL)
 			free(session->sCon);
 		free(session);
+		session = NULL;
 	}
 }
 
