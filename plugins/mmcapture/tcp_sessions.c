@@ -82,7 +82,7 @@ uint8_t addSession(tcp_session *session) {
 		return 0;
 
 	if(sessions->activeSessions == MAX_TCP_SESSIONS)
-		return -1;
+		return 2;
 
 	if(sessions->activeSessions == 0) {
 		sessions->head = session;
@@ -157,7 +157,7 @@ void checkTcpSessions(tcp_packet *packet){
 	else if(HAS_TCP_FLAG(packet->meta->flags, 'S')){	/* if the TCP packet has a SYN flag */
 		session = createNewSession(packet);
 		/* If MAX_SESSIONS reached, free session */
-		if( addSession(session) == -1 ) {
+		if( addSession(session) == 2 ) {
 			freeSession(session);
 			session = NULL;
 		}
