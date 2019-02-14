@@ -576,11 +576,11 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
 	struct tm timestruct;
 	time_t rawtime = time(NULL);
 	gmtime_r(&rawtime, &timestruct); // Get the current UTC date
-	strftime(strtime, 30, "%Y-%m-%dT%H:%M:%S%Z", timestruct); // Format the time as UTC str
+	strftime(strtime, 30, "%Y-%m-%dT%H:%M:%S%Z", &timestruct); // Format the time as UTC str
 	struct json_object *json = NULL;
 	json = json_object_new_object();
 	json_object_object_add(json, "time", json_object_new_string(strtime));
-	msgAddJSON(pMsg, (uchar*)"!", strtime, 0, 0); // Add time as root tree key
+	msgAddJSON(pMsg, (uchar*)"!", json, 0, 0); // Add time as root tree key
 
 	struct json_object *jown = json_object_new_object();
 	json_object_object_add(jown, "ID", json_object_new_int(++(*id)));
