@@ -89,7 +89,7 @@ static const char *check_Command_ftp(uchar *first_part_packet) {
 			return ftp_cmds[i];
 		}
 	}
-	return NULL;
+	return "UNKNOWN";
 }
 
 /*
@@ -138,13 +138,13 @@ data_ret_t *ftp_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	const char *command = check_Command_ftp(frst_part_ftp);
 	free(packet2);
 	if (code != 0) {
-		json_object_object_add(jparent, "response", json_object_new_int(code));
+		json_object_object_add(jparent, "FTP_response", json_object_new_int(code));
 		int nb_digits = 1;
 		while( (code/=10) > 0 ) nb_digits++;
 		RETURN_DATA_AFTER(nb_digits)
 
 	} else if (command != NULL) {
-		json_object_object_add(jparent, "request", json_object_new_string(command));
+		json_object_object_add(jparent, "FTP_request", json_object_new_string(command));
 		RETURN_DATA_AFTER((int)strlen(command) + 1)
 
 	} else {

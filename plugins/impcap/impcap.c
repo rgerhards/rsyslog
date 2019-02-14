@@ -571,6 +571,13 @@ void packet_parse(uchar *arg, const struct pcap_pkthdr *pkthdr, const uchar *pac
 		}
 	}
 
+	/* Get current UTC time and set-it in JSON message */
+	char strtime[30] = {0};
+	struct tm timestruct;
+	time_t rawtime = time(NULL);
+	gmtime_r(&rawtime, &timestruct); // Get the current UTC date
+	strftime(strtime, 30, "%Y-%m-%dT%H:%M:%S%Z", timestruct);
+	msgAddJSON(pMsg, "time", strtime);
 
 	struct json_object *jown = json_object_new_object();
 	json_object_object_add(jown, "ID", json_object_new_int(++(*id)));

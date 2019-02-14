@@ -333,7 +333,7 @@ data_ret_t *dns_parse(const uchar *packet, int pktSize, struct json_object *jpar
 		packet++; // pass the last \0
 		DBGPRINTF("Requested domain : '%s' \n", domain_query);
 		/* Register the name in dict */
-		json_object_object_add(query, "name", json_object_new_string(domain_query));
+		json_object_object_add(query, "qname", json_object_new_string(domain_query));
 		/* Get QTYPE */
 		union_short_int.pckt = packet;
 		unsigned short int qtype = ntohs(*(union_short_int.two_bytes));
@@ -369,5 +369,6 @@ data_ret_t *dns_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	json_object_object_add(jparent, "DNS_ARCOUNT", json_object_new_int((int)additionnal_count));
 	json_object_object_add(jparent, "DNS_Names", queries);
 
-	RETURN_DATA_AFTER((int)(packet-svg_packet));
+	/* Packet has been successfully parsed, there still can be some responses left, but do not process them */
+	RETURN_DATA_AFTER(0);
 }

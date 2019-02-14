@@ -71,11 +71,11 @@ data_ret_t *http_parse(const uchar *packet, int pktSize, struct json_object *jpa
 	}
 
 	char *header = strtok(http, "\r\n\r\n");
-	json_object_object_add(jparent, "Http_Status_Code", json_object_new_string(catch_Status_Code(header)));
+	json_object_object_add(jparent, "HTTP_status_code", json_object_new_string(catch_Status_Code(header)));
 
 
 	char property[] = "Content-Type:";
-	char pro[] = "Http_Content_Type";
+	char pro[] = "HTTP_content_type";
 	char *prop = catch_property(header, property);
 	if (prop != NULL) {
 		json_object_object_add(jparent, pro, json_object_new_string(prop));

@@ -51,6 +51,63 @@ struct __attribute__ ((__packed__)) vlan_header_s
 typedef struct eth_header_s eth_header_t;
 typedef struct vlan_header_s vlan_header_t;
 
+
+/*
+ *  Get an ethernet header type as uint16_t
+ *   and return the correspondence as string
+ *  NOTE : Only most common types are present, to complete if needed
+ */
+static char *eth_type_to_string(uint16_t eth_type) {
+	switch( eth_type ) {
+		case 0x00bb:        // Extreme Networks Discovery Protocol
+			return "EDP";
+		case 0x0200:        // PUP protocol
+			return "PUP";
+		case 0x0800:        // IP protocol
+			return "IP";
+		case 0x0806:        // address resolution protocol
+			return "ARP";
+		case 0x88a2:        // AoE protocol
+			return "AOE";
+		case 0x2000:        // Cisco Discovery Protocol
+			return "CDP";
+		case 0x2004:        // Cisco Dynamic Trunking Protocol
+			return "DTP";
+		case 0x8035:        // reverse addr resolution protocol
+			return "REVARP";
+		case 0x8100:        // IEEE 802.1Q VLAN tagging
+			return "802.1Q";
+		case 0x88a8:        // IEEE 802.1ad
+			return "802.1AD";
+		case 0x9100:        // Legacy QinQ
+			return "QINQ1";
+		case 0x9200:        // Legacy QinQ
+			return "QINQ2";
+		case 0x8137:        // Internetwork Packet Exchange
+			return "IPX";
+		case 0x86DD:        // IPv6 protocol
+			return "IPv6";
+		case 0x880B:        // PPP
+			return "PPP";
+		case 0x8847:        // MPLS
+			return "MPLS";
+		case 0x8848:        // MPLS Multicast
+			return "MPLS_MCAST";
+		case 0x8863:        // PPP Over Ethernet Discovery Stage
+			return "PPPoE_DISC";
+		case 0x8864:        // PPP Over Ethernet Session Stage
+			return "PPPoE";
+		case 0x88CC:        // Link Layer Discovery Protocol
+			return "LLDP";
+		case 0x6558:        // Transparent Ethernet Bridging
+			return "TEB";
+		default:
+			return "UNKNOWN";
+	}
+}
+
+
+
 /*
  *  This function parses the bytes in the received packet to extract Ethernet II metadata.
  *
@@ -98,5 +155,6 @@ data_ret_t* eth_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	}
 
 	json_object_object_add(jparent, "ETH_type", json_object_new_int(ethType));
+	json_object_object_add(jparent, "ETH_typestr", json_object_new_string(eth_type_to_string(ethType)));
 	return (*ethProtoHandlers[ethType])((packet + hdrLen), (pktSize - hdrLen), jparent);
 }
