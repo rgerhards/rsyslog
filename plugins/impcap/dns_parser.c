@@ -29,24 +29,6 @@
 #include "parser.h"
 
 
-struct dns_header_s {
-	uint32_t version;
-	uint16_t headerLength;
-	uint16_t padding1;
-	uint32_t ntStatus;
-	uint16_t opCode;
-	uint16_t padding2;
-	uint32_t flags;
-	uint32_t chainOffset;
-	uint32_t comSeqNumber[2];
-	uint32_t processID;
-	uint32_t treeID;
-	uint32_t userID[2];
-	uint32_t signature[4];
-};
-
-typedef struct dns_header_s dns_header_t;
-
 /* List of RCodes defined in RFC6895 : https://tools.ietf.org/html/rfc6895 */
 static const char *dns_rcodes[] = {
 		"NoError",  // 0
