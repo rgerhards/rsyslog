@@ -57,7 +57,7 @@ typedef struct vlan_header_s vlan_header_t;
  *   and return the correspondence as string
  *  NOTE : Only most common types are present, to complete if needed
  */
-static char *eth_type_to_string(uint16_t eth_type) {
+static const char *eth_type_to_string(uint16_t eth_type) {
 	switch( eth_type ) {
 		case 0x00bb:        // Extreme Networks Discovery Protocol
 			return "EDP";
@@ -155,6 +155,6 @@ data_ret_t* eth_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	}
 
 	json_object_object_add(jparent, "ETH_type", json_object_new_int(ethType));
-	json_object_object_add(jparent, "ETH_typestr", json_object_new_string(eth_type_to_string(ethType)));
+	json_object_object_add(jparent, "ETH_typestr", json_object_new_string((char*)eth_type_to_string(ethType)));
 	return (*ethProtoHandlers[ethType])((packet + hdrLen), (pktSize - hdrLen), jparent);
 }
