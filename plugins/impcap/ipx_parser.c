@@ -88,7 +88,7 @@ data_ret_t *ipx_parse(const uchar *packet, int pktSize, struct json_object *jpar
 	json_object_object_add(jparent, "IPX_dest_node", json_object_new_string(ipxDstNode));
 	json_object_object_add(jparent, "IPX_src_node", json_object_new_string(ipxSrcNode));
 	json_object_object_add(jparent, "IPX_dest_socket", json_object_new_int(ntohs(ipx_header->dstSocket)));
-	json_object_object_add(jparent, "IPX_src_soket", json_object_new_int(ntohs(ipx_header->srcSocket)));
+	json_object_object_add(jparent, "IPX_src_socket", json_object_new_int(ntohs(ipx_header->srcSocket)));
 
 	RETURN_DATA_AFTER(30)
 }
