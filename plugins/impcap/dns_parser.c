@@ -63,79 +63,79 @@ static const char *dns_types[] = {
 		0,
 		"A",        // 1
 		"NS",       // 2
-		"MD", // 3
-		"MF", // 4
-		"CNAME",   // 5
-		"SOA",  // 6
-		"MB", // 7
-		"MG",  // 8
-		"MR",  // 9
-		"NULL",  // 10
-		"WKS",  // 11
-		"PTR",         // 12
-		"HINFO",         // 13
-		"MINFO",         // 14
-		"MX",         // 15
-		"TXT",         // 16
-		"RP",  // 17
-		"AFSDB",   // 18
-		"X25",  // 19
-		"ISDN",  // 20
-		"RT",  // 21
-		"NSAP",   // 22
+		"MD",       // 3
+		"MF",       // 4
+		"CNAME",    // 5
+		"SOA",      // 6
+		"MB",       // 7
+		"MG",       // 8
+		"MR",       // 9
+		"NULL",     // 10
+		"WKS",      // 11
+		"PTR",      // 12
+		"HINFO",    // 13
+		"MINFO",    // 14
+		"MX",       // 15
+		"TXT",      // 16
+		"RP",       // 17
+		"AFSDB",    // 18
+		"X25",      // 19
+		"ISDN",     // 20
+		"RT",       // 21
+		"NSAP",     // 22
 		"NSAP-PTR", // 23
-		"SIG",   // 22
-		"KEY",   // 22
-		"PX",   // 22
-		"GPOS",   // 22
-		"AAAA",   // 22
-		"LOC",   // 22
-		"NXT",   // 22
-		"EID",   // 22
-		"NIMLOC",   // 22
-		"SRV",   // 22
-		"ATMA",   // 22
-		"NAPTR",   // 22
-		"KX",   // 22
-		"CERT",   // 22
-		"A6",   // 22
-		"DNAME",   // 22
-		"SINK",   // 22
-		"OPT",   // 22
-		"APL",   // 22
-		"DS",   // 22
-		"SSHFP",   // 22
-		"IPSECKEY",   // 22
-		"RRSIG",   // 22
-		"NSEC",   // 22
-		"DNSKEY",   // 22
-		"DHCID",   // 22
-		"NSEC3",   // 22
-		"NSEC3PARAM",   // 22
-		"TLSA",   // 22
-		"SMIMEA",   // 22
-		"Unassigned",   // 22
-		"HIP",   // 22
-		"NINFO",   // 22
-		"RKEY",   // 22
-		"TALINK",   // 22
-		"CDS",   // 22
-		"CDNSKEY",   // 22
-		"OPENPGPKEY",   // 22
-		"CSYNC",   // 22
-		"ZONEMD",   // 63
+		"SIG",      // 24
+		"KEY",      // 25
+		"PX",       // 26
+		"GPOS",     // 27
+		"AAAA",     // 28
+		"LOC",      // 29
+		"NXT",      // 30
+		"EID",      // 31
+		"NIMLOC",   // 32
+		"SRV",      // 33
+		"ATMA",     // 34
+		"NAPTR",    // 35
+		"KX",       // 36
+		"CERT",     // 37
+		"A6",       // 38
+		"DNAME",    // 39
+		"SINK",     // 40
+		"OPT",      // 41
+		"APL",      // 42
+		"DS",       // 43
+		"SSHFP",    // 44
+		"IPSECKEY", // 45
+		"RRSIG",    // 46
+		"NSEC",     // 47
+		"DNSKEY",   // 48
+		"DHCID",    // 49
+		"NSEC3",    // 50
+		"NSEC3PARAM",   // 51
+		"TLSA",     // 51
+		"SMIMEA",   // 52
+		"Unassigned",   // 53
+		"HIP",      // 53
+		"NINFO",    // 54
+		"RKEY",     // 55
+		"TALINK",   // 56
+		"CDS",      // 57
+		"CDNSKEY",  // 58
+		"OPENPGPKEY",   // 59
+		"CSYNC",    // 60
+		"ZONEMD",   // 61
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		"SPF",   // 99
-		"UINFO",   // 22
-		"UID",   // 22
-		"GID",   // 22
-		"UNSPEC",   // 22
-		"NID",   // 22
-		"L32",   // 22
-		"L64",   // 22
-		"LP",   // 22
-		"EUI48",   // 22
-		"EUI64",   // 109
+		"SPF",      // 99
+		"UINFO",    // 100
+		"UID",      // 101
+		"GID",      // 102
+		"UNSPEC",   // 103
+		"NID",      // 104
+		"L32",      // 105
+		"L64",      // 106
+		"LP",       // 107
+		"EUI48",    // 108
+		"EUI64",    // 109
 		/* Reserved for private use */
 		NULL
 };
@@ -168,17 +168,22 @@ static const char *dns_types3[] = {
  */
 static const char *get_type(uint16_t x) {
 	const char **types = NULL;
-	if( x >= 32768 )
+	uint16_t len_types3 = (sizeof(dns_types3) / sizeof(char*)) - 1;
+	uint16_t len_types2 = (sizeof(dns_types2) / sizeof(char*)) - 1;
+	uint16_t len_types = (sizeof(dns_types) / sizeof(char*)) - 1;
+	if( x >= 32768 && x < 32768+len_types3)
 		types = dns_types3;
-	else if( x >= 249 )
+	else if( x >= 249 && x < 249+len_types2)
 		types = dns_types2;
-	else
+	else if( x > 0 && x < len_types )
 		types = dns_types;
-
+	else
+		return "UNKNOWN";
 	if( types[x] != NULL )
 		return types[x];
 	return "UNKNOWN";
 }
+
 
 
 /* This function takes an integer as parameter
@@ -312,6 +317,7 @@ data_ret_t *dns_parse(const uchar *packet, int pktSize, struct json_object *jpar
 			cpt++;
 			packet++;
 		}
+		domain_query[cpt] = '\0';
 		packet++; // pass the last \0
 		DBGPRINTF("Requested domain : '%s' \n", domain_query);
 		/* Register the name in dict */
