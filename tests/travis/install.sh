@@ -71,6 +71,15 @@ fi
 if [ "x$ESTEST" == "xYES" ]; then sudo apt-get install -qq elasticsearch ; fi
 if [ "$DISTRIB_CODENAME" == "trusty" ]; then sudo apt-get install -qq libhiredis-dev; export HIREDIS_OPT="--enable-omhiredis"; fi
 if [ "$DISTRIB_CODENAME" == "trusty" ]; then sudo apt-get install -qq libsystemd-journal-dev; export JOURNAL_OPT="--enable-imjournal --enable-omjournal"; fi
+if [ "$DISTRIB_CODENAME" == "trusty" ] || [ "$DISTRIB_CODENAME" == "precise" ]; then
+	export IMDOCKER_OPT=
+else
+	if [ "x$IMDOKER" == "xYES" ]; then
+#    git clone https://github.com/curl/curl.git > /dev/null
+#    (cd curl; ./buildconf; ./configure; make -j2 > /dev/null; sudo make install > /dev/null;)
+		export IMDOCKER_OPT="--enable-imdocker --enable-imdocker-tests";
+	fi
+fi
 if [ "$DISTRIB_CODENAME" != "precise" ]; then sudo apt-get install -qq --force-yes libqpid-proton3-dev ;fi
 if [ "$CC" == "clang" ] && [ "$DISTRIB_CODENAME" == "trusty" ]; then sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y && \
 sudo bash -c "echo \"deb http://apt.llvm.org/trusty/ llvm-toolchain-trusty-5.0 main\" > /etc/apt/sources.list.d/llvm.list" &&\

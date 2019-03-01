@@ -49,6 +49,15 @@ matrix:
        env: RUN="run.sh",CHECK="YES", ESTEST="YES", CFLAGS="-g -O1 -fsanitize=address -fno-color-diagnostics"
 
      - os: linux
+       dist: xenial
+       compiler: "gcc"
+       services:
+         - mysql
+         - postgresql
+         - docker
+       env: RUN="run.sh",CHECK="YES", IMDOCKER="YES"
+
+     - os: linux
        compiler: "clang"
        dist: trusty
        services:
@@ -90,6 +99,7 @@ matrix:
        compiler: "gcc"
        dist: trusty
        env: RUN="run-cron.sh",DO_COVERITY="YES",DO_CRON="YES", KAFKA="YES", GROK="YES"
+
 
 script:
    - devtools/ci/travis/do-run.sh

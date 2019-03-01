@@ -51,6 +51,7 @@ if [ "x$BUILD_FROM_TARBALL" == "xYES" ]; then
 	ls -ld rsyslog*
 	cd rsyslog*
 	export JOURNAL_OPT=
+	export IMDOCKER_OPT=
 	export DEFAULT_CONFIG_FLAGS="--disable-fmhttp"
 	echo "============================== DONE unpacking =============================="
 else
@@ -110,6 +111,7 @@ if [ "$DISTRIB_CODENAME" != "precise" ]; then AMQP1="--enable-omamqp1"; fi
 export CONFIG_FLAGS="$CONFIGURE_FLAGS \
 	$EXTRA_CONFIGURE \
 	$JOURNAL_OPT \
+	$IMDOCKER_OPT \
 	$HIREDIS_OPT \
 	$ENABLE_KAFKA \
 	$ENABLE_DEBUGLESS \

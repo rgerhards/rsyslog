@@ -799,6 +799,22 @@ endif
 endif
 endif
 
+if ENABLE_IMDOCKER
+if ENABLE_IMDOCKER_TESTS
+TESTS += \
+	imdocker-unittests.sh \
+	imdocker-long-logline.sh \
+	imdocker-new-logs-from-start.sh \
+	imdocker-multi-line.sh
+if HAVE_VALGRIND
+TESTS +=  \
+	imdocker-long-logline-vg.sh \
+	imdocker-new-logs-from-start-vg.sh \
+	imdocker-multi-line-vg.sh
+endif # HAVE_VALGRIND
+endif # ENABLE_IMDOCKER_TESTS
+endif # ENABLE_IMDOCKER
+
 if ENABLE_IMPSTATS
 TESTS +=  \
 	impstats-hup.sh \
@@ -2134,6 +2150,15 @@ EXTRA_DIST= \
 	mmkubernetes_test_server.py \
 	mmkubernetes-basic.out.json \
 	es-writeoperation.sh \
+	imdocker-unittests.sh \
+	imdocker-basic.sh \
+	imdocker-basic-vg.sh \
+	imdocker-long-logline.sh \
+	imdocker-long-logline-vg.sh \
+	imdocker-new-logs-from-start.sh \
+	imdocker-new-logs-from-start-vg.sh \
+	imdocker-multi-line.sh \
+	imdocker-multi-line-vg.sh \
 	testsuites/incltest.d/include.conf \
 	testsuites/abort-uncleancfg-goodcfg.conf \
 	testsuites/include-std-omfile-action.conf \
