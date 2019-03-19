@@ -77,8 +77,12 @@ export ZOOPIDFILE="$(pwd)/zookeeper.pid"
 TB_TIMEOUT_STARTSTOP=400 # timeout for start/stop rsyslogd in tenths (!) of a second 400 => 40 sec
 # note that 40sec for the startup should be sufficient even on very slow machines. we changed this from 2min on 2017-12-12
 TB_TEST_TIMEOUT=90  # number of seconds after which test checks timeout (eg. waits)
-TB_TEST_MAX_RUNTIME=500 # maximum runtuime in seconds for a test; testbench will abort test
+TB_TEST_MAX_RUNTIME=580 # maximum runtuime in seconds for a test; testbench will abort test
 			# after that time (iff it has a chance to, not strictly enforced)
+			# Note: 580 is slightly below the rsyslog-ci required max non-stdout writing timeout
+			# This is usually at 600 (10 minutes) and processes will be force-terminated if they
+			# go over it. This is especially bad because we do not receive notifications in this
+			# case.
 export RSYSLOG_DEBUG_TIMEOUTS_TO_STDERR="on"  # we want to know when we loose messages due to timeouts
 if [ "$TESTTOOL_DIR" == "" ]; then
 	export TESTTOOL_DIR="${srcdir:-.}"
@@ -282,21 +286,16 @@ wait_startup_pid() {
 		echo "FAIL: testbench bug: wait_startup_called without \$1"
 		error_exit 100
 	fi
-	i=0
-	start_timeout="$(date)"
 	while test ! -f $1; do
 		$TESTTOOL_DIR/msleep 100 # wait 100 milliseconds
-		(( i++ ))
-		if test $i -gt $TB_TIMEOUT_STARTSTOP
-		then
-		   printf 'ABORT! Timeout waiting on startup (pid file %s1)' "$1"
-		   echo "Wait initiated $start_timeout, now $(date)"
-		   ls -l $1
-		   ps -fp $(cat $1)
+		if [ $(date +%s) -gt $(( TB_STARTTEST + TB_TEST_MAX_RUNTIME )) ]; then
+		   printf '%s ABORT! Timeout waiting on startup (pid file %s)\n' "$(tb_timestamp)" "$1"
+		   ls -l "$1"
+		   ps -fp $(cat "$1")
 		   error_exit 1
 		fi
 	done
-	printf '%s found, pid %s\n' "$1" "$(cat $1)"
+	printf '%s %s found, pid %s\n' "$(tb_timestamp)" "$1" "$(cat $1)"
 }
 
 # special version of wait_startup_pid() for rsyslog startup
@@ -320,13 +319,12 @@ wait_process_startup() {
 			   error_exit 1
 			fi
 			(( i++ ))
-			if test $i -gt $TB_TIMEOUT_STARTSTOP
-			then
-			   echo "ABORT! Timeout waiting on file '$2'"
+			if [ $(date +%s) -gt $(( TB_STARTTEST + TB_TEST_MAX_RUNTIME )) ]; then
+			   printf '%s ABORT! Timeout waiting on file %s\n' "$(tb_timestamp)" "$2"
 			   error_exit 1
 			fi
 		done
-		echo "$2 seen, associated pid " $(cat $1.pid)
+		printf '%s %s seen, associated pid %s\n' "$(tb_timestamp)" "$2" "$(cat $1)"
 	fi
 }
 
@@ -338,22 +336,17 @@ wait_pid_termination() {
 			printf 'TESTBENCH error: pidfile name not specified in wait_pid_termination\n'
 			error_exit 100
 		fi
-		i=0
 		terminated=0
-		start_timeout="$(date)"
 		while [[ $terminated -eq 0 ]]; do
 			ps -p $out_pid &> /dev/null
 			if [[ $? != 0 ]]; then
 				terminated=1
 			fi
 			$TESTTOOL_DIR/msleep 100
-			(( i++ ))
-			if test $i -gt $TB_TIMEOUT_STARTSTOP ; then
-			   echo "ABORT! Timeout waiting on shutdown"
-			   echo "Wait initiated $start_timeout, now $(date)"
+			if [ $(date +%s) -gt $(( TB_STARTTEST + TB_TEST_MAX_RUNTIME )) ]; then
+			   printf '%s ABORT! Timeout waiting on shutdown (pid %s)\n' "$(tb_timestamp)" $out_pid
 			   ps -fp $out_pid
-			   echo "Instance is possibly still running and may need"
-			   echo "manual cleanup."
+			   printf 'Instance is possibly still running and may need manual cleanup.\n'
 			   error_exit 1
 			fi
 		done
@@ -449,7 +442,6 @@ injectmsg_kafkacat() {
 # wait for rsyslogd startup ($1 is the instance)
 wait_startup() {
 	wait_rsyslog_startup_pid $1
-	i=0
 	while test ! -f ${RSYSLOG_DYNNAME}$1.started; do
 		$TESTTOOL_DIR/msleep 100 # wait 100 milliseconds
 		ps -p $(cat $RSYSLOG_PIDBASE$1.pid) &> /dev/null
@@ -458,10 +450,8 @@ wait_startup() {
 		   echo "ABORT! rsyslog pid no longer active during startup!"
 		   error_exit 1 stacktrace
 		fi
-		(( i++ ))
-		if test $i -gt $TB_TIMEOUT_STARTSTOP
-		then
-		   echo "ABORT! Timeout waiting on startup ('${RSYSLOG_DYNNAME}.started' file)"
+		if [ $(date +%s) -gt $(( TB_STARTTEST + TB_TEST_MAX_RUNTIME )) ]; then
+		   printf '%s ABORT! Timeout waiting startup file %s\n' "$(tb_timestamp)" "${RSYSLOG_DYNNAME}.started"
 		   error_exit 1
 		fi
 	done
@@ -798,7 +788,6 @@ wait_shutdown() {
 		wait_shutdown_vg "$1"
 		return
 	fi
-	i=0
 	out_pid=$(cat $RSYSLOG_PIDBASE$1.pid.save)
 	printf '%s wait on shutdown of %s\n' "$(tb_timestamp)" "$out_pid"
 	if [[ "$out_pid" == "" ]]
@@ -807,18 +796,14 @@ wait_shutdown() {
 	else
 		terminated=0
 	fi
-	start_timeout="$(date)"
 	while [[ $terminated -eq 0 ]]; do
 		ps -p $out_pid &> /dev/null
 		if [[ $? != 0 ]]; then
 			terminated=1
 		fi
 		$TESTTOOL_DIR/msleep 100 # wait 100 milliseconds
-		(( i++ ))
-		if test $i -gt $TB_TIMEOUT_STARTSTOP
-		then
-		   echo "ABORT! Timeout waiting on shutdown"
-		   echo "Wait initiated $start_timeout, now $(date)"
+		if [ $(date +%s) -gt $(( TB_STARTTEST + TB_TEST_MAX_RUNTIME )) ]; then
+		   printf '%s wait_shutdown ABORT! Timeout waiting on shutdown (pid %s)\n' "$(tb_timestamp)" $out_pid
 		   ps -fp $out_pid
 		   echo "Instance is possibly still running and may need"
 		   echo "manual cleanup."
@@ -1156,7 +1141,7 @@ error_exit() {
 			exitval=77
 		fi
 	fi
-	printf '%s Test %s FAILED (took %s seconds)\n' "$(tb_timestamp)" "$0" "$(( $(date +%s) - TB_STARTTEST ))"
+	printf '%s FAIL: Test %s (took %s seconds)\n' "$(tb_timestamp)" "$0" "$(( $(date +%s) - TB_STARTTEST ))"
 	exit $exitval
 }
 
@@ -1300,7 +1285,7 @@ exit_test() {
 	rm -f rsyslog.action.*.include
 	rm -f work rsyslog.out.* xlate*.lkp_tbl
 	rm -rf test-logdir stat-file1
-	rm -f rsyslog.conf.tlscert stat-file1 rsyslog.empty imfile-state*
+	rm -f rsyslog.conf.tlscert stat-file1 rsyslog.empty imfile-state:*
 	rm -rf rsyslog-link.*.log targets
 	rm -f ${TESTCONF_NM}.conf
 	rm -f tmp.qi nocert
@@ -1331,7 +1316,7 @@ get_inode() {
 		printf 'FAIL: file "%s" does not exist in get_inode\n' "$1"
 		error_exit 100
 	fi
-	stat -c '%i' "$1"
+	python -c 'import os; import stat; print os.lstat("'$1'")[stat.ST_INO]'
 }
 
 
@@ -2145,7 +2130,7 @@ case $1 in
 		rm -f log log* # RSyslog debug output 
 		rm -f work 
 		rm -rf test-logdir stat-file1
-		rm -f rsyslog.empty imfile-state* omkafka-failed.data
+		rm -f rsyslog.empty imfile-state:* omkafka-failed.data
 		rm -rf rsyslog-link.*.log targets
 		rm -f tmp.qi nocert
 		rm -f core.* vgcore.* core*

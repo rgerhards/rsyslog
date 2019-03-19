@@ -95,9 +95,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#ifdef _AIX
-#include <pthread.h>
-#endif
 #include <json.h>
 
 #include "rsyslog.h"
@@ -122,9 +119,8 @@
 #ifdef _AIX
 #define cs legacy_cs
 #endif
-#if !defined(_AIX)
-#pragma GCC diagnostic ignored "-Wswitch-enum"
-#endif
+
+PRAGMA_INGORE_Wswitch_enum
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -1023,10 +1019,9 @@ finalize_it:
 
 
 /* the #pragmas can go away when we have disable array-passing mode */
-#if !defined(_AIX)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align"
-#endif
+
+PRAGMA_DIAGNOSTIC_PUSH
+PRAGMA_IGNORE_Wcast_align
 void
 releaseDoActionParams(action_t *__restrict__ const pAction, wti_t *__restrict__ const pWti, int action_destruct)
 {
@@ -1061,9 +1056,8 @@ releaseDoActionParams(action_t *__restrict__ const pAction, wti_t *__restrict__ 
 
 	return;
 }
-#if !defined(_AIX)
-#pragma GCC diagnostic pop
-#endif
+
+PRAGMA_DIAGNOSTIC_POP
 
 
 /* This is used in resume processing. We only finally know that a resume
@@ -1508,7 +1502,7 @@ actionCommitAllDirect(wti_t *__restrict__ const pWti)
 }
 
 /* process a single message. This is both called if we run from the
- * cosumer side of an action queue as well as directly from the main
+ * consumer side of an action queue as well as directly from the main
  * queue thread if the action queue is set to "direct".
  */
 static rsRetVal
@@ -1747,7 +1741,7 @@ actionWriteToAction(action_t * const pAction, smsg_t *pMsg, wti_t * const pWti)
 		   }
 		if(pAction->iNbrNoExec < pAction->iExecEveryNthOccur - 1) {
 			++pAction->iNbrNoExec;
-			DBGPRINTF("action %p passed %d times to execution - less than neded - discarding\n",
+			DBGPRINTF("action %p passed %d times to execution - less than configured - discarding\n",
 			  pAction, pAction->iNbrNoExec);
 			FINALIZE;
 		} else {
@@ -1790,9 +1784,9 @@ finalize_it:
 /* Call configured action, most complex case with all features supported (and thus slow).
  * rgerhards, 2010-06-08
  */
-#ifndef _AIX
-#pragma GCC diagnostic ignored "-Wempty-body"
-#endif
+
+PRAGMA_DIAGNOSTIC_PUSH;
+PRAGMA_IGNORE_Wempty_body;
 static rsRetVal
 doSubmitToActionQComplex(action_t * const pAction, wti_t * const pWti, smsg_t *pMsg)
 {
@@ -1821,9 +1815,7 @@ finalize_it:
 
 	RETiRet;
 }
-#ifndef _AIX
-#pragma GCC diagnostic warning "-Wempty-body"
-#endif
+PRAGMA_DIAGNOSTIC_POP
 
 
 /* helper to activateActions, it activates a specific action.

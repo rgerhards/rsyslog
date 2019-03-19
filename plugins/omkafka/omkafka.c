@@ -20,7 +20,6 @@
  * limitations under the License.
  */
 #include "config.h"
-#include "rsyslog.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -38,6 +37,8 @@
 #endif
 #include <unistd.h>
 #include <librdkafka/rdkafka.h>
+
+#include "rsyslog.h"
 #include "syslogd-types.h"
 #include "srUtils.h"
 #include "template.h"
@@ -79,6 +80,65 @@ STATSCOUNTER_DEF(ctrKafkaRespAuth, mutCtrKafkaRespAuth);
 STATSCOUNTER_DEF(ctrKafkaRespOther, mutCtrKafkaRespOther);
 
 #define MAX_ERRMSG 1024 /* max size of error messages that we support */
+
+#ifndef SLIST_INIT
+#define SLIST_INIT(head) do {           \
+	(head)->slh_first = NULL;        \
+} while (/*CONSTCOND*/0)
+#endif
+
+#ifndef SLIST_ENTRY
+#define SLIST_ENTRY(type)           \
+	struct {                \
+		struct type *sle_next;  /* next element */      \
+	}
+#endif
+
+#ifndef SLIST_HEAD
+#define SLIST_HEAD(name, type)            \
+struct name {               \
+	struct type *slh_first; /* first element */     \
+}
+#endif
+
+#ifndef SLIST_INSERT_HEAD
+#define SLIST_INSERT_HEAD(head, elm, field) do {      \
+	(elm)->field.sle_next = (head)->slh_first;      \
+	(head)->slh_first = (elm);          \
+} while (/*CONSTCOND*/0)
+#endif
+
+#ifndef SLIST_REMOVE_HEAD
+#define SLIST_REMOVE_HEAD(head, field) do {       \
+	(head)->slh_first = (head)->slh_first->field.sle_next;    \
+} while (/*CONSTCOND*/0)
+#endif
+
+#ifndef SLIST_FIRST
+#define SLIST_FIRST(head) ((head)->slh_first)
+#endif
+
+#ifndef SLIST_NEXT
+#define SLIST_NEXT(elm, field)  ((elm)->field.sle_next)
+#endif
+
+#ifndef SLIST_EMPTY
+#define SLIST_EMPTY(head) ((head)->slh_first == NULL)
+#endif
+
+#ifndef SLIST_REMOVE
+#define SLIST_REMOVE(head, elm, type, field) do {     \
+		if ((head)->slh_first == (elm)) {       \
+			SLIST_REMOVE_HEAD((head), field);     \
+		}               \
+	else {                \
+		struct type *curelm = (head)->slh_first;    \
+		while(curelm->field.sle_next != (elm))      \
+			curelm = curelm->field.sle_next;    \
+		curelm->field.sle_next = curelm->field.sle_next->field.sle_next;   \
+	}               \
+} while (/*CONSTCOND*/0)
+#endif
 
 #define NO_FIXED_PARTITION -1	/* signifies that no fixed partition config exists */
 
@@ -136,6 +196,7 @@ typedef struct s_dynaTopicCacheEntry dynaTopicCacheEntry;
 
 /* Struct for Failed Messages Listitems */
 struct s_failedmsg_entry {
+	uchar* key;
 	uchar* payload;
 	uchar* topicname;
 	SLIST_ENTRY(s_failedmsg_entry) entries;	/*	List. */
@@ -144,6 +205,7 @@ typedef struct s_failedmsg_entry failedmsg_entry;
 
 typedef struct _instanceData {
 	uchar *topic;
+	sbool dynaKey;
 	sbool dynaTopic;
 	dynaTopicCacheEntry **dynCache;
 	pthread_mutex_t mutDynCache;
@@ -197,6 +259,7 @@ static struct cnfparamdescr actpdescr[] = {
 	{ "topic", eCmdHdlrString, CNFPARAM_REQUIRED },
 	{ "dynatopic", eCmdHdlrBinary, 0 },
 	{ "dynatopic.cachesize", eCmdHdlrInt, 0 },
+	{ "dynakey", eCmdHdlrBinary, 0 },
 	{ "partitions.auto", eCmdHdlrBinary, 0 },	/* use librdkafka's automatic partitioning function */
 	{ "partitions.number", eCmdHdlrPositiveInt, 0 },
 	{ "partitions.usefixed", eCmdHdlrNonNegInt, 0 }, /* expert parameter, "nails" partition */
@@ -249,6 +312,7 @@ free_topic(rd_kafka_topic_t **topic)
 
 static void ATTR_NONNULL(1)
 failedmsg_entry_destruct(failedmsg_entry *const __restrict__ fmsgEntry) {
+	free(fmsgEntry->key);
 	free(fmsgEntry->payload);
 	free(fmsgEntry->topicname);
 	free(fmsgEntry);
@@ -257,21 +321,35 @@ failedmsg_entry_destruct(failedmsg_entry *const __restrict__ fmsgEntry) {
 /* note: we need the length of message as we need to deal with
  * non-NUL terminated strings under some circumstances.
  */
-static failedmsg_entry * ATTR_NONNULL()
-failedmsg_entry_construct(const char *const msg, const size_t msglen, const char *const topicname)
+static failedmsg_entry * ATTR_NONNULL(3,5)
+failedmsg_entry_construct(const char *const key, const size_t keylen, const char *const msg,
+const size_t msglen, const char *const topicname)
 {
 	failedmsg_entry *etry = NULL;
 
 	if((etry = malloc(sizeof(struct s_failedmsg_entry))) == NULL) {
 		return NULL;
 	}
+
+	if (key) {
+		if((etry->key = (uchar*)malloc(keylen+1)) == NULL) {
+			free(etry);
+			return NULL;
+		}
+		memcpy(etry->key, key, keylen);
+	} else {
+		etry->key=NULL;
+	}
+
 	if((etry->payload = (uchar*)malloc(msglen+1)) == NULL) {
+		free(etry->key);
 		free(etry);
 		return NULL;
 	}
 	memcpy(etry->payload, msg, msglen);
 	etry->payload[msglen] = '\0';
 	if((etry->topicname = (uchar*)strdup(topicname)) == NULL) {
+		free(etry->key);
 		free(etry->payload);
 		free(etry);
 		return NULL;
@@ -655,8 +733,8 @@ updateKafkaFailureCounts(rd_kafka_resp_err_t err) {
  * b_do_resubmit tells if we shall resubmit on error or not. This is needed
  *               when we submit already resubmitted messages.
  */
-static rsRetVal ATTR_NONNULL(1, 2)
-writeKafka(instanceData *const pData, uchar *const msg,
+static rsRetVal ATTR_NONNULL(1, 3)
+writeKafka(instanceData *const pData,  uchar *const key, uchar *const msg,
 	uchar *const msgTimestamp, uchar *const topic, const int b_do_resubmit)
 {
 	DEFiRet;
@@ -673,7 +751,7 @@ writeKafka(instanceData *const pData, uchar *const msg,
 #endif
 
 	DBGPRINTF("omkafka: trying to send: key:'%s', msg:'%s', timestamp:'%s'\n",
-		pData->key, msg, msgTimestamp);
+		key, msg, msgTimestamp);
 
 	if(pData->dynaTopic) {
 		DBGPRINTF("omkafka: topic to insert to: %s\n", topic);
@@ -701,7 +779,7 @@ writeKafka(instanceData *const pData, uchar *const msg,
 	DBGPRINTF("omkafka: rd_kafka_producev timestamp=%s/%" PRId64 "\n", msgTimestamp, ttMsgTimestamp);
 
 	/* Using new kafka producev API, includes Timestamp! */
-	if (pData->key == NULL) {
+	if (key == NULL) {
 		msg_kafka_response = rd_kafka_producev(pData->rk,
 						RD_KAFKA_V_RKT(rkt),
 						RD_KAFKA_V_PARTITION(partition),
@@ -711,14 +789,14 @@ writeKafka(instanceData *const pData, uchar *const msg,
 						RD_KAFKA_V_KEY(NULL, 0),
 						RD_KAFKA_V_END);
 	} else {
-		DBGPRINTF("omkafka: rd_kafka_producev key=%s\n", pData->key);
+		DBGPRINTF("omkafka: rd_kafka_producev key=%s\n", key);
 		msg_kafka_response = rd_kafka_producev(pData->rk,
 						RD_KAFKA_V_RKT(rkt),
 						RD_KAFKA_V_PARTITION(partition),
 						RD_KAFKA_V_VALUE(msg, strlen((char*)msg)),
 						RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
 						RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp),
-						RD_KAFKA_V_KEY(pData->key,strlen((char*)pData->key)),
+						RD_KAFKA_V_KEY(key,strlen((char*)key)),
 						RD_KAFKA_V_END);
 	}
 
@@ -731,15 +809,15 @@ writeKafka(instanceData *const pData, uchar *const msg,
 				"partition %d: '%d/%s' - adding MSG '%s' to failed for RETRY!\n",
 				rd_kafka_topic_name(rkt), partition, msg_kafka_response,
 				rd_kafka_err2str(msg_kafka_response), msg);
-			CHKmalloc(fmsgEntry = failedmsg_entry_construct((char*) msg, strlen((char*)msg),
-				rd_kafka_topic_name(rkt)));
+			CHKmalloc(fmsgEntry = failedmsg_entry_construct((char*) key, key ? strlen((char*)key) : 0,
+				(char*) msg, strlen((char*)msg),rd_kafka_topic_name(rkt)));
 			SLIST_INSERT_HEAD(&pData->failedmsg_head, fmsgEntry, entries);
 		} else {
 			LogError(0, RS_RET_KAFKA_PRODUCE_ERR,
 				"omkafka: Failed to produce to topic '%s' (rd_kafka_producev)"
-				"partition %d: %d/%s - MSG '%s'\n",
+				"partition %d: %d/%s - KEY '%s' -MSG '%s'\n",
 				rd_kafka_topic_name(rkt), partition, msg_kafka_response,
-				rd_kafka_err2str(msg_kafka_response), msg);
+				rd_kafka_err2str(msg_kafka_response), key, msg);
 		}
 	}
 #else
@@ -747,8 +825,8 @@ writeKafka(instanceData *const pData, uchar *const msg,
 	DBGPRINTF("omkafka: rd_kafka_produce\n");
 	/* Using old kafka produce API */
 	msg_enqueue_status = rd_kafka_produce(rkt, partition, RD_KAFKA_MSG_F_COPY,
-				  msg, strlen((char*)msg), pData->key,
-				  pData->key == NULL ? 0 : strlen((char*)pData->key),
+				  msg, strlen((char*)msg), key,
+				  key ? strlen((char*)key) : 0,
 				  NULL);
 	if(msg_enqueue_status == -1) {
 		msg_kafka_response = rd_kafka_last_error();
@@ -757,18 +835,18 @@ writeKafka(instanceData *const pData, uchar *const msg,
 		/* Put into kafka queue, again if configured! */
 		if (pData->bResubmitOnFailure && b_do_resubmit) {
 		   	DBGPRINTF("omkafka: Failed to produce to topic '%s' (rd_kafka_produce)"
-				"partition %d: '%d/%s' - adding MSG '%s' to failed for RETRY!\n",
+				"partition %d: '%d/%s' - adding MSG '%s' KEY '%s' to failed for RETRY!\n",
 				rd_kafka_topic_name(rkt), partition, msg_kafka_response,
-				rd_kafka_err2str(rd_kafka_errno2err(errno)), msg);
-			CHKmalloc(fmsgEntry = failedmsg_entry_construct((char*) msg, strlen((char*)msg),
-				rd_kafka_topic_name(rkt)));
+				rd_kafka_err2str(rd_kafka_errno2err(errno)), msg, key ? key : "");
+			CHKmalloc(fmsgEntry = failedmsg_entry_construct((char*) key, key ? strlen((char*)key) : 0,
+				(char*) msg, strlen((char*)msg),rd_kafka_topic_name(rkt)));
 			SLIST_INSERT_HEAD(&pData->failedmsg_head, fmsgEntry, entries);
 		} else {
 			LogError(0, RS_RET_KAFKA_PRODUCE_ERR,
 				"omkafka: Failed to produce to topic '%s' (rd_kafka_produce) "
-				"partition %d: %d/%s - MSG '%s'\n",
+				"partition %d: %d/%s - MSG '%s' KEY '%s'\n",
 				rd_kafka_topic_name(rkt), partition, msg_kafka_response,
-				rd_kafka_err2str(msg_kafka_response), msg);
+				rd_kafka_err2str(msg_kafka_response), msg, key);
 		}
 	}
 #endif
@@ -821,8 +899,8 @@ deliveryCallback(rd_kafka_t __attribute__((unused)) *rk,
 				rd_kafka_topic_name(rkmessage->rkt),
 				(int)(rkmessage->len-1), (char*)rkmessage->payload,
 				(int)(rkmessage->key_len), (char*)rkmessage->key);
-			CHKmalloc(fmsgEntry = failedmsg_entry_construct(rkmessage->payload, rkmessage->len,
-				rd_kafka_topic_name(rkmessage->rkt)));
+			CHKmalloc(fmsgEntry = failedmsg_entry_construct(rkmessage->key, rkmessage->key_len,
+				rkmessage->payload, rkmessage->len,rd_kafka_topic_name(rkmessage->rkt)));
 			SLIST_INSERT_HEAD(&pData->failedmsg_head, fmsgEntry, entries);
 		} else {
 			LogError(0, RS_RET_ERR,
@@ -1269,7 +1347,8 @@ checkFailedMessages(instanceData *const __restrict__ pData)
 		fmsgEntry = SLIST_FIRST(&pData->failedmsg_head);
 		assert(fmsgEntry != NULL);
 		/* Put back into kafka! */
-		iRet = writeKafka(pData, (uchar*) fmsgEntry->payload, NULL, fmsgEntry->topicname, NO_RESUBMIT);
+		iRet = writeKafka(pData, (uchar*) fmsgEntry->key, (uchar*) fmsgEntry->payload, NULL,
+			fmsgEntry->topicname,NO_RESUBMIT);
 		if(iRet != RS_RET_OK) {
 			LogMsg(0, RS_RET_SUSPENDED, LOG_WARNING,
 				"omkafka: failed to deliver failed msg '%.*s' with status %d. "
@@ -1329,6 +1408,10 @@ persistFailedMsgs(instanceData *const __restrict__ pData)
 		nwritten = write(fdMsgFile, fmsgEntry->topicname, ustrlen(fmsgEntry->topicname) );
 		if(nwritten != -1)
 			nwritten = write(fdMsgFile, "\t", 1);
+		if((nwritten != -1) && (fmsgEntry->key))
+			nwritten = write(fdMsgFile, fmsgEntry->key, ustrlen(fmsgEntry->key) );
+		if(nwritten != -1)
+			nwritten = write(fdMsgFile, "\t", 1);
 		if(nwritten != -1)
 			nwritten = write(fdMsgFile, fmsgEntry->payload, ustrlen(fmsgEntry->payload) );
 		if(nwritten == -1) {
@@ -1369,6 +1452,7 @@ loadFailedMsgs(instanceData *const __restrict__ pData)
 	cstr_t *pCStr = NULL;
 	uchar *puStr;
 	char *pStrTabPos;
+	char *pStrTabPos2;
 
 	assert(pData->failedMsgFile != NULL);
 
@@ -1401,16 +1485,26 @@ loadFailedMsgs(instanceData *const __restrict__ pData)
 			/* we do not process empty lines */
 			DBGPRINTF("omkafka: loadFailedMsgs msg was empty!");
 		} else {
-			puStr = rsCStrGetSzStrNoNULL(pCStr);
-			pStrTabPos = index((char*)puStr, '\t');
-			if (pStrTabPos != NULL) {
-				DBGPRINTF("omkafka: loadFailedMsgs successfully loaded msg '%s' for "
-					"topic '%.*s':%d\n",
-					pStrTabPos+1, (int)(pStrTabPos-(char*)puStr), (char*)puStr,
-					(int)(pStrTabPos-(char*)puStr));
+			puStr = rsCStrGetSzStrNoNULL(pCStr); //topic
+			pStrTabPos = index((char*)puStr, '\t');  //key
+			pStrTabPos2 = index((char*)pStrTabPos+1, '\t');  //msg
+			if ((pStrTabPos != NULL) && (pStrTabPos2 != NULL)) {
 				*pStrTabPos = '\0'; /* split string into two */
-				CHKmalloc(fmsgEntry = failedmsg_entry_construct(pStrTabPos+1,
-					strlen(pStrTabPos+1), (char*)puStr));
+				*pStrTabPos2 = '\0'; /* split string into two */
+				DBGPRINTF("omkafka: loadFailedMsgs successfully loaded msg '%s' for "
+					"topic '%s' key '%s' \n",
+					pStrTabPos2+1, (char*)puStr, pStrTabPos+1);
+				if (strlen(pStrTabPos+1)) {
+					CHKmalloc(fmsgEntry = failedmsg_entry_construct(
+						pStrTabPos+1,strlen(pStrTabPos+1),
+						pStrTabPos2+1,strlen(pStrTabPos2+1),
+						(char*)puStr));
+				} else {
+					CHKmalloc(fmsgEntry = failedmsg_entry_construct(
+						NULL,0,
+						pStrTabPos2+1,strlen(pStrTabPos2+1),
+						(char*)puStr));
+				}
 				SLIST_INSERT_HEAD(&pData->failedmsg_head, fmsgEntry, entries);
 			} else {
 				LogError(0, RS_RET_ERR, "omkafka: loadFailedMsgs droping invalid msg found: %s",
@@ -1606,7 +1700,19 @@ CODESTARTdoAction
 	failedmsg_entry* fmsgEntry;
 	instanceData *const pData = pWrkrData->pData;
 	int need_unlock = 0;
+	int dynaTopicID = 0;
+	int dynaKeyID = 0;
 
+	if (pData->dynaKey) {
+		dynaKeyID=2;
+		if (pData->dynaTopic) {
+			dynaTopicID=3;
+		}
+	} else {
+		if (pData->dynaTopic) {
+			dynaTopicID=2;
+		}
+	}
 	pthread_mutex_lock(&pData->mut_doAction);
 	if (! pData->bIsOpen)
 		CHKiRet(setupKafkaHandle(pData, 0));
@@ -1627,12 +1733,24 @@ CODESTARTdoAction
 			DBGPRINTF("omkafka: doAction failed to submit FAILED messages with status %d\n", iRet);
 
 			if (pData->bResubmitOnFailure) {
-				DBGPRINTF("omkafka: also adding MSG '%.*s' for topic '%s' to failed for RETRY!\n",
-					(int)(strlen((char*)ppString[0])-1), ppString[0],
-					pData->dynaTopic ? ppString[2] : pData->topic);
-				CHKmalloc(fmsgEntry = failedmsg_entry_construct((char*)ppString[0],
-					strlen((char*)ppString[0]),
-					(char*) (pData->dynaTopic ? ppString[2] : pData->topic)));
+				if (pData->dynaKey || pData->key) {
+					DBGPRINTF("omkafka: also adding MSG '%.*s' for topic '%s' key '%s' "
+						"to failed for RETRY!\n",
+						(int)(strlen((char*)ppString[0])-1), ppString[0],
+						pData->dynaTopic ? ppString[dynaTopicID] : pData->topic,
+						pData->dynaKey ? ppString[dynaKeyID] : pData->key);
+				} else {
+					DBGPRINTF("omkafka: also adding MSG '%.*s' for topic '%s' "
+						"to failed for RETRY!\n",
+						(int)(strlen((char*)ppString[0])-1), ppString[0],
+						pData->dynaTopic ? ppString[dynaTopicID] : pData->topic);
+				}
+				CHKmalloc(fmsgEntry = failedmsg_entry_construct(
+					(char*) (pData->dynaKey ? ppString[dynaKeyID] : pData->key),
+					pData->dynaKey || pData->key ?
+					strlen((char*)(pData->dynaKey ? ppString[dynaKeyID] : pData->key)) : 0,
+					(char*)ppString[0], strlen((char*)ppString[0]),
+					(char*) (pData->dynaTopic ? ppString[dynaTopicID] : pData->topic)));
 				SLIST_INSERT_HEAD(&pData->failedmsg_head, fmsgEntry, entries);
 			}
 			ABORT_FINALIZE(iRet);
@@ -1640,7 +1758,8 @@ CODESTARTdoAction
 	}
 
 	/* support dynamic topic */
-	iRet = writeKafka(pData, ppString[0], ppString[1], pData->dynaTopic ? ppString[2] : pData->topic, RESUBMIT);
+	iRet = writeKafka(pData, pData->dynaKey ? ppString[dynaKeyID] : pData->key, ppString[0], ppString[1],
+		pData->dynaTopic ? ppString[dynaTopicID] : pData->topic, RESUBMIT);
 
 finalize_it:
 	if(need_unlock) {
@@ -1665,6 +1784,7 @@ setInstParamDefaults(instanceData *pData)
 {
 	pData->topic = NULL;
 	pData->pTopic = NULL;
+	pData->dynaKey = 0;
 	pData->dynaTopic = 0;
 	pData->iDynaTopicCacheSize = 50;
 	pData->brokers = NULL;
@@ -1719,6 +1839,8 @@ CODESTARTnewActInst
 			continue;
 		if(!strcmp(actpblk.descr[i].name, "topic")) {
 			pData->topic = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+		} else if(!strcmp(actpblk.descr[i].name, "dynakey")) {
+			pData->dynaKey = pvals[i].val.d.n;
 		} else if(!strcmp(actpblk.descr[i].name, "dynatopic")) {
 			pData->dynaTopic = pvals[i].val.d.n;
 		} else if(!strcmp(actpblk.descr[i].name, "dynatopic.cachesize")) {
@@ -1790,6 +1912,13 @@ CODESTARTnewActInst
 			"using default of localhost:9092 -- this may not be what you want!");
 	}
 
+	if(pData->dynaKey && pData->key == NULL) {
+		LogError(0, RS_RET_CONFIG_ERROR,
+			"omkafka: requested dynamic key, but no "
+			"name for key template given - action definition invalid");
+		ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
+	}
+
 	if(pData->dynaTopic && pData->topic == NULL) {
 		LogError(0, RS_RET_CONFIG_ERROR,
 			"omkafka: requested dynamic topic, but no "
@@ -1798,6 +1927,7 @@ CODESTARTnewActInst
 	}
 
 	iNumTpls = 2;
+	if(pData->dynaKey) ++iNumTpls;
 	if(pData->dynaTopic) ++iNumTpls;
 	CODE_STD_STRING_REQUESTnewActInst(iNumTpls);
 	CHKiRet(OMSRsetEntry(*ppOMSR, 0, (uchar*)strdup((pData->tplName == NULL) ?
@@ -1806,8 +1936,11 @@ CODESTARTnewActInst
 
 	CHKiRet(OMSRsetEntry(*ppOMSR, 1, (uchar*)strdup(" KAFKA_TimeStamp"),
 						OMSR_NO_RQD_TPL_OPTS));
+	if(pData->dynaKey)
+		CHKiRet(OMSRsetEntry(*ppOMSR, 2, ustrdup(pData->key), OMSR_NO_RQD_TPL_OPTS));
+
 	if(pData->dynaTopic) {
-		CHKiRet(OMSRsetEntry(*ppOMSR, 2, ustrdup(pData->topic), OMSR_NO_RQD_TPL_OPTS));
+		CHKiRet(OMSRsetEntry(*ppOMSR, pData->dynaKey?3:2, ustrdup(pData->topic), OMSR_NO_RQD_TPL_OPTS));
 		CHKmalloc(pData->dynCache = (dynaTopicCacheEntry**)
 			calloc(pData->iDynaTopicCacheSize, sizeof(dynaTopicCacheEntry*)));
 		pData->iCurrElt = -1;

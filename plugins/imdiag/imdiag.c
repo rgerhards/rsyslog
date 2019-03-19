@@ -288,7 +288,7 @@ injectMsg(uchar *pszCmd, tcps_sess_t *pSess)
 		}
 	}
 	CHKiRet(sendResponse(pSess, "%d messages injected\n", nMsgs));
-	
+
 	DBGPRINTF("imdiag: %d messages injected\n", nMsgs);
 
 finalize_it:
@@ -401,7 +401,7 @@ imdiag_statsReadCallback(statsobj_t __attribute__((unused)) *const ignore_stats,
 		pthread_cond_signal(&statsReporterWatch);
 		pthread_mutex_unlock(&mutStatsReporterWatch);
 	}
-	
+
 	if (delta > 0) {
 		STATSCOUNTER_ADD(actualArtificialDelayMs, mutActualArtificialDelayMs, delta);
 	}
@@ -605,6 +605,7 @@ timeoutGuard(ATTR_UNUSED void *arg)
 {
 	assert(abortTimeout != -1);
 	sigset_t sigSet;
+	time_t strtTO;
 	time_t endTO;
 
 	/* block all signals except SIGTTIN and SIGSEGV */
@@ -614,8 +615,8 @@ timeoutGuard(ATTR_UNUSED void *arg)
 
 	dbgprintf("timeoutGuard: timeout %d seconds, time %lld\n", abortTimeout, (long long) time(NULL));
 
-	time(&endTO);
-	endTO += abortTimeout;
+	time(&strtTO);
+	endTO = strtTO + abortTimeout;
 
 	while(1) {
 		int to = endTO - time(NULL);
@@ -632,9 +633,11 @@ timeoutGuard(ATTR_UNUSED void *arg)
 	}
 	dbgprintf("timeoutGuard: sleep expired, aborting\n");
 	/* note: we use fprintf to stderr intentionally! */
+
 	fprintf(stderr, "timeoutGuard: rsyslog still active after expiry of guard "
-		"period (endTO %lld, time now %lld) - initiating abort()\n",
-		(long long) endTO, (long long) time(NULL));
+		"period (strtTO %lld, endTO %lld, time now %lld, diff %lld), pid %d - initiating abort()\n",
+	(long long) strtTO, (long long) endTO, (long long) time(NULL), (long long) (time(NULL) - strtTO),
+	(int) glblGetOurPid());
 	fflush(stderr);
 	abort();
 }

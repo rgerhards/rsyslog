@@ -1,10 +1,82 @@
 ------------------------------------------------------------------------------
+Version 8.1904.0 (aka 2019.04) 2019-04-16
+- imjournal bugfix: potential segfault on some API failure returns
+  In one case there was possibility of free()'d value of journal
+  cursor not being reset, causing double-free and crash later on.
+  closes https://github.com/rsyslog/rsyslog/issues/3537
+------------------------------------------------------------------------------
 Version 8.1903.0 (aka 2019.03) 2019-03-05
+- improg: create input module to use external program as input datas
 - omhttp: rewritten with large feature enhancements
   Many thanks to Gabriel Intrator for this work. Gabriel also has adopted the
   module and plans to support it in the future.
+- TLS subsystem: add support for certless communication
+  both openssl and GnuTLS drivers have been updated to support certless
+  communications. In this case e.g. Diffie-Helman is used.
+  NOTE: this is an insecure mode, as it does NOT guard against
+  man-in-the-middle attacks. We implemented it because of the large demand,
+  not because we think it makes sense to use this mode. We strongly recommend
+  against it.
+  closes https://github.com/rsyslog/rsyslog/issues/1068
 - imrelp/omrelp: add capability to specify tlslib for librelp
   closes https://github.com/rsyslog/rsyslog/issues/3451
+- build system: introduce a better way to handle compiler pragmas
+  we now use macros and _Pragma(). This requires less code lines and is more
+  portable.
+- omkafka: add support for dynamic keys
+  A new configuration property "dynaKey" is added that, when "on", changes the
+  value of property "key" to a template names instead of a constant value.
+  This is similar in approach to the DynaTopic implementation.
+  Thanks to Ludo Brands for the patch.
+- AIX port: add AIX linking extensions on many plugins and contibutions to
+  allow building them on this os.
+- template: add Time-Related System Property $wday which is the day of week
+  This allow to get a week based rotation of log as AIX does.
+- ksi subsystem: add high avalability mode
+  Note: ksi subsystem now REQUIRES libksi 3.19.0 or above
+  Thanks to Allan Park for the patch.
+  closes https://github.com/rsyslog/rsyslog/issues/3338
+- imfile bugfix: file reader could get stuck
+  State file handling was invalid. When a file was moved and re-created
+  rsyslog could use the file_id if the new file to write the old files'
+  state file. This could make the file reader stuck until it reached the
+  previous offset. Depending on file sizes this could never happen AND
+  would cause large message loss. This situation was timing dependent
+  (a race) and most frequently occurred under log rotation. In polling
+  mode the bug was less likely, but could also occur.
+  closes: https://github.com/rsyslog/rsyslog/issues/3465
+  closes: https://github.com/rsyslog/rsyslog/issues/3468
+- imfile bugfix: potential segfault when working with directories or symlinks
+  see also https://github.com/rsyslog/rsyslog/pull/3496
+  Thanks to Nelson Yen for the patch
+- omhttp bugfix: header items could not have spaces in them
+  Thanks to Nathan Brown for the patch.
+- core bugfix: enlarged msg offset types for bigger structured messages
+  using a large enough (dozens of kBs) structured message
+  it is possible to overflow the signed short type which leads
+  to rsyslog crash. (applies to msg.c, the message object)
+  Thanks to Jiri Vymazal for the patch.
+- core bugfix for AIX: timeval2syslogTime now handle the bias according to
+  local time zone as documented by IBM.
+- imfile feature: add configuration parameter to force parsing of read logs
+- imczmq bugfix:
+  Release zframe following read from socket
+  Make the 0MQ frame pointer local to the receive loop and destroy the
+  frame as soon as the contents have been copied. This avoids:
+  * a memory leak should the receive loop execute more than once
+  * referencing an un-initialised value during cleanup (finalize_it)
+  Thanks to Mark Gillott for the patch.
+- omclickhouse bugfix: default template unusable
+  STDSQL option added to the default template used in output module of clickhouse
+  Thanks to gagandeep trivedi for the patch.
+- omclickhouse "bugfix": work-around failed error detection
+  omclickhouse uses a questionable method to check if a request generated
+  an error. We have seen the method to fail when we slightly upgraded clickhouse
+  server in CI testing.
+  This commit makes the method a bit more reliable without really fixing it.
+  But it's at least a short-term solution.
+  This should be changed to a proper status check. I assume such is possible.
+  see also https://github.com/rsyslog/rsyslog/issues/3485
 - imptcp bugfix: overly long socket bind path can lead to segfault
   if the `path` input parameter is overly long (e.g. more than 108
   characters on some platforms) a non-terminated string is generated
@@ -17,6 +89,18 @@ Version 8.1903.0 (aka 2019.03) 2019-03-05
   Tcpflood can now send messages via relp with tls support.
   closes https://github.com/rsyslog/rsyslog/issues/3448
 - testbench: mmdb valgrind tests failed is srcdir env was not set
+- testbench: add omclickhouse tests
+- testbench bugfix: some long-running tests had too low runtime allowance
+  closes https://github.com/rsyslog/rsyslog/issues/3493
+- testbench bugfix: daqueue-dirty-shutdown test
+  This test occasionally failed with left-over spool files. As far as we
+  have analyzed, this is due to the use of an invalid shutdown timeout
+  (very short) in the second phase of the test. It looks like this is
+  actually a copy&paste error from phase one. Behaviour of rsyslog was
+  correct, but the test itself created a false positive.
+  We have corrected the timeout now and also modernized the test
+  a bit.
+  closes https://github.com/rsyslog/rsyslog/issues/2122
 ------------------------------------------------------------------------------
 Version 8.1901.0 (aka 2019.01) 2019-01-22
 - new version scheme: 8.yymm.0 - version now depends on release date

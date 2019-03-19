@@ -23,6 +23,6 @@
  * limitations under the License.
  */
 #include "config.h"
-#ifdef OS_SOLARIS
-int SOLARIS_wants_a_symbol_inside_the_lib;
+#if defined(OS_SOLARIS) || defined(__xlc__)
+int SOLARIS_and_XLC_wants_a_symbol_inside_the_lib;
 #endif

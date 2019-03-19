@@ -296,12 +296,19 @@ if ENABLE_MMKUBERNETES
 SUBDIRS += contrib/mmkubernetes
 endif
 
+# impcap
 if ENABLE_IMPCAP
 SUBDIRS += plugins/impcap
 endif
 
+# mmcapture
 if ENABLE_MMCAPTURE
 SUBDIRS += plugins/mmcapture
+endif
+
+# improg
+if ENABLE_IMPROG
+SUBDIRS += contrib/improg
 endif
 
 # tests are added as last element, because tests may need different

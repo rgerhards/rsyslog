@@ -10,7 +10,7 @@ CLEANFILES=\
 	work \
 	test-spool test-logdir stat-file1 \
 	rsyslog.pipe rsyslog.input.* \
-	rsyslog.input rsyslog.input.* imfile-state* omkafka-failed.data \
+	rsyslog.input rsyslog.input.* imfile-state:* omkafka-failed.data \
 	rsyslog.input-symlink.log rsyslog-link.*.log targets \
 	HOSTNAME \
 	rstb_* \
@@ -490,9 +490,10 @@ endif # if ENABLE_MMANON
 
 if ENABLE_CLICKHOUSE_TESTS
 TESTS +=  \
-	clickhouse-retry-error.sh \
 	clickhouse-start.sh \
 	clickhouse-basic.sh \
+	clickhouse-dflt-tpl.sh \
+	clickhouse-retry-error.sh \
 	clickhouse-load.sh \
 	clickhouse-bulk.sh \
 	clickhouse-bulk-load.sh \
@@ -503,9 +504,10 @@ TESTS +=  \
 	clickhouse-wrong-template-option.sh \
 	clickhouse-wrong-insert-syntax.sh
 
-clickhouse-start.log: clickhouse-retry-error.log
 clickhouse-basic.log: clickhouse-start.log
-clickhouse-load.log: clickhouse-basic.log
+clickhouse-dflt-tpl.log: clickhouse-basic.log
+clickhouse-retry-error.log: clickhouse-dflt-tpl.log
+clickhouse-load.log: clickhouse-retry-error.log
 clickhouse-bulk.log: clickhouse-load.log
 clickhouse-bulk-load.log: clickhouse-bulk.log
 clickhouse-limited-batch.log: clickhouse-bulk-load.log
@@ -691,6 +693,15 @@ TESTS +=  \
 endif
 endif #if ENABLE_JOURNAL_TESTS
 
+if ENABLE_IMPROG
+TESTS +=  \
+	improg_errmsg_no_params.sh
+if HAVE_VALGRIND
+TESTS +=  \
+	improg_errmsg_no_params-vg.sh
+endif # ENABLE_IMPROG
+endif
+
 if ENABLE_OMPROG
 TESTS +=  \
 	omprog-defaults.sh \
@@ -750,6 +761,7 @@ if ENABLE_KAFKA_TESTS
 TESTS += \
 	kafka-selftest.sh \
 	omkafka.sh \
+	omkafkadynakey.sh \
 	imkafka.sh \
 	imkafka-backgrounded.sh \
 	imkafka-config-err-ruleset.sh \
@@ -968,7 +980,9 @@ TESTS +=  \
 	sndrcv_tls_anon_ipv4.sh \
 	sndrcv_tls_anon_ipv6.sh \
 	sndrcv_tls_certless_clientonly.sh \
-	sndrcv_tls_certless_clientonly-legacy.sh \
+	sndrcv_tls_gtls_servercert_gtls_clientanon.sh \
+	sndrcv_tls_gtls_servercert_gtls_clientanon_legacy.sh \
+	sndrcv_tls_gtls_serveranon_gtls_clientanon.sh \
 	sndrcv_tls_priorityString.sh \
 	sndrcv_tls_certvalid.sh \
 	sndrcv_tls_certvalid_expired.sh \
@@ -991,6 +1005,8 @@ TESTS +=  \
 	sndrcv_tls_ossl_anon_ipv4.sh \
 	sndrcv_tls_ossl_anon_ipv6.sh \
 	sndrcv_tls_ossl_anon_rebind.sh \
+	sndrcv_tls_ossl_serveranon_ossl_clientanon.sh \
+	sndrcv_tls_ossl_servercert_ossl_clientanon.sh \
 	sndrcv_tls_ossl_certvalid.sh \
 	sndrcv_tls_ossl_certvalid_expired.sh \
 	imtcp-tls-ossl-x509valid.sh \
@@ -1006,6 +1022,15 @@ TESTS += \
 endif
 endif
 
+if ENABLE_GNUTLS
+if ENABLE_OPENSSL
+TESTS +=  \
+	sndrcv_tls_ossl_servercert_gtls_clientanon.sh \
+	sndrcv_tls_ossl_serveranon_gtls_clientanon.sh \
+	sndrcv_tls_gtls_servercert_ossl_clientanon.sh \
+	sndrcv_tls_gtls_serveranon_ossl_clientanon.sh
+endif
+endif
 
 if ENABLE_OMUXSOCK
 TESTS += uxsock_simple.sh
@@ -1144,6 +1169,8 @@ TESTS += \
 	imfile-endregex-timeout-with-shutdown.sh \
 	imfile-endregex-timeout-with-shutdown-polling.sh \
 	imfile-endmsg.regex.sh \
+	imfile-statefile-no-file_id.sh \
+	imfile-statefile-no-file_id-TO-file_id.sh \
 	imfile-persist-state-1.sh \
 	imfile-freshStartTail1.sh \
 	imfile-freshStartTail2.sh \
@@ -1163,6 +1190,7 @@ TESTS += \
 	imfile-symlink.sh \
 	imfile-symlink-multi.sh \
 	imfile-logrotate.sh \
+	imfile-logrotate-multiple.sh \
 	imfile-logrotate-copytruncate.sh \
 	imfile-logrotate-nocopytruncate.sh \
 	imfile-growing-file-id.sh \
@@ -1293,6 +1321,8 @@ EXTRA_DIST= \
 	tcp_forwarding_ns_tpl.sh \
 	tcp_forwarding_dflt_tpl.sh \
 	tcp_forwarding_retries.sh \
+	queue-minbatch.sh \
+	queue-minbatch-queuefull.sh \
 	killrsyslog.sh \
 	parsertest-parse1.sh \
 	parsertest-parse1-udp.sh \
@@ -1330,8 +1360,6 @@ EXTRA_DIST= \
 	diskq-rfc5424.sh \
 	diskqueue-full.sh \
 	diskqueue.sh \
-	queue-minbatch.sh \
-	queue-minbatch-queuefull.sh \
 	arrayqueue.sh \
 	include-obj-text-from-file.sh \
 	include-obj-outside-control-flow-vg.sh \
@@ -1535,6 +1563,7 @@ EXTRA_DIST= \
 	incltest_dir_empty_wildcard.sh \
 	incltest_dir_wildcard.sh \
 	testsuites/es.yml \
+	clickhouse-dflt-tpl.sh \
 	clickhouse-retry-error.sh \
 	clickhouse-start.sh \
 	clickhouse-stop.sh \
@@ -1712,6 +1741,8 @@ EXTRA_DIST= \
 	action-tx-errfile.sh \
 	testsuites/action-tx-errfile.result \
 	pipeaction.sh \
+	improg_errmsg_no_params.sh \
+	improg_errmsg_no_params-vg.sh \
 	omprog-defaults.sh \
 	omprog-defaults-vg.sh \
 	omprog-output-capture.sh \
@@ -1804,6 +1835,8 @@ EXTRA_DIST= \
 	imfile-endmsg.regex-with-example-vg.sh \
 	imfile-endmsg.regex.crio.rulebase \
 	imfile-endmsg.regex.json.rulebase \
+	imfile-statefile-no-file_id.sh \
+	imfile-statefile-no-file_id-TO-file_id.sh \
 	imfile-persist-state-1.sh \
 	imfile-freshStartTail1.sh \
 	imfile-freshStartTail2.sh \
@@ -1827,6 +1860,7 @@ EXTRA_DIST= \
 	imfile-logrotate.sh \
 	imfile-logrotate-copytruncate.sh \
 	imfile-logrotate-nocopytruncate.sh \
+	imfile-logrotate-multiple.sh \
 	imfile-growing-file-id.sh \
 	glbl-oversizeMsg-truncate-imfile.sh \
 	dynfile_invld_async.sh \
@@ -1889,6 +1923,7 @@ EXTRA_DIST= \
 	mysql-actq-mt-withpause-vg.sh \
 	kafka-selftest.sh \
 	omkafka.sh \
+	omkafkadynakey.sh \
 	omkafka-vg.sh \
 	imkafka-hang-on-no-kafka.sh \
 	imkafka-hang-other-action-on-no-kafka.sh \
@@ -2052,7 +2087,15 @@ EXTRA_DIST= \
 	sndrcv_tls_certvalid.sh \
 	sndrcv_tls_certvalid_expired.sh \
 	sndrcv_tls_certless_clientonly.sh \
-	sndrcv_tls_certless_clientonly-legacy.sh \
+	sndrcv_tls_gtls_servercert_gtls_clientanon.sh \
+	sndrcv_tls_gtls_servercert_gtls_clientanon_legacy.sh \
+	sndrcv_tls_gtls_serveranon_gtls_clientanon.sh \
+	sndrcv_tls_ossl_serveranon_ossl_clientanon.sh \
+	sndrcv_tls_ossl_servercert_ossl_clientanon.sh \
+	sndrcv_tls_ossl_servercert_gtls_clientanon.sh \
+	sndrcv_tls_ossl_serveranon_gtls_clientanon.sh \
+	sndrcv_tls_gtls_servercert_ossl_clientanon.sh \
+	sndrcv_tls_gtls_serveranon_ossl_clientanon.sh \
 	omtcl.sh \
 	omtcl.tcl \
 	pmsnare-default.sh \

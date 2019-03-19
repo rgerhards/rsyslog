@@ -6,7 +6,7 @@
  *
  * File begun on 2007-12-20 by RGerhards (extracted from syslogd.c)
  *
- * Copyright 2007-2018 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2007-2019 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -64,9 +64,6 @@
 #include "hashtable.h"
 #include "ratelimit.h"
 
-#if !defined(_AIX)
-#pragma GCC diagnostic ignored "-Wswitch-enum"
-#endif
 
 MODULE_TYPE_INPUT
 MODULE_TYPE_NOKEEP
@@ -554,8 +551,8 @@ openLogSocket(lstn_t *pLstn)
 #ifdef HAVE_LIBSYSTEMD
 	if (sd_fds > 0) {
 		/* Check if the current socket is a systemd activated one.
-	        * If so, just use it.
-		*/
+		 * If so, just use it.
+		 */
 		int fd;
 
 		for (fd = SD_LISTEN_FDS_START; fd < SD_LISTEN_FDS_START + sd_fds; fd++) {
