@@ -702,6 +702,24 @@ TESTS +=  \
 endif # ENABLE_IMPROG
 endif
 
+if ENABLE_IMPCAP
+TESTS +=  \
+	impcap_errmsg_no_params.sh
+if HAVE_VALGRIND
+TESTS +=  \
+	impcap_errmsg_no_params-vg.sh
+endif
+endif # ENABLE_IMPCAP
+
+if ENABLE_MMCAPTURE
+TESTS +=  \
+	mmcapture_errmsg_no_params.sh
+if HAVE_VALGRIND
+TESTS +=  \
+	mmcapture_errmsg_no_params-vg.sh
+endif
+endif # ENABLE_MMCAPTURE
+
 if ENABLE_OMPROG
 TESTS +=  \
 	omprog-defaults.sh \
@@ -1743,6 +1761,10 @@ EXTRA_DIST= \
 	pipeaction.sh \
 	improg_errmsg_no_params.sh \
 	improg_errmsg_no_params-vg.sh \
+	impcap_errmsg_no_params.sh \
+	impcap_errmsg_no_params-vg.sh \
+	mmcapture_errmsg_no_params.sh \
+	mmcapture_errmsg_no_params-vg.sh \
 	omprog-defaults.sh \
 	omprog-defaults-vg.sh \
 	omprog-output-capture.sh \
