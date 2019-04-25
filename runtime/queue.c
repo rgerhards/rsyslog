@@ -1615,7 +1615,7 @@ DoDeleteBatchFromQStore(qqueue_t *pThis, int nElem)
 		 * size. -- rgerhards, 2008-01-30
 		 */
 		 if(bytesDel != 0) {
-			pThis->tVars.disk.sizeOnDisk -= bytesDel;
+			pThis->tVars.disk.sizeOnDisk -= bytesDel; // REFACTOR: for multi-thread, this needs to be atomic
 			DBGOPRINT((obj_t*) pThis, "doDeleteBatch: a %lld octet file has been deleted, now %lld "
 				"octets disk space used\n", (long long) bytesDel, pThis->tVars.disk.sizeOnDisk);
 			/* awake possibly waiting enq process */
@@ -1664,9 +1664,10 @@ DeleteBatchFromQStore(qqueue_t *pThis, batch_t *pBatch)
 	assert(pBatch != NULL);
 
 	pTdl = tdlPeek(pThis); /* get current head element */
-	if(pTdl == NULL) { /* to-delete list empty */
+	if(pTdl == NULL) { /* to-delete list empty */  // REFACTOR: we can probably save this check ... it is actually done in the while() below!
 		DoDeleteBatchFromQStore(pThis, pBatch->nElem);
 	} else if(pBatch->deqID == pThis->deqIDDel) {
+	// REFACTOR: for disk queues, this predicate must always be valid (we read sequentually on a single thread)
 		deqIDDel = pThis->deqIDDel;
 		pTdl = tdlPeek(pThis);
 		while(pTdl != NULL && deqIDDel == pTdl->deqID) {

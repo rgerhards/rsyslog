@@ -1965,6 +1965,7 @@ strmMultiFileSeek(strm_t *pThis, unsigned int FNum, off64_t offs, off64_t *bytes
 		/* Note: we assume that no more than one file is skipped - an
 		 * assumption that is being used also by the whole rest of the
 		 * code and most notably the queue subsystem.
+	 REFACTOR: should/must we work on this restriction as well?
 		 */
 		CHKiRet(genFileName(&pThis->pszCurrFName, pThis->pszDir, pThis->lenDir,
 				    pThis->pszFName, pThis->lenFName, pThis->iCurrFNum,
