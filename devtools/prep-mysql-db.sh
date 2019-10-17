@@ -1,6 +1,8 @@
 #!/bin/bash
 # this script prepares a mysql instance for use by the rsyslog testbench
 
+set -e # abort if something goes wrong - should not happen here!
+
 mysql -u root -e "CREATE USER 'rsyslog'@'localhost' IDENTIFIED BY 'testbench';"
 mysql -u root -e "GRANT ALL PRIVILEGES ON * . * TO 'rsyslog'@'localhost'; FLUSH PRIVILEGES;"
 mysql -u root -e "CREATE DATABASE Syslog; GRANT ALL ON Syslog.* to 'rsyslog'@'localhost' identified by 'testbench';"
