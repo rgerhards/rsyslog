@@ -21,10 +21,7 @@ ruleset(name="rcvr" queue.type="LinkedList"
 	set $!host_received=$$myhostname;
 	set $!time_received=$timegenerated;
 	set $!@timestamp=exec_template("ts");
-	action( type="omfile"
-		file=`echo $RSYSLOG_OUT_LOG`
-		template="json"
-	)
+	action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="json")
 }'
 startup_vg
 tcpflood -m5000

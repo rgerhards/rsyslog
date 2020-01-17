@@ -312,15 +312,16 @@ deinit_tcp_listener(tcpsrv_t *const pThis)
 
 	ISOBJ_TYPE_assert(pThis, tcpsrv);
 
+dbgprintf("deinit_tcp_listener tcps_sess %p\n",pThis->pSessions);
 	if(pThis->pSessions != NULL) {
+dbgprintf("deinit_tcp_listener 100 tcps_sess \n");
 		/* close all TCP connections! */
-		if(!pThis->bUsingEPoll) {
-			i = TCPSessGetNxtSess(pThis, -1);
-			while(i != -1) {
-				tcps_sess.Destruct(&pThis->pSessions[i]);
-				/* now get next... */
-				i = TCPSessGetNxtSess(pThis, i);
-			}
+		i = TCPSessGetNxtSess(pThis, -1);
+		while(i != -1) {
+dbgprintf("deinit_tcp_listener tcps_sess %p\n",&pThis->pSessions[i]);
+			tcps_sess.Destruct(&pThis->pSessions[i]);
+			/* now get next... */
+			i = TCPSessGetNxtSess(pThis, i);
 		}
 
 		/* we are done with the session table - so get rid of it...  */
@@ -532,8 +533,8 @@ SessAccept(tcpsrv_t *pThis, tcpLstnPortList_t *pLstnInfo, tcps_sess_t **ppSess, 
 	}
 
 	*ppSess = pSess;
-	if(!pThis->bUsingEPoll)
-		pThis->pSessions[iSess] = pSess;
+	pSess->sessTblIdx = iSess;
+	pThis->pSessions[iSess] = pSess;
 	pSess = NULL; /* this is now also handed over */
 
 finalize_it:
@@ -586,6 +587,7 @@ closeSess(tcpsrv_t *pThis, tcps_sess_t **ppSess, nspoll_t *pPoll) {
 		CHKiRet(nspoll.Ctl(pPoll, (*ppSess)->pStrm, 0, *ppSess, NSDPOLL_IN, NSDPOLL_DEL));
 	}
 	pThis->pOnRegularClose(*ppSess);
+dbgprintf("closeSess on tcps_sess %p\n", *ppSess);
 	tcps_sess.Destruct(ppSess);
 finalize_it:
 	RETiRet;
@@ -657,7 +659,7 @@ processWorksetItem(tcpsrv_t *const pThis, nspoll_t *pPoll, const int idx, void *
 	tcps_sess_t *pNewSess = NULL;
 	DEFiRet;
 
-	DBGPRINTF("tcpsrv: processing item %d, pUsr %p, bAbortConn\n", idx, pUsr);
+	DBGPRINTF("tcpsrv: processing item %d, pUsr %p\n", idx, pUsr);
 	if(pUsr == pThis->ppLstn) {
 		DBGPRINTF("New connect on NSD %p.\n", pThis->ppLstn[idx]);
 		iRet = SessAccept(pThis, pThis->ppLstnPort[idx], &pNewSess, pThis->ppLstn[idx]);
@@ -971,6 +973,7 @@ Run(tcpsrv_t *pThis)
 	while(glbl.GetGlobalInputTermState() == 0) {
 		numEntries = sizeof(workset)/sizeof(nsd_epworkset_t);
 		localRet = nspoll.Wait(pPoll, -1, &numEntries, workset);
+dbgprintf("tcps_sess: run get workset, localRet %d\n", localRet);
 		if(glbl.GetGlobalInputTermState() == 1)
 			break; /* terminate input! */
 
@@ -982,6 +985,7 @@ Run(tcpsrv_t *pThis)
 			continue;
 
 		localRet = processWorkset(pThis, pPoll, numEntries, workset);
+dbgprintf("tcps_sess: run processed workset %d\n", localRet);
 		if(localRet != RS_RET_OK) {
 			if (bFailed == FALSE) {
 				LogError(0, localRet, "tcpsrv listener (inputname: '%s') failed "
@@ -1000,6 +1004,7 @@ Run(tcpsrv_t *pThis)
 			/* Reset bFailed State */
 			bFailed = FALSE;
 		}
+dbgprintf("tcps_sess: end loop workset %d\n", bFailed);
 	}
 
 	/* remove the tcp listen sockets from the epoll set */
@@ -1007,7 +1012,14 @@ Run(tcpsrv_t *pThis)
 		CHKiRet(nspoll.Ctl(pPoll, pThis->ppLstn[i], i, pThis->ppLstn, NSDPOLL_IN, NSDPOLL_DEL));
 	}
 
+int sessions = 0;
+for(i = 0 ; i < pThis->iSessMax ; ++i) {
+	if(pThis->pSessions[i] != NULL)
+		++sessions;
+}
+dbgprintf("tcps_sess sessions %p: %d\n",pThis->pSessions, sessions);
 finalize_it:
+dbgprintf("tcpsrv: done run, calling cancel cleanup tcps_sess\n");
 	pthread_cleanup_pop(1);
 
 	RETiRet;
@@ -1078,6 +1090,7 @@ finalize_it:
 /* destructor for the tcpsrv object */
 BEGINobjDestruct(tcpsrv) /* be sure to specify the object type also in END and CODESTART macros! */
 CODESTARTobjDestruct(tcpsrv)
+dbgprintf("destruct tcpsrv (tcps_sess testing) %s\n", pThis->pszInputName);
 	if(pThis->OnDestruct != NULL)
 		pThis->OnDestruct(pThis->pUsr);
 

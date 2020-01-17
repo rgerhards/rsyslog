@@ -70,6 +70,7 @@ BEGINobjConstruct(tcps_sess) /* be sure to specify the object type also in END m
 		pThis->eFraming = TCP_FRAMING_OCTET_STUFFING; /* just make sure... */
 		/* now allocate the message reception buffer */
 		CHKmalloc(pThis->pMsg = (uchar*) malloc(glbl.GetMaxLine() + 1));
+dbgprintf("construct tcps_sess %p\n", pThis);
 finalize_it:
 ENDobjConstruct(tcps_sess)
 
@@ -93,6 +94,7 @@ finalize_it:
 /* destructor for the tcps_sess object */
 BEGINobjDestruct(tcps_sess) /* be sure to specify the object type also in END and CODESTART macros! */
 CODESTARTobjDestruct(tcps_sess)
+dbgprintf("tcps_sess destruct\n");
 	if(pThis->pStrm != NULL)
 		netstrm.Destruct(&pThis->pStrm);
 
@@ -105,6 +107,8 @@ CODESTARTobjDestruct(tcps_sess)
 	if(pThis->fromHostIP != NULL)
 		CHKiRet(prop.Destruct(&pThis->fromHostIP));
 	free(pThis->pMsg);
+
+	pThis->pSrv->pSessions[pThis->sessTblIdx] = NULL;
 ENDobjDestruct(tcps_sess)
 
 
