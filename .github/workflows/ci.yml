@@ -35,3 +35,18 @@ jobs:
     steps:
       - name: git checkout project
         uses: actions/checkout@v1
+
+      - name: run CentOS 7 container
+        run: |
+          export RSYSLOG_DEV_CONTAINER='rsyslog/rsyslog_dev_base_centos:7'
+          export CC='gcc'
+          export CFLAGS='-g'
+          export RSYSLOG_CONFIGURE_OPTIONS_EXTRA='--disable-elasticsearch-tests --disable-kafka-tests --disable-snmp-tests'
+          export CI_MAKE_OPT='-j20'
+          export CI_MAKE_CHECK_OPT='-j4'
+          export CI_CHECK_CMD='check'
+          export USE_AUTO_DEBUG='off'
+          export CI_VALGRIND_SUPPRESSIONS='centos7.supp'
+          export RSYSLOG_STATSURL='http://build.rsyslog.com/testbench-failedtest.php'
+          devtools/devcontainer.sh --rm devtools/run-ci.sh
+          devtools/gather-check-logs.sh
