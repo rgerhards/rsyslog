@@ -500,15 +500,18 @@ MsgSetRulesetByName(smsg_t * const pMsg, cstr_t *const rulesetName)
 static const char *
 jsonToString(struct json_object *json, int jsonFormatOpt)
 {
+	const char *ret = NULL;
 	if (!json)
-		return NULL;
+		goto done;
 	
 	if (json_object_get_type(json) == json_type_string) {
-		return json_object_get_string(json);
+		ret= json_object_get_string(json);
+		goto done;
 	}
 	
-	return json_object_to_json_string_ext(json, jsonFormatOpt);
-	
+	ret =  json_object_to_json_string_ext(json, jsonFormatOpt);
+done:	dbgprintf("!!!! JSON mode %d STRING: %s\n", jsonFormatOpt, ret);
+	return ret;
 }
 
 /* do a DNS reverse resolution, if not already done, reflect status
