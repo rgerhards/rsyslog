@@ -693,7 +693,7 @@ computeMessageSize(const wrkrInstanceData_t *const pWrkrData,
 	const uchar *const message,
 	uchar **const tpls)
 {
-	size_t r = sizeof(META_TYPE)-1 + sizeof(META_END)-1 + sizeof("\n")-1;
+	size_t r = sizeof(META_END)-1 + sizeof("\n")-1;
 	if (pWrkrData->pData->writeOperation == ES_WRITE_CREATE)
 		r += sizeof(META_STRT_CREATE)-1;
 	else
