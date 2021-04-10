@@ -620,6 +620,8 @@ setPostURL(wrkrInstanceData_t *const pWrkrData, uchar **const tpls)
 	uchar *parent;
 	uchar *bulkId;
 	char* baseUrl;
+	/* since 7.0, the API always requires /idx/_doc, so use that if searchType is not explicitly set */
+	uchar* actualSearchType = (uchar*)"_doc";
 	es_str_t *url;
 	int r;
 	DEFiRet;
@@ -645,11 +647,12 @@ setPostURL(wrkrInstanceData_t *const pWrkrData, uchar **const tpls)
 		if(searchIndex != NULL) {
 			r = es_addBuf(&url, (char*)searchIndex, ustrlen(searchIndex));
 			if(r == 0) r = es_addChar(&url, '/');
-			if(searchType != NULL) {
-				if(r == 0) r = es_addBuf(&url, (char*)searchType, ustrlen(searchType));
-			}
-		} else
-			r = 0;
+
+		if(searchType != NULL) {
+			actualSearchType = searchType;
+		}
+		if(r == 0) r = es_addChar(&url, '/');
+		if(r == 0) r = es_addBuf(&url, (char*)actualSearchType, ustrlen(actualSearchType));
 		if(pipelineName != NULL && (!pData->skipPipelineIfEmpty || pipelineName[0] != '\0')) {
 			if(r == 0) r = es_addChar(&url, separator);
 			if(r == 0) r = es_addBuf(&url, "pipeline=", sizeof("pipeline=")-1);
