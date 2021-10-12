@@ -2137,6 +2137,7 @@ prepare_elasticsearch() {
 	if [ -n "${ES_PORT:-}" ] ; then
 		rm -f $dep_work_dir/es/config/elasticsearch.yml
 		sed "s/^http.port:.*\$/http.port: ${ES_PORT}/" $srcdir/testsuites/$dep_work_es_config > $dep_work_dir/es/config/elasticsearch.yml
+		printf 'xpack.security.enabled: false\n' >> $dep_work_dir/es/config/elasticsearch.yml
 	else
 		cp -f $srcdir/testsuites/$dep_work_es_config $dep_work_dir/es/config/elasticsearch.yml
 	fi
