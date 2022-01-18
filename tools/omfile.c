@@ -17,7 +17,7 @@
  * pipes. These have been moved to ompipe, to reduced the entanglement
  * between the two different functionalities. -- rgerhards
  *
- * Copyright 2007-2018 Adiscon GmbH.
+ * Copyright 2007-2022 Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
@@ -51,6 +51,7 @@
 #ifdef HAVE_ATOMIC_BUILTINS
 #	include <pthread.h>
 #endif
+#include <zstd.h>
 
 #include "rsyslog.h"
 #include "conf.h"
@@ -1553,6 +1554,8 @@ CODEmodInit_QueryRegCFSLineHdlr
 INITLegCnfVars
 	CHKiRet(objUse(strm, CORE_COMPONENT));
 	CHKiRet(objUse(statsobj, CORE_COMPONENT));
+
+	fprintf(stderr, "zstd version: %d\n", ZSTD_versionNumber());
 
 	INIT_ATOMIC_HELPER_MUT(mutClock);
 
