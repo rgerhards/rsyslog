@@ -340,6 +340,7 @@ TESTS +=  \
 	abort-uncleancfg-badcfg-check.sh \
 	abort-uncleancfg-badcfg-check_1.sh \
 	variable_leading_underscore.sh \
+	zstd.sh \
 	gzipwr_hup_multi_file.sh \
 	gzipwr_hup_single_file.sh \
 	gzipwr_rscript.sh \
@@ -1663,6 +1664,7 @@ distclean-local:
 	rm -rf .dep_cache .dep_wrk
 
 EXTRA_DIST= \
+	zstd.sh \
 	set-envvars.in \
 	urlencode.py \
 	dnscache-TTL-0.sh \

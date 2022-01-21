@@ -69,6 +69,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <time.h>
+#include <zstd.h>
 #include "obj-types.h"
 #include "glbl.h"
 #include "stream.h"
@@ -159,6 +160,13 @@ typedef struct strm_s {
 		uchar *pBuf;
 		size_t lenBuf;
 	} asyncBuf[STREAM_ASYNC_NUMBUFS];
+	struct {
+		size_t buffInSize;
+		void*  buffIn;
+		size_t buffOutSize;
+		void*  buffOut;
+		ZSTD_CCtx* cctx;
+	} zstd;
 	pthread_t writerThreadID;
 	/* support for omfile size-limiting commands, special counters, NOT persisted! */
 	off_t	iSizeLimit;	/* file size limit, 0 = no limit */

@@ -76,8 +76,8 @@ export ZOOPIDFILE="$(pwd)/zookeeper.pid"
 #valgrind="valgrind --tool=helgrind --log-fd=1 --suppressions=$srcdir/linux_localtime_r.supp --gen-suppressions=all"
 #valgrind="valgrind --tool=exp-ptrcheck --log-fd=1"
 #set -o xtrace
-#export RSYSLOG_DEBUG="debug nologfuncflow noprintmutexaction nostdout"
-#export RSYSLOG_DEBUGLOG="log"
+export RSYSLOG_DEBUG="debug nologfuncflow noprintmutexaction nostdout"
+export RSYSLOG_DEBUGLOG="log"
 TB_TIMEOUT_STARTSTOP=400 # timeout for start/stop rsyslogd in tenths (!) of a second 400 => 40 sec
 # note that 40sec for the startup should be sufficient even on very slow machines. we changed this from 2min on 2017-12-12
 TB_TEST_TIMEOUT=90  # number of seconds after which test checks timeout (eg. waits)
@@ -1396,6 +1396,9 @@ seq_check() {
 	fi
 	if [ "${SEQ_CHECK_FILE##*.}" == "gz" ]; then
 		gunzip -c "${SEQ_CHECK_FILE}" | $RS_SORTCMD $RS_SORT_NUMERIC_OPT | ./chkseq -s$startnum -e$endnum $3 $4 $5 $6 $7 $SEQ_CHECK_OPTIONS
+	elif [ "${SEQ_CHECK_FILE##*.}" == "zst" ]; then
+		ls -l "${SEQ_CHECK_FILE}" 
+		unzstd < "${SEQ_CHECK_FILE}" | $RS_SORTCMD $RS_SORT_NUMERIC_OPT | ./chkseq -s$startnum -e$endnum $3 $4 $5 $6 $7 $SEQ_CHECK_OPTIONS
 	else
 		$RS_SORTCMD $RS_SORT_NUMERIC_OPT < "${SEQ_CHECK_FILE}" | ./chkseq -s$startnum -e$endnum $3 $4 $5 $6 $7 $SEQ_CHECK_OPTIONS
 	fi
@@ -1406,6 +1409,10 @@ seq_check() {
 	if [ $ret -ne 0 ]; then
 		if [ "${SEQ_CHECK_FILE##*.}" == "gz" ]; then
 			gunzip -c "${SEQ_CHECK_FILE}" | $RS_SORTCMD $RS_SORT_NUMERIC_OPT \
+				| ./chkseq -s$startnum -e$endnum $3 $4 $5 $6 $7 $SEQ_CHECK_OPTIONS \
+				> $RSYSLOG_DYNNAME.error.log
+		elif [ "${SEQ_CHECK_FILE##*.}" == "zst" ]; then
+			unzstd < "${SEQ_CHECK_FILE}" | $RS_SORTCMD $RS_SORT_NUMERIC_OPT \
 				| ./chkseq -s$startnum -e$endnum $3 $4 $5 $6 $7 $SEQ_CHECK_OPTIONS \
 				> $RSYSLOG_DYNNAME.error.log
 		else

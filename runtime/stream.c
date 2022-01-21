@@ -16,7 +16,7 @@
  * it turns out to be problematic. Then, we need to quasi-refcount the number of accesses
  * to the object.
  *
- * Copyright 2008-2018 Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2008-2022 Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of the rsyslog runtime library.
  *
@@ -53,6 +53,7 @@
 #ifdef HAVE_SYS_PRCTL_H
 #  include <sys/prctl.h>
 #endif
+#include <zstd.h>
 
 #include "rsyslog.h"
 #include "stringbuf.h"
@@ -85,8 +86,12 @@ static rsRetVal strmWrite(strm_t *__restrict__ const pThis, const uchar *__restr
 static rsRetVal strmOpenFile(strm_t *pThis);
 static rsRetVal strmCloseFile(strm_t *pThis);
 static void *asyncWriterThread(void *pPtr);
+#if 0
 static rsRetVal doZipWrite(strm_t *pThis, uchar *pBuf, size_t lenBuf, int bFlush);
 static rsRetVal doZipFinish(strm_t *pThis);
+#endif
+static rsRetVal doZstdWrite(strm_t *pThis, uchar *pBuf, size_t lenBuf, int bFlush);
+static rsRetVal doZstdFinish(strm_t *pThis);
 static rsRetVal strmPhysWrite(strm_t *pThis, uchar *pBuf, size_t lenBuf);
 static rsRetVal strmSeekCurrOffs(strm_t *pThis);
 
@@ -490,7 +495,7 @@ static rsRetVal strmCloseFile(strm_t *pThis)
 		}
 		strmFlushInternal(pThis, 0);
 		if(pThis->iZipLevel) {
-			doZipFinish(pThis);
+			doZstdFinish(pThis);
 		}
 		if(pThis->bAsyncWrite) {
 			stopWriter(pThis);
@@ -1526,7 +1531,7 @@ doWriteInternal(strm_t *pThis, uchar *pBuf, const size_t lenBuf, const int bFlus
 		pThis->fd, getFileDebugName(pThis), bFlush);
 
 	if(pThis->iZipLevel) {
-		CHKiRet(doZipWrite(pThis, pBuf, lenBuf, bFlush));
+		CHKiRet(doZstdWrite(pThis, pBuf, lenBuf, bFlush));
 	} else {
 		/* write without zipping */
 		CHKiRet(strmPhysWrite(pThis, pBuf, lenBuf));
@@ -1751,7 +1756,7 @@ finalize_it:
  * rgerhards, 2009-06-04
  */
 static rsRetVal
-strmPhysWrite(strm_t *pThis, uchar *pBuf, size_t lenBuf)
+strmPhysWrite(strm_t *pThis, uchar *const pBuf, size_t lenBuf)
 {
 	size_t iWritten;
 	DEFiRet;
@@ -1788,15 +1793,9 @@ finalize_it:
 }
 
 
+#if 0
 /* write the output buffer in zip mode
  * This means we compress it first and then do a physical write.
- * Note that we always do a full deflateInit ... deflate ... deflateEnd
- * sequence. While this is not optimal, we need to do it because we need
- * to ensure that the file is readable even when we are aborted. Doing the
- * full sequence brings us as far towards this goal as possible (and not
- * doing it would be a total failure). It may be worth considering to
- * add a config switch so that the user can decide the risk he is ready
- * to take, but so far this is not yet implemented (not even requested ;)).
  * rgerhards, 2009-06-04
  */
 static rsRetVal
@@ -1888,6 +1887,98 @@ finalize_it:
 		LogError(0, RS_RET_ZLIB_ERR, "error %d returned from zlib/deflateEnd()", zRet);
 	}
 
+	pThis->bzInitDone = 0;
+done:	RETiRet;
+}
+#endif
+
+/* write the output buffer in zip mode
+ * This means we compress it first and then do a physical write.
+ * rgerhards, 2009-06-04
+ */
+static rsRetVal
+doZstdWrite(strm_t *pThis, uchar *const pBuf, const size_t lenBuf, const int bFlush)
+{
+// https://github.com/facebook/zstd/blob/dev/examples/streaming_compression.c
+	DEFiRet;
+	//unsigned outavail = 0;
+	assert(pThis != NULL);
+	assert(pBuf != NULL);
+	if(!pThis->bzInitDone) {
+		pThis->zstd.cctx = ZSTD_createCCtx();
+		if(pThis->zstd.cctx == NULL) {
+			LogError(0, RS_RET_ZLIB_ERR, "error creating zstd context (ZSTD_createCCtx failed, "
+				"that's all we know");
+			ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+		}
+		
+		// TODO adjust these params, add more?
+		ZSTD_CCtx_setParameter(pThis->zstd.cctx, ZSTD_c_compressionLevel, pThis->iZipLevel);
+		ZSTD_CCtx_setParameter(pThis->zstd.cctx, ZSTD_c_checksumFlag, 1);
+		/* CONFIG CHANGEME - "configure" number of zstd workers here in this system call */
+		ZSTD_CCtx_setParameter(pThis->zstd.cctx, ZSTD_c_nbWorkers, 5);
+		pThis->bzInitDone = RSTRUE;
+	}
+
+	/* now doing the compression */
+	ZSTD_inBuffer input = { pBuf, lenBuf, 0 };
+
+	ZSTD_EndDirective const mode = bFlush ? ZSTD_e_end : ZSTD_e_continue;
+	do {
+		ZSTD_outBuffer output = { pThis->pZipBuf, pThis->sIOBufSize, 0 };
+		DBGPRINTF("PRE doZstdWrite: input: .len %zd, .pos %zd, output.pos %zd\n", input.size, input.pos, output.pos);
+		size_t const remaining = ZSTD_compressStream2(pThis->zstd.cctx, &output , &input, mode);
+		DBGPRINTF("doZstdWrite: remaining %zd, input: .len %zd, .pos %zd, output.pos %zd\n", remaining, input.size, input.pos, output.pos);
+		if(ZSTD_isError(remaining)) {
+			LogError(0, RS_RET_ZLIB_ERR, "error returned from ZSTD_compressStream2(): %s",
+				ZSTD_getErrorName(remaining));
+			ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+		}
+
+		CHKiRet(strmPhysWrite(pThis, (uchar*)pThis->pZipBuf, output.pos));
+
+	} while (input.pos != input.size);
+
+finalize_it:
+	if(pThis->bzInitDone && pThis->bVeryReliableZip) {
+		doZstdFinish(pThis);
+	}
+	RETiRet;
+}
+
+
+
+/* finish zlib buffer, to be called before closing the ZIP file (if
+ * running in stream mode).
+ */
+static rsRetVal
+doZstdFinish(strm_t *pThis)
+{
+	size_t remaining = 0;
+	DEFiRet;
+	assert(pThis != NULL);
+
+	if(!pThis->bzInitDone)
+		goto done;
+
+	char dummybuf; /* not sure if we can pass in NULL as buffer address in this special case */
+	ZSTD_inBuffer input = { &dummybuf, 0, 0 };
+
+	do {
+		ZSTD_outBuffer output = { pThis->pZipBuf, pThis->sIOBufSize, 0 };
+		DBGPRINTF("FINISH PRE doZstdWrite: input: .len %zd, .pos %zd, output.pos %zd\n", input.size, input.pos, output.pos);
+		remaining = ZSTD_compressStream2(pThis->zstd.cctx, &output , &input, ZSTD_e_end);
+		DBGPRINTF("FINISH doZstdWrite: remaining %zd, input: .len %zd, .pos %zd, output.pos %zd\n", remaining, input.size, input.pos, output.pos);
+		if(ZSTD_isError(remaining)) {
+			LogError(0, RS_RET_ZLIB_ERR, "error returned from ZSTD_compressStream2()"); // TODO: add error info
+			ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+		}
+
+		CHKiRet(strmPhysWrite(pThis, (uchar*)pThis->pZipBuf, output.pos));
+
+	} while (remaining != 0);
+
+finalize_it:
 	pThis->bzInitDone = 0;
 done:	RETiRet;
 }
