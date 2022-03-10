@@ -1923,21 +1923,31 @@ doZstdWrite(strm_t *pThis, uchar *const pBuf, const size_t lenBuf, const int bFl
 	/* now doing the compression */
 	ZSTD_inBuffer input = { pBuf, lenBuf, 0 };
 
-	ZSTD_EndDirective const mode = bFlush ? ZSTD_e_end : ZSTD_e_continue;
+	// This following needs to be configurable? It's possibly sufficient to use e_flush
+	// only, as this can also be controlled by veryRobustZip. However, testbench will than
+	// not be able to check when all file lines are complete.
+	//ZSTD_EndDirective const mode = bFlush ? ZSTD_e_end : ZSTD_e_continue; //use this to ensure we write on end of "transaction"
+	ZSTD_EndDirective const mode = bFlush ? ZSTD_e_flush : ZSTD_e_continue; // never close a frame, except for "veryReliableZip" case
+	size_t remaining;
 	do {
-		ZSTD_outBuffer output = { pThis->pZipBuf, pThis->sIOBufSize, 0 };
-		DBGPRINTF("PRE doZstdWrite: input: .len %zd, .pos %zd, output.pos %zd\n", input.size, input.pos, output.pos);
-		size_t const remaining = ZSTD_compressStream2(pThis->zstd.cctx, &output , &input, mode);
-		DBGPRINTF("doZstdWrite: remaining %zd, input: .len %zd, .pos %zd, output.pos %zd\n", remaining, input.size, input.pos, output.pos);
+		//ZSTD_outBuffer output = { pThis->pZipBuf, pThis->sIOBufSize, 0 };
+		ZSTD_outBuffer output = { pThis->pZipBuf, 128, 0 };
+		DBGPRINTF("PRE doZstdWrite: bFlush %d, input: .len %zd, .pos %zd | output size %zd .pos %zd\n", bFlush, input.size,
+			input.pos, output.size, output.pos);
+		remaining = ZSTD_compressStream2(pThis->zstd.cctx, &output , &input, mode);
+		DBGPRINTF("doZstdWrite: bFlush %d, remaining %zd, input: .len %zd, .pos %zd | output.size %zd, .pos %zd\n",
+			bFlush, remaining, input.size, input.pos, output.size, output.pos);
 		if(ZSTD_isError(remaining)) {
 			LogError(0, RS_RET_ZLIB_ERR, "error returned from ZSTD_compressStream2(): %s",
+				ZSTD_getErrorName(remaining));
+			fprintf(stderr, "error returned from ZSTD_compressStream2(): %s",
 				ZSTD_getErrorName(remaining));
 			ABORT_FINALIZE(RS_RET_ZLIB_ERR);
 		}
 
 		CHKiRet(strmPhysWrite(pThis, (uchar*)pThis->pZipBuf, output.pos));
 
-	} while (input.pos != input.size);
+	} while ( mode == ZSTD_e_end ? (remaining != 0) : (input.pos != input.size));
 
 finalize_it:
 	if(pThis->bzInitDone && pThis->bVeryReliableZip) {
