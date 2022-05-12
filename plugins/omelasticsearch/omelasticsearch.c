@@ -623,7 +623,7 @@ setPostURL(wrkrInstanceData_t *const pWrkrData, uchar **const tpls)
 	/* since 7.0, the API always requires /idx/_doc, so use that if searchType is not explicitly set */
 	uchar* actualSearchType = (uchar*)"_doc";
 	es_str_t *url;
-	int r;
+	int r = 0;
 	DEFiRet;
 	instanceData *const pData = pWrkrData->pData;
 	char separator;
@@ -646,13 +646,12 @@ setPostURL(wrkrInstanceData_t *const pWrkrData, uchar **const tpls)
 		getIndexTypeAndParent(pData, tpls, &searchIndex, &searchType, &parent, &bulkId, &pipelineName);
 		if(searchIndex != NULL) {
 			r = es_addBuf(&url, (char*)searchIndex, ustrlen(searchIndex));
+			if(searchType != NULL) {
+				actualSearchType = searchType;
+			}
 			if(r == 0) r = es_addChar(&url, '/');
-
-		if(searchType != NULL) {
-			actualSearchType = searchType;
+			if(r == 0) r = es_addBuf(&url, (char*)actualSearchType, ustrlen(actualSearchType));
 		}
-		if(r == 0) r = es_addChar(&url, '/');
-		if(r == 0) r = es_addBuf(&url, (char*)actualSearchType, ustrlen(actualSearchType));
 		if(pipelineName != NULL && (!pData->skipPipelineIfEmpty || pipelineName[0] != '\0')) {
 			if(r == 0) r = es_addChar(&url, separator);
 			if(r == 0) r = es_addBuf(&url, "pipeline=", sizeof("pipeline=")-1);
@@ -1918,6 +1917,10 @@ CODESTARTnewActInst
 			pData->searchIndex = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(actpblk.descr[i].name, "searchtype")) {
 			pData->searchType = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
+			if(pData->searchType[0] == '\0') {
+				free(pData->searchType);
+				pData->searchType = NULL;
+			}
 		} else if(!strcmp(actpblk.descr[i].name, "pipelinename")) {
 			pData->pipelineName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(actpblk.descr[i].name, "dynpipelinename")) {
