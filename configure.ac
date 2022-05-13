@@ -2249,6 +2249,17 @@ AC_ARG_ENABLE(imkafka,
         [enable_imkafka=no]
 )
 
+AC_ARG_ENABLE(omazureeventhubs_tests,
+        [AS_HELP_STRING([--enable-omazureeventhubs-tests],[Enable Omazureeventhubs tests @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_omazureeventhubs_tests="yes" ;;
+          no) enable_omazureeventhubs_tests="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-omazureeventhubs-tests) ;;
+         esac],
+        [enable_omazureeventhubs_tests=no]
+)
+AM_CONDITIONAL(ENABLE_OMAZUREEVENTHUBS_TESTS, test x$enable_omazureeventhubs_tests = xyes)
+
 AC_ARG_ENABLE(kafka_tests,
         [AS_HELP_STRING([--enable-kafka-tests],[Enable Kafka tests, needs Java @<:@default=no@:>@])],
         [case "${enableval}" in
@@ -2362,6 +2373,41 @@ else
 fi
 AM_CONDITIONAL(ENABLE_OMKAFKA, test x$enable_omkafka = xyes -o x$enable_omkafka = xoptional)
 AM_CONDITIONAL(ENABLE_IMKAFKA, test x$enable_imkafka = xyes -o x$enable_imkafka = xoptional)
+
+
+# omazureeventhubs support for output module
+AC_ARG_ENABLE(omazureeventhubs,
+        [AS_HELP_STRING([--enable-omazureeventhubs],[Compiles AzureEventHubs output module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_omazureeventhubs="yes" ;;
+          no) enable_omazureeventhubs="no" ;;
+         optional) enable_omazureeventhubs="optional" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-omazureeventhubs) ;;
+         esac],
+        [enable_omazureeventhubs=no]
+)
+
+# PROTON PROTOCOL SUPPORT for omazureeventhubs
+# uses qpid-proton library
+if test "x$enable_omazureeventhubs" = "xyes"; then
+        PKG_CHECK_MODULES(PROTON, libqpid-proton >= 0.12)
+        AC_SUBST(PROTON_CFLAGS)
+        AC_SUBST(PROTON_LIBS)
+fi
+AM_CONDITIONAL(ENABLE_OMAZUREEVENTHUBS, test x$enable_omazureeventhubs = xyes)
+# END PROTON
+
+if test "x$enable_omazureeventhubs" = "xyes"; then
+	if test "x$enable_omazure_tests" = "xyes"; then
+		AC_MSG_NOTICE([omazureveenthubs: TEST Suite enabled, requires Azure Environment variables!])
+	fi
+else
+	if test "x$enable_omazure_tests" = "xyes"; then
+		AC_MSG_WARN([Omazureeventhubs Tests can not be enabled omazureveenthubs support. Disabling enable_omazure_tests...])
+		enable_omazure_tests="no"
+	fi
+fi
+
 
 #MONGODB SUPPORT
 
@@ -2728,7 +2774,8 @@ AC_CONFIG_FILES([Makefile \
 		plugins/mmsnmptrapd/Makefile \
 		plugins/pmlastmsg/Makefile \
 		plugins/mmdblookup/Makefile \
-    		contrib/mmdarwin/Makefile \
+		plugins/omazureeventhubs/Makefile \
+		contrib/mmdarwin/Makefile \
 		contrib/omhttp/Makefile \
 		contrib/fmhash/Makefile \
 		contrib/fmunflatten/Makefile \
@@ -2830,6 +2877,7 @@ echo "    omhttpfs module will be compiled:         $enable_omhttpfs"
 echo "    omamqp1 module will be compiled:          $enable_omamqp1"
 echo "    omtcl module will be compiled:            $enable_omtcl"
 echo "    omkafka module will be compiled:          $enable_omkafka"
+echo "    omazureeventhubs module will be compiled: $enable_omazureeventhubs"
 echo
 echo "---{ parser modules }---"
 echo "    pmlastmsg module will be compiled:        $enable_pmlastmsg"
@@ -2896,6 +2944,7 @@ echo "    Elasticsearch Tests:                      $enable_elasticsearch_tests"
 echo "    ClickHouse Tests:                         $enable_clickhouse_tests"
 echo "    PostgreSQL Tests enabled:                 $enable_pgsql_tests"
 echo "    Kafka Tests enabled:                      $enable_kafka_tests"
+echo "    Omazureeventhubs Tests enabled:           $enable_omazureeventhubs_tests"
 echo "    Imdocker Tests enabled:                   $enable_imdocker_tests"
 echo "    gnutls tests enabled:                     $enable_gnutls_tests"
 echo "    imfile tests enabled:                     $enable_imfile_tests"
