@@ -646,7 +646,7 @@ setPostURL(wrkrInstanceData_t *const pWrkrData, uchar **const tpls)
 		getIndexTypeAndParent(pData, tpls, &searchIndex, &searchType, &parent, &bulkId, &pipelineName);
 		if(searchIndex != NULL) {
 			r = es_addBuf(&url, (char*)searchIndex, ustrlen(searchIndex));
-			if(searchType != NULL) {
+			if(searchType != NULL && searchType[0] != '\0') {
 				actualSearchType = searchType;
 			}
 			if(r == 0) r = es_addChar(&url, '/');
@@ -712,7 +712,12 @@ computeMessageSize(const wrkrInstanceData_t *const pWrkrData,
 	if(searchIndex != NULL) {
 		r += ustrlen(searchIndex);
 	}
-	if(searchType != NULL) {
+	if(searchType != NULL)
+		if(searchType[0] == '\0') {
+			r += 4; // "_doc"
+		} else {
+			r += ustrlen(searchType);
+	} else {
 		r += ustrlen(searchType);
 	}
 	if(parent != NULL) {
@@ -758,7 +763,7 @@ buildBatch(wrkrInstanceData_t *pWrkrData, uchar *message, uchar **tpls)
 			if(r == 0) r = es_addBuf(&pWrkrData->batch.data, META_IX, sizeof(META_IX)-1);
 		if(r == 0) r = es_addBuf(&pWrkrData->batch.data, (char*)searchIndex,
 				 ustrlen(searchIndex));
-		if(searchType != NULL) {
+		if(searchType != NULL && searchType[0] != '\0') {
 			if(r == 0) r = es_addBuf(&pWrkrData->batch.data, META_TYPE, sizeof(META_TYPE)-1);
 			if(r == 0) r = es_addBuf(&pWrkrData->batch.data, (char*)searchType,
 				 ustrlen(searchType));
@@ -1917,10 +1922,6 @@ CODESTARTnewActInst
 			pData->searchIndex = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(actpblk.descr[i].name, "searchtype")) {
 			pData->searchType = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
-			if(pData->searchType[0] == '\0') {
-				free(pData->searchType);
-				pData->searchType = NULL;
-			}
 		} else if(!strcmp(actpblk.descr[i].name, "pipelinename")) {
 			pData->pipelineName = (uchar*)es_str2cstr(pvals[i].val.d.estr, NULL);
 		} else if(!strcmp(actpblk.descr[i].name, "dynpipelinename")) {
