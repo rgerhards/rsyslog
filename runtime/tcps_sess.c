@@ -362,7 +362,6 @@ processDataRcvd(tcps_sess_t *pThis,
 	DEFiRet;
 	const tcpLstnParams_t *const cnf_params = pThis->pLstnInfo->cnf_params;
 	ISOBJ_TYPE_assert(pThis, tcps_sess);
-	const int iMaxLine = pThis->iMaxLine;
 	uchar *propPeerName = NULL;
 	int lenPeerName = 0;
 	uchar *propPeerIP = NULL;
@@ -391,7 +390,7 @@ processDataRcvd(tcps_sess_t *pThis,
 			if(pThis->iOctetsRemain <= 200000000) {
 				pThis->iOctetsRemain = pThis->iOctetsRemain * 10 + c - '0';
 			}
-			if(pThis->iMsg < iMaxLine) {
+			if(pThis->iMsg < pThis->iMaxLine) {
 				*(pThis->pMsg + pThis->iMsg++) = c;
 			}
 		} else { /* done with the octet count, so this must be the SP terminator */
@@ -409,14 +408,14 @@ processDataRcvd(tcps_sess_t *pThis,
 					"peer: (hostname) %s, (ip) %s: invalid octet count %d.",
 					cnf_params->pszInputName, propPeerName, propPeerIP, pThis->iOctetsRemain);
 				pThis->eFraming = TCP_FRAMING_OCTET_STUFFING;
-			} else if(pThis->iOctetsRemain > iMaxLine) {
+			} else if(pThis->iOctetsRemain > pThis->iMaxLine) {
 				/* while we can not do anything against it, we can at least log an indication
 				 * that something went wrong) -- rgerhards, 2008-03-14
 				 */
 				LogError(0, NO_ERRCODE, "imtcp %s: received oversize message from peer: "
 					"(hostname) %s, (ip) %s: size is %d bytes, max msg size "
 					"is %d, truncating...", cnf_params->pszInputName, propPeerName,
-					propPeerIP, pThis->iOctetsRemain, iMaxLine);
+					propPeerIP, pThis->iOctetsRemain, pThis->iMaxLine);
 			}
 			if(pThis->iOctetsRemain > pThis->pSrv->maxFrameSize) {
 				LogError(0, NO_ERRCODE, "imtcp %s: Framing Error in received TCP message from "
@@ -465,7 +464,7 @@ processDataRcvd(tcps_sess_t *pThis,
 			 * If we have a message that is larger than the max msg size, we truncate it. This is the best
 			 * we can do in light of what the engine supports. -- rgerhards, 2008-03-14
 			 */
-			if(pThis->iMsg < iMaxLine) {
+			if(pThis->iMsg < pThis->iMaxLine) {
 				*(pThis->pMsg + pThis->iMsg++) = c;
 			} else {
 				/* emergency, we now need to flush, no matter if we are at end of message or not... */
