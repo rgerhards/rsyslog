@@ -67,10 +67,11 @@ static rsRetVal Close(tcps_sess_t *pThis);
 /* Standard-Constructor */
 BEGINobjConstruct(tcps_sess) /* be sure to specify the object type also in END macro! */
 		pThis->iMsg = 0; /* just make sure... */
+		pThis->iMaxLine = glbl.GetMaxLine(runConf);
 		pThis->inputState = eAtStrtFram; /* indicate frame header expected */
 		pThis->eFraming = TCP_FRAMING_OCTET_STUFFING; /* just make sure... */
 		/* now allocate the message reception buffer */
-		CHKmalloc(pThis->pMsg = (uchar*) malloc(glbl.GetMaxLine(runConf) + 1));
+		CHKmalloc(pThis->pMsg = (uchar*) malloc(pThis->iMaxLine + 1));
 finalize_it:
 ENDobjConstruct(tcps_sess)
 
@@ -361,7 +362,7 @@ processDataRcvd(tcps_sess_t *pThis,
 	DEFiRet;
 	const tcpLstnParams_t *const cnf_params = pThis->pLstnInfo->cnf_params;
 	ISOBJ_TYPE_assert(pThis, tcps_sess);
-	int iMaxLine = glbl.GetMaxLine(runConf);
+	const int iMaxLine = pThis->iMaxLine;
 	uchar *propPeerName = NULL;
 	int lenPeerName = 0;
 	uchar *propPeerIP = NULL;
