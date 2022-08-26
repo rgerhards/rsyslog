@@ -230,7 +230,7 @@ setsid(void)
 #endif
 
 
-static rsRetVal
+rsRetVal
 queryLocalHostname(void)
 {
 	uchar *LocalHostName = NULL;
@@ -240,6 +240,7 @@ queryLocalHostname(void)
 
 	CHKiRet(net.getLocalHostname(&LocalFQDNName));
 	uchar *dot = (uchar*) strstr((char*)LocalFQDNName, ".");
+	DBGPRINTF("RGER: queryLocalHostname dot %p\n", dot);
 	if(dot == NULL) {
 		CHKmalloc(LocalHostName = (uchar*) strdup((char*)LocalFQDNName));
 		CHKmalloc(LocalDomain = (uchar*)strdup(""));
@@ -249,6 +250,7 @@ queryLocalHostname(void)
 		CHKmalloc(LocalDomain = (uchar*) strdup((char*) dot+1));
 	}
 
+	DBGPRINTF("RGER: queryLocalHostname FQDN: %s, Local %s\n", LocalFQDNName, LocalHostName);
 	glbl.SetLocalFQDNName(LocalFQDNName);
 	glbl.SetLocalHostName(LocalHostName);
 	glbl.SetLocalDomain(LocalDomain);
@@ -1632,6 +1634,10 @@ initAll(int argc, char **argv)
 	}
 
 	CHKiRet(rsconf.Activate(ourConf));
+
+	queryLocalHostname();
+	LogMsg(0, RS_RET_OK, LOG_INFO, "rsyslogd HOSTNAME RESET");
+	fprintf(stderr, "rsyslogd HOSTNAME RESET");
 
 	if(runConf->globals.bLogStatusMsgs) {
 		char bufStartUpMsg[512];

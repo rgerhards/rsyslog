@@ -1182,8 +1182,13 @@ getLocalHostname(uchar **ppName)
 	}
 
 	char *dot = strstr(hnbuf, ".");
+dbgprintf("RGER: gethostname: %s\n", hnbuf);
 	struct addrinfo *res = NULL;
-	if(!empty_hostname && dot == NULL && runConf != NULL && !glbl.GetDisableDNS(runConf)) {
+	//if(!empty_hostname && dot == NULL && runConf != NULL && !glbl.GetDisableDNS(runConf)) {
+	//HIER müssen wir ebenfalls ansetzen - nicht ganz einfach bzw. "sauber".
+	//if(!empty_hostname && dot == NULL && !glbl.GetDisableDNS(runConf)) {
+	if(!empty_hostname && dot == NULL) {
+dbgprintf("RGER: try to find gethostname: by resolver\n");
 		/* we need to (try) to find the real name via resolver */
 		struct addrinfo flags;
 		memset(&flags, 0, sizeof(flags));

@@ -642,10 +642,13 @@ GetLocalHostName(void)
 	if(LocalHostName == NULL)
 		pszRet = (uchar*) "[localhost]";
 	else {
-		if(GetPreserveFQDN() == 1)
+		if(GetPreserveFQDN() == 1) {
+DBGPRINTF("RGER: GetLocalHostName, FQDN on\n");
 			pszRet = LocalFQDNName;
-		else
+		} else {
+DBGPRINTF("RGER: GetLocalHostName, FQDN off\n");
 			pszRet = LocalHostName;
+		}
 	}
 done:
 	return(pszRet);
@@ -982,6 +985,7 @@ bs_arrcmp_glblDbgFiles(const void *s1, const void *s2)
 
 
 
+void queryLocalHostname(void);
 /* handle a global config object. Note that multiple global config statements
  * are permitted (because of plugin support), so once we got a param block,
  * we need to hold to it.
@@ -1016,6 +1020,11 @@ glblProcessCnf(struct cnfobj *o)
 		} else if(!strcmp(paramblk.descr[i].name, "internal.developeronly.options")) {
 			loadConf->globals.glblDevOptions = (uint64_t) cnfparamvals[i].val.d.n;
 			cnfparamvals[i].bUsed = TRUE;
+		} else if(!strcmp(paramblk.descr[i].name, "preservefqdn")) {
+			bPreserveFQDN = (int) cnfparamvals[i].val.d.n;
+DBGPRINTF("RGER: HOStNAME SET, bPreserveFQDN %d\n", bPreserveFQDN);
+	queryLocalHostname();
+	DBGPRINTF("RGER: GLBL rsyslogd HOSTNAME RESET");
 		} else if(!strcmp(paramblk.descr[i].name, "stdlog.channelspec")) {
 #ifndef ENABLE_LIBLOGGING_STDLOG
 			LogError(0, RS_RET_ERR, "rsyslog wasn't "
