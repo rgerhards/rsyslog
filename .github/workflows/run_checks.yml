@@ -1,4 +1,4 @@
-# Copyright 2022 Rainer Gerhards and Others
+# Copyright 2024 Rainer Gerhards and Others
 #
 # https://github.com/rsyslog/rsyslog-pkg-ubuntu
 #
@@ -38,6 +38,7 @@ jobs:
         config: [centos_7, centos_8, debian_10, debian_11,
                  fedora_35, fedora_36,
                  ubuntu_18, ubuntu_20, ubuntu_22,
+                 ubuntu_24_san, ubuntu_24_tsan, 
                  ubuntu_22_san, ubuntu_22_tsan, ubuntu_22_distcheck, ubuntu_22_codecov,
                  kafka_codecov, elasticsearch]
 
@@ -154,6 +155,38 @@ jobs:
               export RSYSLOG_CONFIGURE_OPTIONS_EXTRA="--disable-kafka-tests --disable-imkafka \
                             --disable-omkafka --enable-debug --disable-elasticsearch \
                             --disable-elasticsearch-tests"
+              ;;
+          'ubuntu_24_san')
+              export CI_SANITIZE_BLACKLIST='tests/asan.supp'
+              export RSYSLOG_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+              export CC='clang'
+              export RSYSLOG_CONFIGURE_OPTIONS_EXTRA="--disable-elasticsearch-tests \
+                      --disable-libfaketime --without-valgrind-testbench --disable-valgrind \
+                      --disable-kafka-tests --enable-imdtls --enable-omdtls --disable-ommongodb"
+              export CFLAGS="-std=c11 -fstack-protector -D_FORTIFY_SOURCE=2 \
+                     -fsanitize=address,undefined,nullability,unsigned-integer-overflow \
+                     -fno-sanitize-recover=undefined,nullability,unsigned-integer-overflow \
+                     -g -O3 -fno-omit-frame-pointer -fno-color-diagnostics"
+              export LSAN_OPTIONS='detect_leaks=0'
+              export UBSAN_OPTIONS='print_stacktrace=1'
+              ;;
+          'ubuntu_24_tsan')
+              export RSYSLOG_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+              export CI_VALGRIND_SUPPRESSIONS="ubuntu22.04.supp"
+              export CI_SANITIZE_BLACKLIST='tests/tsan.supp'
+              export CC='clang'
+              # impstats has known and OK races
+              # mmpstrucdata TEMPORARILY disabled because of a threading hang on shutdown
+              export RSYSLOG_CONFIGURE_OPTIONS_EXTRA="--disable-elasticsearch-tests --enable-imfile-tests \
+                    --disable-impstats --disable-kafka-tests --disable-mmpstrucdata \
+                    --disable-clickhouse --disable-clickhouse-tests --disable-kafka-tests \
+                    --disable-libfaketime --without-valgrind-testbench --disable-valgrind \
+                    --disable-ommongodb"
+              export CFLAGS="-std=c11 -g -fstack-protector -D_FORTIFY_SOURCE=2 -fsanitize=thread \
+                    -O0 -fno-omit-frame-pointer -fno-color-diagnostics"
+              # note: we need pathes in container, thus /rsyslog vs. $(pwd) in TSAN_OPTIONS
+              export TSAN_OPTIONS="halt_on_error=1 suppressions=/rsyslog/tests/tsan-rt.supp"
+              export ABORT_ALL_ON_TEST_FAIL='YES'
               ;;
           'kafka_codecov')
               export RSYSLOG_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:22.04'
