@@ -599,7 +599,7 @@ finalize_it:
  * rgerhards, 2009-07-020
  */
 static rsRetVal
-doReceive(tcpsrv_t *pThis, tcps_sess_t **ppSess, nspoll_t *pPoll)
+doReceive(tcpsrv_t *const pThis, tcps_sess_t **ppSess, nspoll_t *const pPoll)
 {
 	char buf[128*1024]; /* reception buffer - may hold a partial or multiple messages */
 	ssize_t iRcvd;
@@ -648,18 +648,50 @@ finalize_it:
 	RETiRet;
 }
 
+static rsRetVal ATTR_NONNULL(1)
+doAccept(tcpsrv_t *const pThis, tcps_sess_t **ppSess, nspoll_t *const pPoll, const int idx)
+{
+	tcpLstnParams_t *cnf_params;
+	tcps_sess_t *pNewSess;
+	DEFiRet;
+
+	DBGPRINTF("New connect on NSD %p.\n", pThis->ppLstn[idx]);
+	iRet = SessAccept(pThis, pThis->ppLstnPort[idx], ppSess, pThis->ppLstn[idx]);
+	pNewSess = *ppSess;
+	cnf_params = pThis->ppLstnPort[idx]->cnf_params;
+	if(iRet == RS_RET_OK) {
+		if(pPoll != NULL) {
+			CHKiRet(nspoll.Ctl(pPoll, pNewSess->pStrm, 0, pNewSess, NSDPOLL_IN, NSDPOLL_ADD));
+		}
+		DBGPRINTF("New session created with NSD %p.\n", pNewSess);
+	} else {
+		DBGPRINTF("tcpsrv: error %d during accept\n", iRet);
+	}
+
+finalize_it:
+	if(iRet != RS_RET_OK) {
+		LogError(0, iRet, "tcpsrv listener (inputname: '%s') failed "
+			"to process incoming connection with error %d",
+			(cnf_params->pszInputName == NULL) ? (uchar*)"*UNSET*" : cnf_params->pszInputName, iRet);
+		srSleep(0,20000); /* Sleep 20ms */
+	}
+	RETiRet;
+}
+
 /* process a single workset item
  */
 static rsRetVal ATTR_NONNULL(1)
 processWorksetItem(tcpsrv_t *const pThis, nspoll_t *pPoll, const int idx, void *pUsr)
 {
 	tcps_sess_t *pNewSess = NULL;
-	tcpLstnParams_t *cnf_params;
 
 	DEFiRet;
 
 	DBGPRINTF("tcpsrv: processing item %d, pUsr %p, bAbortConn\n", idx, pUsr);
 	if(pUsr == pThis->ppLstn) {
+		#if 1
+		iRet = doAccept(pThis, &pNewSess, pPoll, idx);
+		#else
 		DBGPRINTF("New connect on NSD %p.\n", pThis->ppLstn[idx]);
 		iRet = SessAccept(pThis, pThis->ppLstnPort[idx], &pNewSess, pThis->ppLstn[idx]);
 		cnf_params = pThis->ppLstnPort[idx]->cnf_params;
@@ -671,14 +703,16 @@ processWorksetItem(tcpsrv_t *const pThis, nspoll_t *pPoll, const int idx, void *
 		} else {
 			DBGPRINTF("tcpsrv: error %d during accept\n", iRet);
 		}
+		#endif
 	} else {
 		pNewSess = (tcps_sess_t*) pUsr;
-		cnf_params = pNewSess->pLstnInfo->cnf_params;
+		//cnf_params = pNewSess->pLstnInfo->cnf_params;
 		doReceive(pThis, &pNewSess, pPoll);
 		if(pPoll == NULL && pNewSess == NULL) {
 			pThis->pSessions[idx] = NULL;
 		}
 	}
+	#if 0
 
 finalize_it:
 	if(iRet != RS_RET_OK) {
@@ -687,6 +721,7 @@ finalize_it:
 			(cnf_params->pszInputName == NULL) ? (uchar*)"*UNSET*" : cnf_params->pszInputName, iRet);
 		srSleep(0,20000); /* Sleep 20ms */
 	}
+	#endif
 	RETiRet;
 }
 
@@ -1027,6 +1062,7 @@ DoRun(tcpsrv_t *pThis, nspoll_t **ppPoll)
 			CHKiRet(nspoll.SetDrvrName(pPoll, pThis->pszDrvrName));
 		localRet = nspoll.ConstructFinalize(pPoll);
 	}
+localRet = RS_RET_ERR;
 	if(localRet != RS_RET_OK) {
 		/* fall back to select */
 		DBGPRINTF("tcpsrv could not use epoll() interface, iRet=%d, using select()\n", localRet);

@@ -1,6 +1,6 @@
 /* Definitions for tcpsrv class.
  *
- * Copyright 2008-2022 Adiscon GmbH.
+ * Copyright 2008-2024 Adiscon GmbH.
  *
  * This file is part of rsyslog.
  *
