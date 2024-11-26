@@ -649,15 +649,14 @@ finalize_it:
 }
 
 static rsRetVal ATTR_NONNULL(1)
-doAccept(tcpsrv_t *const pThis, tcps_sess_t **ppSess, nspoll_t *const pPoll, const int idx)
+doAccept(tcpsrv_t *const pThis, nspoll_t *const pPoll, const int idx)
 {
 	tcpLstnParams_t *cnf_params;
-	tcps_sess_t *pNewSess;
+	tcps_sess_t *pNewSess = NULL;
 	DEFiRet;
 
 	DBGPRINTF("New connect on NSD %p.\n", pThis->ppLstn[idx]);
-	iRet = SessAccept(pThis, pThis->ppLstnPort[idx], ppSess, pThis->ppLstn[idx]);
-	pNewSess = *ppSess;
+	iRet = SessAccept(pThis, pThis->ppLstnPort[idx], &pNewSess, pThis->ppLstn[idx]);
 	cnf_params = pThis->ppLstnPort[idx]->cnf_params;
 	if(iRet == RS_RET_OK) {
 		if(pPoll != NULL) {
@@ -690,7 +689,7 @@ processWorksetItem(tcpsrv_t *const pThis, nspoll_t *pPoll, const int idx, void *
 	DBGPRINTF("tcpsrv: processing item %d, pUsr %p, bAbortConn\n", idx, pUsr);
 	if(pUsr == pThis->ppLstn) {
 		#if 1
-		iRet = doAccept(pThis, &pNewSess, pPoll, idx);
+		doAccept(pThis, pPoll, idx);
 		#else
 		DBGPRINTF("New connect on NSD %p.\n", pThis->ppLstn[idx]);
 		iRet = SessAccept(pThis, pThis->ppLstnPort[idx], &pNewSess, pThis->ppLstn[idx]);
@@ -751,7 +750,7 @@ wrkrAccept(void *const myself)
 	struct acceptWrkrInfo_s *const me = (struct acceptWrkrInfo_s*) myself;
 	tcpsrv_t *const pThis = me->pSrv;
 	nsd_epworkset_t workset[128]; // TODO: think if we can get rid of this!
-	const int sizeWorkset = sizeof(workset)/sizeof(nsd_epworkset_t);
+	//const int sizeWorkset = sizeof(workset)/sizeof(nsd_epworkset_t);
 
 	dbgprintf("tcpsrv/wrkrAccept: starting thread\n");
 	pthread_cleanup_push(wrkrAcceptCancelCleanup, (void*) &pSel);
@@ -780,6 +779,8 @@ wrkrAccept(void *const myself)
 				ABORT_FINALIZE(RS_RET_FORCE_TERM);
 			CHKiRet(nssel.IsReady(pSel, pThis->ppLstn[i], NSDSEL_RD, &bIsReady, &nfds));
 			if(bIsReady) {
+				doAccept(pThis, NULL, i);
+		#if 0
 				workset[iWorkset].id = i;
 				workset[iWorkset].pUsr = (void*) pThis->ppLstn;
 				/* this is a flag to indicate listen sock */
@@ -788,6 +789,7 @@ wrkrAccept(void *const myself)
 					processWorkset(pThis, NULL, iWorkset, workset);
 					iWorkset = 0;
 				}
+		#endif
 				--nfds; /* indicate we have processed one */
 			}
 		}
@@ -962,7 +964,12 @@ RunSelect(tcpsrv_t *pThis, nsd_epworkset_t workset[], size_t sizeWorkset)
 			CHKiRet(nssel.SetDrvrName(pSel, pThis->pszDrvrName));
 		CHKiRet(nssel.ConstructFinalize(pSel));
 
-#if 1
+		#if 0
+		/* Add self-pipe fd to the list of read descriptors. */
+		CHKiRet(nssel.Add(pSel, pThis->selfpipe_fds[0], NSDSEL_RD));
+		#endif
+
+#if 0
 		/* Add the TCP listen sockets to the list of read descriptors. */
 		for(i = 0 ; i < pThis->iLstnCurr ; ++i) {
 			CHKiRet(nssel.Add(pSel, pThis->ppLstn[i], NSDSEL_RD));
@@ -1121,6 +1128,8 @@ Run(tcpsrv_t *pThis)
 
 	ISOBJ_TYPE_assert(pThis, tcpsrv);
 
+	pThis->main_tid = pthread_self(); /* store our tid for sync wakeups */
+
 	if(pThis->iLstnCurr == 0) {
 		dbgprintf("tcpsrv: no listeneres at all (probably init error), terminating\n");
 		RETiRet; /* somewhat "dirty" exit to avoid issue with cancel handler */
@@ -1133,7 +1142,7 @@ Run(tcpsrv_t *pThis)
 	if(!pThis->bWrkrRunning) {
 		pThis->bWrkrRunning = 1;
 		startWorkerPool(pThis);
-		//startAcceptThread(pThis); // TODO: re-enable
+		startAcceptThread(pThis); // TODO: re-enable
 	}
 	d_pthread_mutex_unlock(&pThis->wrkrMut);
 
@@ -1150,6 +1159,46 @@ Run(tcpsrv_t *pThis)
 	RETiRet;
 }
 
+static rsRetVal
+make_non_blocking(tcpsrv_t *const pThis, const int fd)
+{
+	DEFiRet;
+
+	int flags = fcntl(fd, F_GETFL, 0);
+	if(flags == -1) {
+		LogError(errno, RS_RET_ERR, "tcpsrv could not query self-pipe fd %d (inputname: '%s') - "
+				"server may be defunct", fd,
+				(pThis->pszInputName == NULL) ? (uchar*)"*UNSET*" : pThis->pszInputName);
+	}
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+		LogError(errno, RS_RET_ERR, "tcpsrv could not query self-pipe fd %d (inputname: '%s') - "
+				"server may be defunct", fd,
+				(pThis->pszInputName == NULL) ? (uchar*)"*UNSET*" : pThis->pszInputName);
+	}
+	RETiRet;
+}
+
+
+static rsRetVal
+setupSelfPipe(tcpsrv_t *const pThis)
+{
+	DEFiRet;
+
+	/* setup self-pipe for synchronization */
+	if(pipe(pThis->selfpipe_fds) == -1) {
+		iRet = RS_RET_ERR;
+		LogError(errno, iRet, "tcpsrv could not create self-pipe (inputname: '%s') - "
+				"cannot continue, server defunct",
+				(pThis->pszInputName == NULL) ? (uchar*)"*UNSET*" : pThis->pszInputName);
+		FINALIZE;
+	}
+
+	CHKiRet(make_non_blocking(pThis, pThis->selfpipe_fds[0]));
+	CHKiRet(make_non_blocking(pThis, pThis->selfpipe_fds[1]));
+
+finalize_it:
+	RETiRet;
+}
 
 /* Standard-Constructor */
 BEGINobjConstruct(tcpsrv) /* be sure to specify the object type also in END macro! */
@@ -1175,6 +1224,10 @@ BEGINobjConstruct(tcpsrv) /* be sure to specify the object type also in END macr
 	}
 	pthread_mutex_init(&pThis->wrkrMut, NULL);
 	pThis->bWrkrRunning = 0;
+
+	CHKiRet(setupSelfPipe(pThis));
+
+finalize_it:
 ENDobjConstruct(tcpsrv)
 
 
@@ -1251,6 +1304,9 @@ CODESTARTobjDestruct(tcpsrv)
 	free(pThis->ppLstnPort);
 	free(pThis->pszInputName);
 	free(pThis->pszOrigin);
+
+	close(pThis->selfpipe_fds[0]);
+	close(pThis->selfpipe_fds[1]);
 ENDobjDestruct(tcpsrv)
 
 

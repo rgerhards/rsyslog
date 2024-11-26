@@ -138,12 +138,16 @@ struct tcpsrv_s {
 	rsRetVal (*OnMsgReceive)(tcps_sess_t *, uchar *pszMsg, int iLenMsg); /* submit message callback */
 
 	/* support for multiple workers */
+	pthread_t main_tid;	/* thread ID of module main worker thread */
 	sbool bWrkrRunning; /* are the worker threads running? */
 	pthread_mutex_t wrkrMut;
 	pthread_cond_t wrkrIdle;
 	int wrkrMax;
 	int wrkrRunning;
 	struct tcpsrv_wrkrInfo_s wrkrInfo[4];
+
+	/* self-pipe trick for synchronization */
+	int selfpipe_fds[2];
 };
 
 
