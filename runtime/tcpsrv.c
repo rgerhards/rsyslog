@@ -866,11 +866,12 @@ doReceive(tcpsrv_io_descr_t *const pioDescr)
 	int lenPeer;
 	int oserr = 0;
 	int do_run = 1;
-	int loop_ctr = 0;
+	unsigned loop_ctr = 0;
 	int needReArm = 1;
 	tcps_sess_t *const pSess = pioDescr->ptr.pSess;
 	tcpsrv_t *const pThis = pioDescr->pSrv;
 	int freeMutex = 0;
+	const unsigned maxReads = pThis->starvationMaxReads;
 
 	ISOBJ_TYPE_assert(pThis, tcpsrv);
 	prop.GetString((pSess)->fromHostIP, &pszPeer, &lenPeer);
@@ -895,7 +896,7 @@ doReceive(tcpsrv_io_descr_t *const pioDescr)
 	}
 
 	while(do_run) {	/*  outer loop as "backup" if starvation protection does not properly work */
-		while(do_run && loop_ctr < 1000) {	/*  break happens in switch below! */
+		while(do_run && (maxReads == 0 || loop_ctr < maxReads)) { /*  break in switch below! */
 			// TODO: STARVATION needs URGENTLY be considered!!! loop_ctr is one step into
 			// this direction, but we need to consider that in regard to edge triggered epoll
 
@@ -944,7 +945,7 @@ doReceive(tcpsrv_io_descr_t *const pioDescr)
 		}
 
 		if(do_run) { /* we did not finish, just exited loop for starvation avoidance */
-dbgprintf("RGER: starvation avoidance triggered, ctr=%d\n", loop_ctr);
+dbgprintf("RGER: starvation avoidance triggered, ctr=%d, maxReads=%u\n", loop_ctr, maxReads);
 			// TODO: add stats counter
 			iRet = enqueueWork(pioDescr);
 			if(iRet == RS_RET_OK) {
@@ -2037,6 +2038,14 @@ SetSynBacklog(tcpsrv_t *pThis, const int iSynBacklog)
 
 
 static rsRetVal
+SetStarvationMaxReads(tcpsrv_t *pThis, const unsigned int maxReads)
+{
+	pThis->starvationMaxReads = maxReads;
+	return RS_RET_OK;
+}
+
+
+static rsRetVal
 SetNumWrkr(tcpsrv_t *pThis, const int numWrkr)
 {
 	pThis->workQueue.numWrkr = numWrkr;
@@ -2113,6 +2122,7 @@ CODESTARTobjQueryInterface(tcpsrv)
 	pIf->SetDrvrTlsVerifyDepth = SetDrvrTlsVerifyDepth;
 	pIf->SetSynBacklog = SetSynBacklog;
 	pIf->SetNumWrkr = SetNumWrkr;
+	pIf->SetStarvationMaxReads = SetStarvationMaxReads;
 
 finalize_it:
 ENDobjQueryInterface(tcpsrv)

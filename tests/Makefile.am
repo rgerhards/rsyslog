@@ -608,6 +608,8 @@ TESTS +=  \
 	imtcp-discard-truncated-msg.sh \
 	imtcp-basic.sh \
 	imtcp-basic-hup.sh \
+	imtcp-starvation-0.sh \
+	imtcp-starvation-1.sh \
 	imtcp-maxFrameSize.sh \
 	imtcp-msg-truncation-on-number.sh \
 	imtcp-msg-truncation-on-number2.sh \
@@ -2463,6 +2465,8 @@ EXTRA_DIST= \
 	imtcp-discard-truncated-msg.sh \
 	imtcp-basic.sh \
 	imtcp-basic-hup.sh \
+	imtcp-starvation-0.sh \
+	imtcp-starvation-1.sh \
 	imtcp-maxFrameSize.sh \
 	imtcp-msg-truncation-on-number.sh \
 	imtcp-msg-truncation-on-number2.sh \
