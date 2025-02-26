@@ -66,12 +66,12 @@ struct tcpLstnPortList_s {
 
 
 typedef struct workQueue_s {
-    tcpsrv_io_descr_t *head;
-    tcpsrv_io_descr_t *tail;
-    pthread_mutex_t mut;
-    pthread_cond_t workRdy;
-    unsigned numWrkr;		/* how many workers to spawn */
-    pthread_t *wrkr_tids;	/* array of thread IDs */
+	tcpsrv_io_descr_t *head;
+	tcpsrv_io_descr_t *tail;
+	pthread_mutex_t mut;
+	pthread_cond_t workRdy;
+	unsigned numWrkr;		/* how many workers to spawn */
+	pthread_t *wrkr_tids;	/* array of thread IDs */
 } workQueue_t;
 
 /**

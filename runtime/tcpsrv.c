@@ -123,7 +123,8 @@ eventNotify_init(tcpsrv_t *const pThis)
 #endif
 	{
 		DBGPRINTF("tcpsrv uses epoll_create()\n");
-		pThis->evtdata.epoll.efd = epoll_create(100); /* size is ignored in newer kernels, but 100 is not bad... */
+		pThis->evtdata.epoll.efd = epoll_create(100);
+		/* size is ignored in newer kernels, but 100 is not bad... */
 	}
 
 	if(pThis->evtdata.epoll.efd < 0) {
@@ -1085,7 +1086,7 @@ DBGPRINTF("RGER: done stopWrkrPool\n");
 
 static tcpsrv_io_descr_t *
 dequeueWork(tcpsrv_t *pSrv)
-{	
+{
 	workQueue_t *const queue = &pSrv->workQueue;
 	tcpsrv_io_descr_t *pioDescr;
 
@@ -1114,7 +1115,7 @@ finalize_it:
 
 static rsRetVal
 enqueueWork(tcpsrv_io_descr_t *const pioDescr)
-{	
+{
 	workQueue_t *const queue = &pioDescr->pSrv->workQueue;
 	DEFiRet;
 
