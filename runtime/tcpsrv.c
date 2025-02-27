@@ -736,8 +736,6 @@ SessAccept(tcpsrv_t *const pThis, tcpLstnPortList_t *const pLstnInfo, tcps_sess_
 	}
 	CHKiRet(netstrm.GetRemoteIP(pNewStrm, &fromHostIP));
 	CHKiRet(netstrm.GetRemAddr(pNewStrm, &addr));
-	/* TODO: check if we need to strip the domain name here -- rgerhards, 2008-04-24 */
-
 	/* Here we check if a host is permitted to send us messages. If it isn't, we do not further
 	 * process the message but log a warning (if we are configured to do this).
 	 * rgerhards, 2005-09-26
@@ -897,9 +895,6 @@ doReceive(tcpsrv_io_descr_t *const pioDescr)
 
 	while(do_run) {	/*  outer loop as "backup" if starvation protection does not properly work */
 		while(do_run && (maxReads == 0 || loop_ctr < maxReads)) { /*  break in switch below! */
-			// TODO: STARVATION needs URGENTLY be considered!!! loop_ctr is one step into
-			// this direction, but we need to consider that in regard to edge triggered epoll
-
 			/* Receive message */
 			iRet = pThis->pRcvData(pSess, buf, sizeof(buf), &iRcvd, &oserr);
 			switch(iRet) {
@@ -1170,7 +1165,6 @@ DBGPRINTF("RGER: enqueuWork done, sock %d\n", pioDescr->sock);
 static void *
 wrkr(void *arg)
 {
-	//rsRetVal localRet;
 	tcpsrv_t *const pThis = (tcpsrv_t *) arg;
 	workQueue_t *const queue = &pThis->workQueue;
 	tcpsrv_io_descr_t *pioDescr;
@@ -1199,7 +1193,10 @@ wrkr(void *arg)
 		if(pioDescr == NULL) {
 			break;
 		}
-		processWorksetItem(pioDescr); // TODO check result?
+		/* note: we ignore the result as we cannot do anything against errors in any
+		 * case. Also, errors are reported inside processWorksetItem().
+		 */
+		processWorksetItem(pioDescr);
 	}
 
 	return NULL;

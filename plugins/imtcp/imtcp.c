@@ -222,7 +222,7 @@ static struct cnfparamdescr modpdescr[] = {
 	{ "maxlistners", eCmdHdlrPositiveInt, 0 },
 	{ "maxlisteners", eCmdHdlrPositiveInt, 0 },
 	{ "workerthreads", eCmdHdlrPositiveInt, 0 },
-	{ "starvationprotection.maxreads", eCmdHdlrInt, 0 },
+	{ "starvationprotection.maxreads", eCmdHdlrNonNegInt, 0 },
 	{ "streamdriver.mode", eCmdHdlrNonNegInt, 0 },
 	{ "streamdriver.authmode", eCmdHdlrString, 0 },
 	{ "streamdriver.permitexpiredcerts", eCmdHdlrString, 0 },
@@ -267,7 +267,7 @@ static struct cnfparamdescr inppdescr[] = {
 	{ "name", eCmdHdlrString, 0 },
 	{ "defaulttz", eCmdHdlrString, 0 },
 	{ "ruleset", eCmdHdlrString, 0 },
-	{ "starvationprotection.maxreads", eCmdHdlrInt, 0 },
+	{ "starvationprotection.maxreads", eCmdHdlrNonNegInt, 0 },
 	{ "streamdriver.mode", eCmdHdlrNonNegInt, 0 },
 	{ "streamdriver.authmode", eCmdHdlrString, 0 },
 	{ "streamdriver.permitexpiredcerts", eCmdHdlrString, 0 },
@@ -1108,7 +1108,6 @@ CODESTARTafterRun
 	tcpsrv_etry_t *del;
 	while(etry != NULL) {
 		iRet = tcpsrv.Destruct(&etry->tcpsrv);
-		// TODO: check iRet, reprot error
 		del = etry;
 		etry = etry->next;
 		free(del);
