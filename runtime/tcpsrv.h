@@ -101,7 +101,6 @@ struct tcpsrv_io_descr_s {
 	tcpsrv_io_descr_t *next; /* for use in workQueue_t */
 	#if defined(ENABLE_IMTCP_EPOLL)
 	struct epoll_event event; /* to re-enable EPOLLONESHOT */
-	tcpsrvWrkrData_t *wrkrData; /* for MT: current thread's worker data. Invalid in single threading. */
 	#endif
 	DEF_ATOMIC_HELPER_MUT(mut_isInError);
 };

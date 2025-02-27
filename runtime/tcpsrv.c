@@ -854,7 +854,7 @@ finalize_it:
  * rgerhards, 2009-07-020
  */
 static rsRetVal ATTR_NONNULL(1)
-doReceive(tcpsrv_io_descr_t *const pioDescr)
+doReceive(tcpsrv_io_descr_t *const pioDescr, tcpsrvWrkrData_t *const wrkrData ATTR_UNUSED)
 {
 	char buf[128*1024]; /* reception buffer - may hold a partial or multiple messages */
 	ssize_t iRcvd;
@@ -871,7 +871,6 @@ doReceive(tcpsrv_io_descr_t *const pioDescr)
 	const unsigned maxReads = pThis->starvationMaxReads;
 #	if defined(ENABLE_IMTCP_EPOLL)
 #	define SET_REARM(x) (needReArm = (x))
-	tcpsrvWrkrData_t *const wrkrData = pioDescr->wrkrData;
 	int needReArm = 1;
 #	else
 #	define SET_REARM(x) /* not needed when ENABLE_IMTCP_EPOLL is not defined */
@@ -886,6 +885,7 @@ doReceive(tcpsrv_io_descr_t *const pioDescr)
 		freeMutex = 1;
 	}
 
+#	if defined(ENABLE_IMTCP_EPOLL)
 	/* if we had EPOLLERR, give information. The other processing continues. This
 	 * seems to be best practice and may cause better error information.
 	 */
@@ -898,6 +898,7 @@ doReceive(tcpsrv_io_descr_t *const pioDescr)
 				"for stream %p, peer %s  ", (pSess)->pStrm, pszPeer);
 		} /* no else - if this fails, we have nothing to report... */
 	}
+#	endif
 
 	while(do_run) {	/*  outer loop as "backup" if starvation protection does not properly work */
 		while(do_run && (maxReads == 0 || read_calls < maxReads)) { /*  break in switch below! */
@@ -1038,7 +1039,7 @@ no_more_data:
 
 /* This function processes all pending accepts on this fd */
 static rsRetVal ATTR_NONNULL(1)
-doAccept(tcpsrv_io_descr_t *const pioDescr)
+doAccept(tcpsrv_io_descr_t *const pioDescr, tcpsrvWrkrData_t *const wrkrData ATTR_UNUSED)
 {
 	DEFiRet;
 	int bRun = 1;
@@ -1054,7 +1055,7 @@ doAccept(tcpsrv_io_descr_t *const pioDescr)
 	dbgprintf("doAccept did %d accept()'s\n", nAccept);
 #	if defined(ENABLE_IMTCP_EPOLL)
 	if(pioDescr->pSrv->workQueue.numWrkr > 1) {
-		STATSCOUNTER_ADD(pioDescr->wrkrData->ctrAccept, pioDescr->wrkrData->mutCtrRead, nAccept);
+		STATSCOUNTER_ADD(wrkrData->ctrAccept, wrkrData->mutCtrRead, nAccept);
 	}
 	notifyReArm(pioDescr); /* listeners must ALWAYS be re-armed */
 #	endif
@@ -1063,18 +1064,17 @@ doAccept(tcpsrv_io_descr_t *const pioDescr)
 }
 
 
-/* process a single workset item
- */
+/* process a single workset item */
 static rsRetVal ATTR_NONNULL(1)
-processWorksetItem(tcpsrv_io_descr_t *const pioDescr)
+processWorksetItem(tcpsrv_io_descr_t *const pioDescr, tcpsrvWrkrData_t *const wrkrData ATTR_UNUSED)
 {
 	DEFiRet;
 
 	DBGPRINTF("tcpsrv: processing item %d, socket %d\n", pioDescr->id, pioDescr->sock);
 	if(pioDescr->ptrType == NSD_PTR_TYPE_LSTN) {
-		iRet = doAccept(pioDescr);
+		iRet = doAccept(pioDescr, wrkrData);
 	} else {
-		iRet = doReceive(pioDescr);
+		iRet = doReceive(pioDescr, wrkrData);
 	}
 
 DBGPRINTF("RGER: processWorksetItem returns %d\n", iRet);
@@ -1248,17 +1248,10 @@ wrkr(void *arg)
 			break;
 		}
 
-#		if defined(ENABLE_IMTCP_EPOLL)
-		if(queue->numWrkr > 1) {
-			STATSCOUNTER_INC(wrkrData->ctrRuns, wrkrData->mutCtrRuns);
-			pioDescr->wrkrData = wrkrData;
-		}
-#		endif
-
 		/* note: we ignore the result as we cannot do anything against errors in any
 		 * case. Also, errors are reported inside processWorksetItem().
 		 */
-		processWorksetItem(pioDescr);
+		processWorksetItem(pioDescr, wrkrData);
 	}
 
 	/**** de-init ****/
@@ -1287,7 +1280,7 @@ processWorkset(const int numEntries, tcpsrv_io_descr_t *const pioDescr[])
 	for(i = 0 ; i < numEntries ; ++i) {
 		if(numWrkr == 1) {
 			/* we process all on this thread, no need for context switch */
-			processWorksetItem(pioDescr[i]);
+			processWorksetItem(pioDescr[i], NULL);
 		} else {
 			iRet = enqueueWork(pioDescr[i]);
 		}
