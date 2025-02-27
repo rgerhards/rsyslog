@@ -880,6 +880,7 @@ doReceive(tcpsrv_io_descr_t *const pioDescr, tcpsrvWrkrData_t *const wrkrData AT
 	prop.GetString((pSess)->fromHostIP, &pszPeer, &lenPeer);
 	DBGPRINTF("netstream %p with new data from remote peer %s\n", (pSess)->pStrm, pszPeer);
 
+fprintf(stderr, "doRecv, numWrkr %d\n",pThis->workQueue.numWrkr); fflush(stderr);
 	if(pThis->workQueue.numWrkr > 1) {
 		pthread_mutex_lock(&pSess->mut);
 		freeMutex = 1;

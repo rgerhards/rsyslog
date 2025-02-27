@@ -622,8 +622,10 @@ TESTS +=  \
 	imtcp-octet-framing-too-long-vg.sh
 endif # HAVE_VALGRIND
 if ENABLE_IMTCP_EPOLL
+if ENABLE_IMPSTATS
 TESTS +=  \
 	imtcp-impstats.sh
+endif # ENABLE_IMPSTATS
 endif # ENABLE_IMTCP_EPOLL
 endif # ENABLE_IMTCP_TESTS
 
