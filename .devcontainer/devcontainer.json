@@ -1,0 +1,37 @@
+{
+  "name": "rsyslog-dev",
+  "image": "rsyslog/rsyslog_dev_base_ubuntu:24.04",
+  "workspaceFolder": "/rsyslog",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/rsyslog,type=bind,consistency=cached"
+  ],
+  "runArgs": [
+    "--cap-add=SYS_ADMIN",
+    "--cap-add=SYS_PTRACE",
+    "--user",
+    "${localEnv:UID}:${localEnv:GID}"
+  ],
+  "containerEnv": {
+    "RSYSLOG_CONFIGURE_OPTIONS_EXTRA": "",
+    "RSYSLOG_CONFIGURE_OPTIONS_OVERRIDE": "",
+    "CC": "",
+    "CFLAGS": "",
+    "LDFLAGS": "",
+    "LSAN_OPTIONS": "",
+    "TSAN_OPTIONS": "",
+    "UBSAN_OPTIONS": "",
+    "CI_MAKE_OPT": "",
+    "CI_MAKE_CHECK_OPT": "",
+    "CI_CHECK_CMD": "",
+    "CI_BUILD_URL": "",
+    "CI_CODECOV_TOKEN": "",
+    "CI_VALGRIND_SUPPRESSIONS": "",
+    "CI_SANITIZE_BLACKLIST": "",
+    "ABORT_ALL_ON_TEST_FAIL": "",
+    "USE_AUTO_DEBUG": "",
+    "RSYSLOG_STATSURL": "",
+    "VCS_SLUG": ""
+  },
+  "remoteUser": "root",
+  "postCreateCommand": "echo 'Container ready. You may run make check or other test commands.'"
+}
