@@ -237,6 +237,10 @@ This ensures Codex can build core components even in constrained environments. S
 ### `omgssapi`
 - Depends on: `gssapi` library
 
+### `fmpcre`
+- Buildable: Yes when `libpcre3-dev` (or equivalent) is installed
+- Testable: Yes, simple regression test `ffmpcre-basic.sh` exercises `pcre_match()`
+
 ---
 
 ## Documentation
