@@ -90,7 +90,7 @@ typedef struct _targetStats {
 } targetStats_t;
 
 typedef struct _instanceData {
-	uchar 	*tplName;	/* name of assigned template */
+	uchar	*tplName;	/* name of assigned template */
 	uchar *pszStrmDrvr;
 	uchar *pszStrmDrvrAuthMode;
 	uchar *pszStrmDrvrPermitExpiredCerts;
@@ -268,7 +268,7 @@ static struct cnfparamblk actpblk =
 
 struct modConfData_s {
 	rsconf_t *pConf;	/* our overall config object */
-	uchar 	*tplName;	/* default template */
+	uchar	*tplName;	/* default template */
 	int maxLenSndBuf;	/* default max usable length of sendbuf - primarily for testing */
 };
 
@@ -1140,21 +1140,23 @@ countActiveTargets(const wrkrInstanceData_t *const pWrkrData) {
 		}
 	}
 
-	/* Use atomic CAS to update the value safely */
-	int oldVal, newVal;
-	do {
-		oldVal = ATOMIC_FETCH_32BIT(&pWrkrData->pData->nActiveTargets,
-			&pWrkrData->pData->mut_nActiveTargets);
-		if (oldVal == activeTargets) {
-			break;  // No change needed
-		}
-		newVal = activeTargets;
-	} while (!ATOMIC_CAS(&pWrkrData->pData->nActiveTargets, oldVal, newVal,
-			&pWrkrData->pData->mut_nActiveTargets));
+       /* Use atomic CAS to update the value safely */
+       int oldVal, newVal;
+       do {
+               oldVal = ATOMIC_FETCH_32BIT(&pWrkrData->pData->nActiveTargets,
+                       &pWrkrData->pData->mut_nActiveTargets);
+               if (oldVal == activeTargets) {
+                       break;  /* no change, so no log message either */
+               }
+               newVal = activeTargets;
+       } while (!ATOMIC_CAS(&pWrkrData->pData->nActiveTargets, oldVal, newVal,
+                       &pWrkrData->pData->mut_nActiveTargets));
 
-	LogMsg(0, RS_RET_DEBUG, LOG_DEBUG,
-		"omfwd: [wrkr %u] number of active targets changed from %d to %d",
-		pWrkrData->wrkrID, oldVal, activeTargets);
+       if(oldVal != activeTargets) {
+               LogMsg(0, RS_RET_DEBUG, LOG_DEBUG,
+                       "omfwd: [wrkr %u] number of active targets changed from %d to %d",
+                       pWrkrData->wrkrID, oldVal, activeTargets);
+       }
 }
 
 
