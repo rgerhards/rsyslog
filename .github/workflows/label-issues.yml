@@ -151,9 +151,14 @@ jobs:
       uses: actions/github-script@v6
       with:
         script: |
-          // Access variables directly from process.env, as they are passed in the 'env' block
+          // Access variables directly from process.env
           const label = process.env.SUGGESTED_LABEL;
           const issue_number = process.env.ISSUE_NUMBER; 
+
+          // --- ADD THESE DEBUGGING LINES ---
+          console.log(`DEBUG: Value of label (from process.env.SUGGESTED_LABEL): "${label}"`);
+          console.log(`DEBUG: Value of issue_number (from process.env.ISSUE_NUMBER): "${issue_number}"`);
+          // --- END DEBUGGING LINES ---
 
           console.log(`Attempting to add label "${label}" to issue #${issue_number}`);
           try {
