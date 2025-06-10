@@ -63,12 +63,10 @@ jobs:
         fi
 
         # Set output variables for use in subsequent steps using GITHUB_OUTPUT file
-        # Use simple key=value for single-line outputs
         echo "ISSUE_NUMBER=${ISSUE_NUMBER}" >> "$GITHUB_OUTPUT"
         echo "ISSUE_TITLE=${ISSUE_TITLE}" >> "$GITHUB_OUTPUT"
         
         # --- FIX for multiline ISSUE_BODY using EOF delimiter ---
-        # The delimiter must be unique and not appear in the actual content
         echo "ISSUE_BODY<<EOF_BODY_TEXT" >> "$GITHUB_OUTPUT"
         echo "${ISSUE_BODY}" >> "$GITHUB_OUTPUT"
         echo "EOF_BODY_TEXT" >> "$GITHUB_OUTPUT"
@@ -136,7 +134,7 @@ jobs:
             
             # If Gemini suggested something not in our exact list (despite prompt instructions)
             if cleaned_label == "no label":
-                print(f"Warning: Gemini suggested '{suggested_label_raw}', but it was not an exact match in the available labels list. Defaulting to 'no label'.")
+                print(f"Warning: Gemini suggested '{suggested_label_raw}', which was not an exact match in the available labels list. Defaulting to 'no label'.")
 
 
             print(f"Suggested Label: {cleaned_label}")
@@ -153,8 +151,9 @@ jobs:
       uses: actions/github-script@v6
       with:
         script: |
-          const label = core.getInput('suggested_label'); // Access 'suggested_label' from 'with' inputs
-          const issue_number = core.getInput('issue_number'); // Access 'issue_number' from 'with' inputs
+          // Access variables directly from process.env, as they are passed in the 'env' block
+          const label = process.env.SUGGESTED_LABEL;
+          const issue_number = process.env.ISSUE_NUMBER; 
 
           console.log(`Attempting to add label "${label}" to issue #${issue_number}`);
           try {
@@ -168,6 +167,7 @@ jobs:
           } catch (error) {
             console.error(`Failed to add label "${label}" to issue #${issue_number}: ${error.message}`);
           }
-        # Pass inputs to the github-script action
-        suggested_label: ${{ steps.gemini_call.outputs.SUGGESTED_LABEL }}
-        issue_number: ${{ steps.get_issue_context.outputs.ISSUE_NUMBER }} # Pass the determined issue number
+      # Pass variables as environment variables for the script to access
+      env:
+        SUGGESTED_LABEL: ${{ steps.gemini_call.outputs.SUGGESTED_LABEL }}
+        ISSUE_NUMBER: ${{ steps.get_issue_context.outputs.ISSUE_NUMBER }} # Pass the determined issue number
