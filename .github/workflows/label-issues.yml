@@ -82,6 +82,7 @@ jobs:
         ISSUE_TITLE: ${{ steps.get_issue_context.outputs.ISSUE_TITLE }}
         ISSUE_BODY: ${{ steps.get_issue_context.outputs.ISSUE_BODY }}
         AVAILABLE_LABELS: ${{ steps.get_issue_context.outputs.AVAILABLE_LABELS }}
+        GITHUB_OUTPUT: ${{ github.output }} # Ensure GITHUB_OUTPUT path is available to Python
       run: |
         python <<EOF
         import google.generativeai as genai
@@ -91,7 +92,9 @@ jobs:
         api_key = os.environ.get('GEMINI_API_KEY')
         if not api_key:
             print("Error: GEMINI_API_KEY not found in environment variables. Exiting.")
-            print("##vso[task.setvariable variable=SUGGESTED_LABEL;]no label") # Fallback
+            # Ensure fallback also writes to GITHUB_OUTPUT
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write("SUGGESTED_LABEL=no label\n")
             exit(1) # Exit with an error code
 
         genai.configure(api_key=api_key)
@@ -138,11 +141,16 @@ jobs:
 
 
             print(f"Suggested Label: {cleaned_label}")
-            print(f"##vso[task.setvariable variable=SUGGESTED_LABEL;]{cleaned_label}")
+            # --- CRITICAL FIX: Write to GITHUB_OUTPUT file instead of using ##vso[task.setvariable] ---
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write(f"SUGGESTED_LABEL={cleaned_label}\n")
+            # -----------------------------------------------------------------------------------------
 
         except Exception as e:
             print(f"Error calling Gemini API: {e}")
-            print("##vso[task.setvariable variable=SUGGESTED_LABEL;]no label") # Fallback on API error
+            # Ensure fallback also writes to GITHUB_OUTPUT
+            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                f.write("SUGGESTED_LABEL=no label\n")
         EOF
 
     - name: Add label to issue
@@ -151,14 +159,13 @@ jobs:
       uses: actions/github-script@v6
       with:
         script: |
-          // Access variables directly from process.env
+          // Access variables directly from process.env, as they are passed in the 'env' block
           const label = process.env.SUGGESTED_LABEL;
           const issue_number = process.env.ISSUE_NUMBER; 
 
-          // --- ADD THESE DEBUGGING LINES ---
+          // These debug lines should now show the correct 'feature' label
           console.log(`DEBUG: Value of label (from process.env.SUGGESTED_LABEL): "${label}"`);
           console.log(`DEBUG: Value of issue_number (from process.env.ISSUE_NUMBER): "${issue_number}"`);
-          // --- END DEBUGGING LINES ---
 
           console.log(`Attempting to add label "${label}" to issue #${issue_number}`);
           try {
