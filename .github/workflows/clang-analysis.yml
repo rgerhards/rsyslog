@@ -1,0 +1,56 @@
+# Copyright 2025 Rainer Gerhards and Others
+#
+# https://github.com/rsyslog/rsyslog-pkg-ubuntu
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: clang static analysis
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'ChangeLog'
+      - '**/*.md'
+      - '**/*.txt'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: git checkout project
+        uses: actions/checkout@v1
+
+      - name: run clang analyzer
+        id: analyzer
+        continue-on-error: true
+        run: |
+          chmod -R go+rw .
+          export RSYSLOG_CONTAINER_UID=""
+          export SCAN_BUILD_CC="clang-18"
+          export SCAN_BUILD="scan-build-18"
+          export SCAN_BUILD_REPORT_DIR="$PWD/scan-build-report"
+          devtools/devcontainer.sh --rm devtools/run-static-analyzer.sh
+
+      - name: upload analyzer report
+        if: steps.analyzer.outcome != 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-analyzer-report-${{ github.run_id }}
+          path: scan-build-report
+          retention-days: 7
+
+      - name: fail job when issues found
+        if: steps.analyzer.outcome != 'success'
+        run: exit 1
