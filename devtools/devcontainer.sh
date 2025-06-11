@@ -61,12 +61,15 @@ docker run $ti $optrm $DOCKER_RUN_EXTRA_OPTS \
 	-e CI_VALGRIND_SUPPRESSIONS \
 	-e CI_SANITIZE_BLACKLIST \
 	-e ABORT_ALL_ON_TEST_FAIL \
-	-e USE_AUTO_DEBUG \
-	-e RSYSLOG_STATSURL \
-	-e VCS_SLUG \
-	-e SCAN_BUILD_CC \
-	-e SCAN_BUILD \
-	-e SCAN_BUILD_REPORT_DIR \
+       -e USE_AUTO_DEBUG \
+       -e RSYSLOG_STATSURL \
+       -e VCS_SLUG \
+       -e SCAN_BUILD_CC \
+       -e SCAN_BUILD \
+       -e SCAN_BUILD_REPORT_DIR \
+       --cap-add SYS_ADMIN \
+       --cap-add SYS_PTRACE \
+       ${RSYSLOG_CONTAINER_UID--u $(id -u):$(id -g)} \
 	--cap-add SYS_ADMIN \
 	--cap-add SYS_PTRACE \
 	${RSYSLOG_CONTAINER_UID--u $(id -u):$(id -g)} \

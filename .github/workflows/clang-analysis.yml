@@ -37,6 +37,7 @@ jobs:
         continue-on-error: true
         run: |
           chmod -R go+rw .
+          export HOME=$PWD
           export RSYSLOG_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
           export CI_VALGRIND_SUPPRESSIONS='ubuntu22.04.supp'
           export RSYSLOG_CONTAINER_UID=""
