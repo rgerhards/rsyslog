@@ -1,14 +1,13 @@
 #!/bin/bash
 cd /rsyslog
-set -e
+set -ex
 echo "SCAN_BUILD_CC: $SCAN_BUILD_CC"
 echo "SCAN_BUILD: $SCAN_BUILD"
 
 # ensure scan-build can create its temporary files
-if [ ! -d "$HOME" ] || [ ! -w "$HOME" ]; then
-    export HOME=/tmp/scanbuild_home
-    mkdir -p "$HOME"
-fi
+export HOME=/tmp/scanbuild_home
+mkdir -p "$HOME"
+echo "HOME set to $HOME"
 
 if [ -n "$SCAN_BUILD_REPORT_DIR" ]
 then
