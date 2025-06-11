@@ -4,6 +4,12 @@ set -e
 echo "SCAN_BUILD_CC: $SCAN_BUILD_CC"
 echo "SCAN_BUILD: $SCAN_BUILD"
 
+# ensure scan-build can create its temporary files
+if [ ! -d "$HOME" ] || [ ! -w "$HOME" ]; then
+    export HOME=/tmp/scanbuild_home
+    mkdir -p "$HOME"
+fi
+
 if [ -n "$SCAN_BUILD_REPORT_DIR" ]
 then
   export CURR_REPORT=$(date +%y-%m-%d_%H-%M-%S)
