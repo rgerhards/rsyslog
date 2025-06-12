@@ -67,6 +67,8 @@ docker run $ti $optrm $DOCKER_RUN_EXTRA_OPTS \
        -e SCAN_BUILD_CC \
        -e SCAN_BUILD \
        -e SCAN_BUILD_REPORT_DIR \
+       -e SCAN_BUILD_REPORT_BASEURL \
+       -e GITHUB_OUTPUT \
        --cap-add SYS_ADMIN \
        --cap-add SYS_PTRACE \
        ${RSYSLOG_CONTAINER_UID--u $(id -u):$(id -g)} \

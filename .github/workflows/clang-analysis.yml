@@ -32,6 +32,10 @@ jobs:
       - name: git checkout project
         uses: actions/checkout@v1
 
+      - name: set pages base url
+        run: |
+          echo "PAGES_BASE_URL=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/clang-analysis/pr-${{ github.event.pull_request.number }}/" >> "$GITHUB_ENV"
+
       - name: run clang analyzer
         id: analyzer
         continue-on-error: true
@@ -43,15 +47,31 @@ jobs:
           export SCAN_BUILD_CC="clang"
           export SCAN_BUILD="scan-build"
           export SCAN_BUILD_REPORT_DIR="/rsyslog/scan-build-report"
+          export SCAN_BUILD_REPORT_BASEURL="$PAGES_BASE_URL"
           devtools/devcontainer.sh --rm devtools/run-static-analyzer.sh
+
+      - name: determine report directory
+        if: steps.analyzer.outcome != 'success'
+        run: |
+          cat report_dir >> "$GITHUB_ENV"
 
       - name: upload analyzer report
         if: steps.analyzer.outcome != 'success'
         uses: actions/upload-artifact@v4
         with:
           name: clang-analyzer-report-${{ github.run_id }}
-          path: scan-build-report
+          path: ${{ env.REPORT_DIR }}
           retention-days: 7
+
+      - name: publish report to pages
+        if: steps.analyzer.outcome != 'success'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ${{ env.REPORT_DIR }}
+          destination_dir: clang-analysis/pr-${{ github.event.pull_request.number }}/${{ github.run_id }}
+          keep_files: true
 
       - name: fail job when issues found
         if: steps.analyzer.outcome != 'success'
