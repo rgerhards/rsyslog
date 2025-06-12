@@ -3,6 +3,7 @@ cd /rsyslog
 set -ex
 echo "SCAN_BUILD_CC: $SCAN_BUILD_CC"
 echo "SCAN_BUILD: $SCAN_BUILD"
+echo "SCAN_BUILD_REPORT_DIR: $SCAN_BUILD_REPORT_DIR"
 
 # ensure scan-build can create its temporary files
 export HOME=/tmp/scanbuild_home
@@ -14,6 +15,7 @@ then
   export CURR_REPORT=$(date +%y-%m-%d_%H-%M-%S)
   export REPORT_DIR="$SCAN_BUILD_REPORT_DIR/$CURR_REPORT"
   export REPORT_OPT="-o $REPORT_DIR"
+  echo "REPORT_DIR: $REPORT_DIR"
 fi
 
 autoreconf -fvi

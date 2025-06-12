@@ -42,7 +42,7 @@ jobs:
           export RSYSLOG_CONTAINER_UID=""
           export SCAN_BUILD_CC="clang"
           export SCAN_BUILD="scan-build"
-          export SCAN_BUILD_REPORT_DIR="$PWD/scan-build-report"
+          export SCAN_BUILD_REPORT_DIR="/rsyslog/scan-build-report"
           devtools/devcontainer.sh --rm devtools/run-static-analyzer.sh
 
       - name: upload analyzer report
