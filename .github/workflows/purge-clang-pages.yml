@@ -1,0 +1,31 @@
+name: purge old clang analysis reports
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: remove old directories
+        run: |
+          set -e
+          cutoff=$(date +%s -d '-7 days')
+          for dir in clang-analysis/pr-*/*; do
+            [ -d "$dir" ] || continue
+            ts=$(git log -1 --format=%ct -- "$dir" || echo 0)
+            if [ "$ts" -lt "$cutoff" ]; then
+              git rm -r "$dir"
+            fi
+          done
+          if ! git diff --quiet --staged; then
+            git config user.email 'github-actions@github.com'
+            git config user.name 'github-actions'
+            git commit -m 'purge old clang analysis reports'
+            git push
+          fi

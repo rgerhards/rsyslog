@@ -1,14 +1,23 @@
 #!/bin/bash
 cd /rsyslog
-set -e
+set -ex
 echo "SCAN_BUILD_CC: $SCAN_BUILD_CC"
 echo "SCAN_BUILD: $SCAN_BUILD"
+echo "SCAN_BUILD_REPORT_DIR: $SCAN_BUILD_REPORT_DIR"
+
+# ensure scan-build can create its temporary files
+export HOME=/tmp/scanbuild_home
+mkdir -p "$HOME"
+echo "HOME set to $HOME"
 
 if [ -n "$SCAN_BUILD_REPORT_DIR" ]
 then
   export CURR_REPORT=$(date +%y-%m-%d_%H-%M-%S)
   export REPORT_DIR="$SCAN_BUILD_REPORT_DIR/$CURR_REPORT"
   export REPORT_OPT="-o $REPORT_DIR"
+  echo "REPORT_DIR: $REPORT_DIR"
+  mkdir -p "$REPORT_DIR"
+  touch "$REPORT_DIR/.nojekyll"
 fi
 
 autoreconf -fvi
@@ -29,6 +38,11 @@ then
    then
       echo "scan-build report URL: ${SCAN_BUILD_REPORT_BASEURL}${CURR_REPORT}" > report_url
    fi
+fi
+# emit report directory so caller can use it
+if [ -n "$REPORT_DIR" ]
+then
+   echo "REPORT_DIR=scan-build-report/$CURR_REPORT" > report_dir
 fi
 #make clean
 echo static analyzer result: $RESULT
