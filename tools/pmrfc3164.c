@@ -89,11 +89,11 @@ struct instanceConf_s {
     int bForceTagEndingByColon;
     int bRemoveMsgFirstSpace;
     int hdrlessMode; /* 0=off,1=fast,2=strict */
-    uchar *pszHeaderlessHostname; /** < HOSTNAME to use for headerless messages */
-    uchar *pszHeaderlessTag; /** < TAG to use for headerless messages */
-    uchar *pszHeaderlessRulesetName; /** < name of Ruleset to use for headerless messages */
-    ruleset_t *pHeaderlessRuleset; /**< Ruleset to use for headerless messages */
-    uchar *pszHeaderlessErrFile; /**< name of error file for headerless messages */
+    uchar* pszHeaderlessHostname; /** < HOSTNAME to use for headerless messages */
+    uchar* pszHeaderlessTag; /** < TAG to use for headerless messages */
+    uchar* pszHeaderlessRulesetName; /** < name of Ruleset to use for headerless messages */
+    ruleset_t* pHeaderlessRuleset; /**< Ruleset to use for headerless messages */
+    uchar* pszHeaderlessErrFile; /**< name of error file for headerless messages */
     int fdHeaderlessErr; /**< file descriptor for error file (headerless) */
     pthread_mutex_t mutErrFile;
     int bDropHeaderless;
@@ -102,16 +102,18 @@ struct instanceConf_s {
 
 BEGINisCompatibleWithFeature
     CODESTARTisCompatibleWithFeature;
-    if (eFeat == sFEATUREAutomaticSanitazion) iRet = RS_RET_OK;
-    if (eFeat == sFEATUREAutomaticPRIParsing) iRet = RS_RET_OK;
+    if (eFeat == sFEATUREAutomaticSanitazion)
+        iRet = RS_RET_OK;
+    if (eFeat == sFEATUREAutomaticPRIParsing)
+        iRet = RS_RET_OK;
 ENDisCompatibleWithFeature
 
 
 /* create input instance, set default parameters, and
  * add it to the list of instances.
  */
-static rsRetVal createInstance(instanceConf_t **pinst) {
-    instanceConf_t *inst;
+static rsRetVal createInstance(instanceConf_t** pinst) {
+    instanceConf_t* inst;
     DEFiRet;
     CHKmalloc(inst = malloc(sizeof(instanceConf_t)));
     inst->bDetectYearAfterTimestamp = 0;
@@ -136,12 +138,12 @@ finalize_it:
 }
 
 /* Helper function to parse string parameters from configuration */
-static rsRetVal parseStringParam(const struct cnfparamvals *pvals, int idx, uchar **dest) {
-    char *cstr;
+static rsRetVal parseStringParam(const struct cnfparamvals* pvals, int idx, uchar** dest) {
+    char* cstr;
     DEFiRet;
 
     cstr = es_str2cstr(pvals[idx].val.d.estr, NULL);
-    CHKmalloc(*dest = (uchar *)strdup(cstr));
+    CHKmalloc(*dest = (uchar*)strdup(cstr));
     free(cstr);
 
 finalize_it:
@@ -149,7 +151,7 @@ finalize_it:
 }
 
 BEGINnewParserInst
-    struct cnfparamvals *pvals = NULL;
+    struct cnfparamvals* pvals = NULL;
     int i;
     CODESTARTnewParserInst;
     DBGPRINTF("newParserInst (pmrfc3164)\n");
@@ -157,7 +159,8 @@ BEGINnewParserInst
     inst = NULL;
     CHKiRet(createInstance(&inst));
 
-    if (lst == NULL) FINALIZE; /* just set defaults, no param block! */
+    if (lst == NULL)
+        FINALIZE; /* just set defaults, no param block! */
 
     if ((pvals = nvlstGetParams(lst, &parserpblk, NULL)) == NULL) {
         ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
@@ -169,7 +172,8 @@ BEGINnewParserInst
     }
 
     for (i = 0; i < parserpblk.nParams; ++i) {
-        if (!pvals[i].bUsed) continue;
+        if (!pvals[i].bUsed)
+            continue;
         if (!strcmp(parserpblk.descr[i].name, "detect.yearaftertimestamp")) {
             inst->bDetectYearAfterTimestamp = (int)pvals[i].val.d.n;
         } else if (!strcmp(parserpblk.descr[i].name, "permit.squarebracketsinhostname")) {
@@ -183,7 +187,7 @@ BEGINnewParserInst
         } else if (!strcmp(parserpblk.descr[i].name, "remove.msgfirstspace")) {
             inst->bRemoveMsgFirstSpace = (int)pvals[i].val.d.n;
         } else if (!strcmp(parserpblk.descr[i].name, "detect.headerless")) {
-            char *cstr = es_str2cstr(pvals[i].val.d.estr, NULL);
+            char* cstr = es_str2cstr(pvals[i].val.d.estr, NULL);
             if (!strcasecmp(cstr, "fast"))
                 inst->hdrlessMode = 1;
             else if (!strcasecmp(cstr, "strict"))
@@ -204,15 +208,15 @@ BEGINnewParserInst
         } else if (!strcmp(parserpblk.descr[i].name, "headerless.drop")) {
             inst->bDropHeaderless = (int)pvals[i].val.d.n;
         } else {
-            dbgprintf(
-                "pmrfc3164: program error, non-handled "
-                "param '%s'\n",
-                parserpblk.descr[i].name);
+            dbgprintf("pmrfc3164: program error, non-handled "
+                      "param '%s'\n",
+                      parserpblk.descr[i].name);
         }
     }
 finalize_it:
     CODE_STD_FINALIZERnewParserInst if (lst != NULL) cnfparamvalsDestruct(pvals, &parserpblk);
-    if (iRet != RS_RET_OK) free(inst);
+    if (iRet != RS_RET_OK)
+        free(inst);
 ENDnewParserInst
 
 
@@ -222,14 +226,15 @@ BEGINfreeParserInst
     free(pInst->pszHeaderlessTag);
     free(pInst->pszHeaderlessRulesetName);
     free(pInst->pszHeaderlessErrFile);
-    if (pInst->fdHeaderlessErr != -1) close(pInst->fdHeaderlessErr);
+    if (pInst->fdHeaderlessErr != -1)
+        close(pInst->fdHeaderlessErr);
     pthread_mutex_destroy(&pInst->mutErrFile);
     dbgprintf("pmrfc3164: free parser instance %p\n", pInst);
 ENDfreeParserInst
 
 BEGINdoHUPParser
     CODESTARTdoHUPParser;
-    instanceConf_t *pInst = (instanceConf_t *)pData;
+    instanceConf_t* pInst = (instanceConf_t*)pData;
 
     /* Close and reopen error file on HUP signal to support log rotation */
     if (pInst->pszHeaderlessErrFile != NULL) {
@@ -245,25 +250,27 @@ BEGINdoHUPParser
 ENDdoHUPParser
 
 /** Handle a headerless message by setting defaults and marking the object */
-static ATTR_NONNULL() rsRetVal handleHeaderlessMessage(smsg_t *pMsg, instanceConf_t *pInst, uchar *p2parse) {
+static ATTR_NONNULL() rsRetVal handleHeaderlessMessage(smsg_t* pMsg, instanceConf_t* pInst, uchar* p2parse) {
     DEFiRet;
-    uchar *hostname = pInst->pszHeaderlessHostname ? pInst->pszHeaderlessHostname : getRcvFrom(pMsg);
-    MsgSetHOSTNAME(pMsg, hostname, strlen((char *)hostname));
+    uchar* hostname = pInst->pszHeaderlessHostname ? pInst->pszHeaderlessHostname : getRcvFrom(pMsg);
+    MsgSetHOSTNAME(pMsg, hostname, strlen((char*)hostname));
 
-    uchar *tag = pInst->pszHeaderlessTag ? pInst->pszHeaderlessTag : (uchar *)"headerless";
-    MsgSetTAG(pMsg, tag, strlen((char *)tag));
+    uchar* tag = pInst->pszHeaderlessTag ? pInst->pszHeaderlessTag : (uchar*)"headerless";
+    MsgSetTAG(pMsg, tag, strlen((char*)tag));
 
     MsgSetMSGoffs(pMsg, p2parse - pMsg->pszRawMsg);
     if (pInst->pHeaderlessRuleset == NULL && pInst->pszHeaderlessRulesetName != NULL) {
         rsRetVal r = ruleset.GetRuleset(runConf, &pInst->pHeaderlessRuleset, pInst->pszHeaderlessRulesetName);
-        if (r != RS_RET_OK) pInst->pHeaderlessRuleset = NULL;
+        if (r != RS_RET_OK)
+            pInst->pHeaderlessRuleset = NULL;
     }
-    if (pInst->pHeaderlessRuleset != NULL) MsgSetRuleset(pMsg, pInst->pHeaderlessRuleset);
+    if (pInst->pHeaderlessRuleset != NULL)
+        MsgSetRuleset(pMsg, pInst->pHeaderlessRuleset);
     if (pInst->pszHeaderlessErrFile != NULL) {
         pthread_mutex_lock(&pInst->mutErrFile);
         if (pInst->fdHeaderlessErr == -1) {
             pInst->fdHeaderlessErr =
-                open((char *)pInst->pszHeaderlessErrFile, O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE | O_CLOEXEC,
+                open((char*)pInst->pszHeaderlessErrFile, O_WRONLY | O_CREAT | O_APPEND | O_LARGEFILE | O_CLOEXEC,
                      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
             if (pInst->fdHeaderlessErr == -1) {
                 LogError(errno, RS_RET_ERR, "pmrfc3164: cannot open error file %s", pInst->pszHeaderlessErrFile);
@@ -273,7 +280,7 @@ static ATTR_NONNULL() rsRetVal handleHeaderlessMessage(smsg_t *pMsg, instanceCon
             struct iovec iov[2];
             iov[0].iov_base = pMsg->pszRawMsg;
             iov[0].iov_len = pMsg->iLenRawMsg;
-            iov[1].iov_base = (void *)"\n";
+            iov[1].iov_base = (void*)"\n";
             iov[1].iov_len = 1;
             ssize_t expected = pMsg->iLenRawMsg + 1;
             ssize_t written = writev(pInst->fdHeaderlessErr, iov, 2);
@@ -293,23 +300,29 @@ static ATTR_NONNULL() rsRetVal handleHeaderlessMessage(smsg_t *pMsg, instanceCon
     }
 
     DBGPRINTF("pmrfc3164: headerless message handled with hostname='%s', tag='%s'\n", hostname, tag);
-    if (pInst->bDropHeaderless) iRet = RS_RET_DISCARDMSG;
+    if (pInst->bDropHeaderless)
+        iRet = RS_RET_DISCARDMSG;
     RETiRet;
 }
 
-static int hasPossibleTimestamp(uchar *p, int len) {
-    if (len < 3) return 0;
-    if (isalpha((unsigned char)p[0]) && isalpha((unsigned char)p[1]) && isalpha((unsigned char)p[2])) return 1;
+static int hasPossibleTimestamp(uchar* p, int len) {
+    if (len < 3)
+        return 0;
+    if (isalpha((unsigned char)p[0]) && isalpha((unsigned char)p[1]) && isalpha((unsigned char)p[2]))
+        return 1;
     if (len >= 4 && isdigit((unsigned char)p[0]) && isdigit((unsigned char)p[1]) && isdigit((unsigned char)p[2]) &&
         isdigit((unsigned char)p[3]))
         return 1;
     return 0;
 }
 
-static int isObviouslyHeaderless(uchar *p, int len, int offAfterPRI, int mode) {
-    if (mode == 0) return 0;
-    if (offAfterPRI != 0) return 0;
-    if (mode == 2 && hasPossibleTimestamp(p, len)) return 0;
+static int isObviouslyHeaderless(uchar* p, int len, int offAfterPRI, int mode) {
+    if (mode == 0)
+        return 0;
+    if (offAfterPRI != 0)
+        return 0;
+    if (mode == 2 && hasPossibleTimestamp(p, len))
+        return 0;
     return 1;
 }
 
@@ -317,7 +330,7 @@ static int isObviouslyHeaderless(uchar *p, int len, int offAfterPRI, int mode) {
 /* parse a legay-formatted syslog message.
  */
 BEGINparse2
-    uchar *p2parse;
+    uchar* p2parse;
     int lenMsg;
     int i; /* general index for parsing */
     uchar bufParseTAG[CONF_TAG_MAXSIZE];
@@ -366,7 +379,8 @@ BEGINparse2
         /* we are done - parse pointer is moved by ParseTIMESTAMP3339 */;
     } else if (datetime.ParseTIMESTAMP3164(&(pMsg->tTIMESTAMP), &p2parse, &lenMsg, NO_PARSE3164_TZSTRING,
                                            pInst->bDetectYearAfterTimestamp) == RS_RET_OK) {
-        if (pMsg->dfltTZ[0] != '\0') applyDfltTZ(&pMsg->tTIMESTAMP, pMsg->dfltTZ);
+        if (pMsg->dfltTZ[0] != '\0')
+            applyDfltTZ(&pMsg->tTIMESTAMP, pMsg->dfltTZ);
         /* we are done - parse pointer is moved by ParseTIMESTAMP3164 */;
     } else if (*p2parse == ' ' && lenMsg > 1) {
         /* try to see if it is slightly malformed - HP procurve seems to do that sometimes */
@@ -432,7 +446,8 @@ BEGINparse2
                    i < (CONF_HOSTNAME_MAXSIZE - 1)) {
                 bufParseHOSTNAME[i] = p2parse[i];
                 ++i;
-                if (p2parse[i] == ']') break; /* must be closing bracket */
+                if (p2parse[i] == ']')
+                    break; /* must be closing bracket */
             }
 
             if (i == lenMsg) {
@@ -457,7 +472,8 @@ BEGINparse2
                             isHostName = 1;
                         }
                     }
-                    if (p2parse[i] != ' ') isHostName = 0;
+                    if (p2parse[i] != ' ')
+                        isHostName = 0;
                 }
 
                 if (isHostName) {
