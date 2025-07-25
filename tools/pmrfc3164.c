@@ -46,7 +46,6 @@
 #include "parser.h"
 #include "datetime.h"
 #include "unicode-helper.h"
-#include "ruleset.h"
 #include "rsconf.h"
 MODULE_TYPE_PARSER
 MODULE_TYPE_NOKEEP;
@@ -56,7 +55,7 @@ MODULE_CNFNAME("pmrfc3164")
 /* internal structures
  */
 DEF_PMOD_STATIC_DATA;
-DEFobjCurrIf(glbl) DEFobjCurrIf(parser) DEFobjCurrIf(datetime) DEFobjCurrIf(ruleset)
+DEFobjCurrIf(glbl) DEFobjCurrIf(parser) DEFobjCurrIf(datetime)
 
 
     /* static data */
@@ -74,7 +73,6 @@ static struct cnfparamdescr parserpdescr[] = {
     {"detect.headerless", eCmdHdlrGetWord, 0},
     {"headerless.hostname", eCmdHdlrString, 0},
     {"headerless.tag", eCmdHdlrString, 0},
-    {"headerless.ruleset", eCmdHdlrString, 0},
     {"headerless.errorfile", eCmdHdlrString, 0},
     {"headerless.drop", eCmdHdlrBinary, 0},
 };
@@ -91,8 +89,6 @@ struct instanceConf_s {
     int hdrlessMode; /* 0=off,1=fast,2=strict */
     uchar* pszHeaderlessHostname; /** < HOSTNAME to use for headerless messages */
     uchar* pszHeaderlessTag; /** < TAG to use for headerless messages */
-    uchar* pszHeaderlessRulesetName; /** < name of Ruleset to use for headerless messages */
-    ruleset_t* pHeaderlessRuleset; /**< Ruleset to use for headerless messages */
     uchar* pszHeaderlessErrFile; /**< name of error file for headerless messages */
     int fdHeaderlessErr; /**< file descriptor for error file (headerless) */
     pthread_mutex_t mutErrFile;
@@ -102,10 +98,8 @@ struct instanceConf_s {
 
 BEGINisCompatibleWithFeature
     CODESTARTisCompatibleWithFeature;
-    if (eFeat == sFEATUREAutomaticSanitazion)
-        iRet = RS_RET_OK;
-    if (eFeat == sFEATUREAutomaticPRIParsing)
-        iRet = RS_RET_OK;
+    if (eFeat == sFEATUREAutomaticSanitazion) iRet = RS_RET_OK;
+    if (eFeat == sFEATUREAutomaticPRIParsing) iRet = RS_RET_OK;
 ENDisCompatibleWithFeature
 
 
@@ -125,8 +119,6 @@ static rsRetVal createInstance(instanceConf_t** pinst) {
     inst->hdrlessMode = 0;
     inst->pszHeaderlessHostname = NULL;
     inst->pszHeaderlessTag = NULL;
-    inst->pszHeaderlessRulesetName = NULL;
-    inst->pHeaderlessRuleset = NULL;
     inst->pszHeaderlessErrFile = NULL;
     inst->fdHeaderlessErr = -1;
     pthread_mutex_init(&inst->mutErrFile, NULL);
@@ -159,8 +151,7 @@ BEGINnewParserInst
     inst = NULL;
     CHKiRet(createInstance(&inst));
 
-    if (lst == NULL)
-        FINALIZE; /* just set defaults, no param block! */
+    if (lst == NULL) FINALIZE; /* just set defaults, no param block! */
 
     if ((pvals = nvlstGetParams(lst, &parserpblk, NULL)) == NULL) {
         ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
@@ -172,8 +163,7 @@ BEGINnewParserInst
     }
 
     for (i = 0; i < parserpblk.nParams; ++i) {
-        if (!pvals[i].bUsed)
-            continue;
+        if (!pvals[i].bUsed) continue;
         if (!strcmp(parserpblk.descr[i].name, "detect.yearaftertimestamp")) {
             inst->bDetectYearAfterTimestamp = (int)pvals[i].val.d.n;
         } else if (!strcmp(parserpblk.descr[i].name, "permit.squarebracketsinhostname")) {
@@ -201,22 +191,20 @@ BEGINnewParserInst
             CHKiRet(parseStringParam(pvals, i, &inst->pszHeaderlessHostname));
         } else if (!strcmp(parserpblk.descr[i].name, "headerless.tag")) {
             CHKiRet(parseStringParam(pvals, i, &inst->pszHeaderlessTag));
-        } else if (!strcmp(parserpblk.descr[i].name, "headerless.ruleset")) {
-            CHKiRet(parseStringParam(pvals, i, &inst->pszHeaderlessRulesetName));
         } else if (!strcmp(parserpblk.descr[i].name, "headerless.errorfile")) {
             CHKiRet(parseStringParam(pvals, i, &inst->pszHeaderlessErrFile));
         } else if (!strcmp(parserpblk.descr[i].name, "headerless.drop")) {
             inst->bDropHeaderless = (int)pvals[i].val.d.n;
         } else {
-            dbgprintf("pmrfc3164: program error, non-handled "
-                      "param '%s'\n",
-                      parserpblk.descr[i].name);
+            dbgprintf(
+                "pmrfc3164: program error, non-handled "
+                "param '%s'\n",
+                parserpblk.descr[i].name);
         }
     }
 finalize_it:
     CODE_STD_FINALIZERnewParserInst if (lst != NULL) cnfparamvalsDestruct(pvals, &parserpblk);
-    if (iRet != RS_RET_OK)
-        free(inst);
+    if (iRet != RS_RET_OK) free(inst);
 ENDnewParserInst
 
 
@@ -224,10 +212,8 @@ BEGINfreeParserInst
     CODESTARTfreeParserInst;
     free(pInst->pszHeaderlessHostname);
     free(pInst->pszHeaderlessTag);
-    free(pInst->pszHeaderlessRulesetName);
     free(pInst->pszHeaderlessErrFile);
-    if (pInst->fdHeaderlessErr != -1)
-        close(pInst->fdHeaderlessErr);
+    if (pInst->fdHeaderlessErr != -1) close(pInst->fdHeaderlessErr);
     pthread_mutex_destroy(&pInst->mutErrFile);
     dbgprintf("pmrfc3164: free parser instance %p\n", pInst);
 ENDfreeParserInst
@@ -259,13 +245,6 @@ static ATTR_NONNULL() rsRetVal handleHeaderlessMessage(smsg_t* pMsg, instanceCon
     MsgSetTAG(pMsg, tag, strlen((char*)tag));
 
     MsgSetMSGoffs(pMsg, p2parse - pMsg->pszRawMsg);
-    if (pInst->pHeaderlessRuleset == NULL && pInst->pszHeaderlessRulesetName != NULL) {
-        rsRetVal r = ruleset.GetRuleset(runConf, &pInst->pHeaderlessRuleset, pInst->pszHeaderlessRulesetName);
-        if (r != RS_RET_OK)
-            pInst->pHeaderlessRuleset = NULL;
-    }
-    if (pInst->pHeaderlessRuleset != NULL)
-        MsgSetRuleset(pMsg, pInst->pHeaderlessRuleset);
     if (pInst->pszHeaderlessErrFile != NULL) {
         pthread_mutex_lock(&pInst->mutErrFile);
         if (pInst->fdHeaderlessErr == -1) {
@@ -300,16 +279,13 @@ static ATTR_NONNULL() rsRetVal handleHeaderlessMessage(smsg_t* pMsg, instanceCon
     }
 
     DBGPRINTF("pmrfc3164: headerless message handled with hostname='%s', tag='%s'\n", hostname, tag);
-    if (pInst->bDropHeaderless)
-        iRet = RS_RET_DISCARDMSG;
+    if (pInst->bDropHeaderless) iRet = RS_RET_DISCARDMSG;
     RETiRet;
 }
 
 static int hasPossibleTimestamp(uchar* p, int len) {
-    if (len < 3)
-        return 0;
-    if (isalpha((unsigned char)p[0]) && isalpha((unsigned char)p[1]) && isalpha((unsigned char)p[2]))
-        return 1;
+    if (len < 3) return 0;
+    if (isalpha((unsigned char)p[0]) && isalpha((unsigned char)p[1]) && isalpha((unsigned char)p[2])) return 1;
     if (len >= 4 && isdigit((unsigned char)p[0]) && isdigit((unsigned char)p[1]) && isdigit((unsigned char)p[2]) &&
         isdigit((unsigned char)p[3]))
         return 1;
@@ -317,12 +293,9 @@ static int hasPossibleTimestamp(uchar* p, int len) {
 }
 
 static int isObviouslyHeaderless(uchar* p, int len, int offAfterPRI, int mode) {
-    if (mode == 0)
-        return 0;
-    if (offAfterPRI != 0)
-        return 0;
-    if (mode == 2 && hasPossibleTimestamp(p, len))
-        return 0;
+    if (mode == 0) return 0;
+    if (offAfterPRI != 0) return 0;
+    if (mode == 2 && hasPossibleTimestamp(p, len)) return 0;
     return 1;
 }
 
@@ -379,8 +352,7 @@ BEGINparse2
         /* we are done - parse pointer is moved by ParseTIMESTAMP3339 */;
     } else if (datetime.ParseTIMESTAMP3164(&(pMsg->tTIMESTAMP), &p2parse, &lenMsg, NO_PARSE3164_TZSTRING,
                                            pInst->bDetectYearAfterTimestamp) == RS_RET_OK) {
-        if (pMsg->dfltTZ[0] != '\0')
-            applyDfltTZ(&pMsg->tTIMESTAMP, pMsg->dfltTZ);
+        if (pMsg->dfltTZ[0] != '\0') applyDfltTZ(&pMsg->tTIMESTAMP, pMsg->dfltTZ);
         /* we are done - parse pointer is moved by ParseTIMESTAMP3164 */;
     } else if (*p2parse == ' ' && lenMsg > 1) {
         /* try to see if it is slightly malformed - HP procurve seems to do that sometimes */
@@ -446,8 +418,7 @@ BEGINparse2
                    i < (CONF_HOSTNAME_MAXSIZE - 1)) {
                 bufParseHOSTNAME[i] = p2parse[i];
                 ++i;
-                if (p2parse[i] == ']')
-                    break; /* must be closing bracket */
+                if (p2parse[i] == ']') break; /* must be closing bracket */
             }
 
             if (i == lenMsg) {
@@ -472,8 +443,7 @@ BEGINparse2
                             isHostName = 1;
                         }
                     }
-                    if (p2parse[i] != ' ')
-                        isHostName = 0;
+                    if (p2parse[i] != ' ') isHostName = 0;
                 }
 
                 if (isHostName) {
@@ -549,7 +519,6 @@ BEGINmodExit
     objRelease(glbl, CORE_COMPONENT);
     objRelease(parser, CORE_COMPONENT);
     objRelease(datetime, CORE_COMPONENT);
-    objRelease(ruleset, CORE_COMPONENT);
 ENDmodExit
 
 
@@ -568,7 +537,6 @@ BEGINmodInit(pmrfc3164)
     CODEmodInit_QueryRegCFSLineHdlr CHKiRet(objUse(glbl, CORE_COMPONENT));
     CHKiRet(objUse(parser, CORE_COMPONENT));
     CHKiRet(objUse(datetime, CORE_COMPONENT));
-    CHKiRet(objUse(ruleset, CORE_COMPONENT));
 
     DBGPRINTF("rfc3164 parser init called\n");
     bParseHOSTNAMEandTAG = glbl.GetParseHOSTNAMEandTAG(loadConf);

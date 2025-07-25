@@ -176,19 +176,6 @@ headerless.tag
 Specifies the tag to assign to detected headerless messages.
 
 
-headerless.ruleset
-^^^^^^^^^^^^^^^^^^
-
-.. csv-table::
-   :header: "type", "default", "mandatory", "|FmtObsoleteName| directive"
-   :widths: auto
-   :class: parameter-table
-
-   "string", "none", "no", "none"
-
-If set, detected headerless messages are routed to the given ruleset for
-further processing (e.g. writing to a dedicated error log or discarding).
-
 headerless.errorfile
 ^^^^^^^^^^^^^^^^^^^^
 
