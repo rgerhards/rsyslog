@@ -92,9 +92,9 @@ struct instanceConf_s {
     uchar *pszHeaderlessHostname; /** < HOSTNAME to use for headerless messages */
     uchar *pszHeaderlessTag; /** < TAG to use for headerless messages */
     uchar *pszHeaderlessRulesetName; /** < name of Ruleset to use for headerless messages */
-    ruleset_t *pHeaderlessRuleset;/**< Ruleset to use for headerless messages */
-    uchar *pszHeaderlessErrFile;/**< name of error file for headerless messages */
-    int fdHeaderlessErr;/**< file descriptor for error file (headerless) */
+    ruleset_t *pHeaderlessRuleset; /**< Ruleset to use for headerless messages */
+    uchar *pszHeaderlessErrFile; /**< name of error file for headerless messages */
+    int fdHeaderlessErr; /**< file descriptor for error file (headerless) */
     pthread_mutex_t mutErrFile;
     int bDropHeaderless;
 };
@@ -139,11 +139,11 @@ finalize_it:
 static rsRetVal parseStringParam(const struct cnfparamvals *pvals, int idx, uchar **dest) {
     char *cstr;
     DEFiRet;
-    
+
     cstr = es_str2cstr(pvals[idx].val.d.estr, NULL);
     CHKmalloc(*dest = (uchar *)strdup(cstr));
     free(cstr);
-    
+
 finalize_it:
     RETiRet;
 }
@@ -227,10 +227,10 @@ BEGINfreeParserInst
     dbgprintf("pmrfc3164: free parser instance %p\n", pInst);
 ENDfreeParserInst
 
-BEGINdoHUP
-    CODESTARTdoHUP;
+BEGINdoHUPParser
+    CODESTARTdoHUPParser;
     instanceConf_t *pInst = (instanceConf_t *)pData;
-    
+
     /* Close and reopen error file on HUP signal to support log rotation */
     if (pInst->pszHeaderlessErrFile != NULL) {
         pthread_mutex_lock(&pInst->mutErrFile);
@@ -242,10 +242,10 @@ BEGINdoHUP
         /* File will be reopened on next write attempt in handleHeaderlessMessage() */
         pthread_mutex_unlock(&pInst->mutErrFile);
     }
-ENDdoHUP
+ENDdoHUPParser
 
 /** Handle a headerless message by setting defaults and marking the object */
-static ATTR_NONNULL() rsRetVal handleHeaderlessMessage(smsg_t *pMsg, instanceConf_t *pInst, uchar  *p2parse) {
+static ATTR_NONNULL() rsRetVal handleHeaderlessMessage(smsg_t *pMsg, instanceConf_t *pInst, uchar *p2parse) {
     DEFiRet;
     uchar *hostname = pInst->pszHeaderlessHostname ? pInst->pszHeaderlessHostname : getRcvFrom(pMsg);
     MsgSetHOSTNAME(pMsg, hostname, strlen((char *)hostname));
@@ -286,8 +286,7 @@ static ATTR_NONNULL() rsRetVal handleHeaderlessMessage(smsg_t *pMsg, instanceCon
                  * should revisit this decision.
                  */
                 LogError(errno, RS_RET_IO_ERROR, "pmrfc3164: error writing to error file %s",
-                            pInst->pszHeaderlessErrFile);
-                }
+                         pInst->pszHeaderlessErrFile);
             }
         }
         pthread_mutex_unlock(&pInst->mutErrFile);
