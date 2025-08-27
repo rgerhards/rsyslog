@@ -470,8 +470,14 @@ writeSenderInfo(instanceData *const pData)
 {
     DEFiRet;
     FILE *fp = NULL;
-    const char *tmpname = (const char *)pData->statefile_tmp;
+    const char *tmpname;
     int tmp_alloc = 0;
+
+    if (pData == NULL || pData->statefile == NULL) {
+        ABORT_FINALIZE(RS_RET_ERR);
+    }
+
+    tmpname = (const char *)pData->statefile_tmp;
 
     dbgprintf("writeSenderInfo, file %s\n", pData->statefile);
     if (tmpname == NULL) {
@@ -671,7 +677,9 @@ BEGINfreeInstance
     }
 
     /* do final write */
-    writeSenderInfo(pData);
+    if (pData->statefile != NULL) {
+        writeSenderInfo(pData);
+    }
 
     /* destroy data structs */
     free((void *)pData->senderidTemplate);
