@@ -1,0 +1,92 @@
+name: Generate Contributor Welcome Message
+
+# This workflow is triggered on pull request events.
+# We want to run it when a new PR is opened, a PR is reopened,
+# or a PR is updated with new commits.
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  check-info:
+    # This job will run on the latest version of Ubuntu.
+    runs-on: ubuntu-latest
+    
+    # We need to grant the workflow permission to write comments on pull requests.
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Get Contributor Info
+        # This step uses a shell script to fetch data from the GitHub API.
+        id: contributor_info
+        run: |
+          # The pr_creator variable gets the username of the person who opened the pull request.
+          pr_creator="${{ github.event.pull_request.user.login }}"
+          repo_owner="${{ github.repository_owner }}"
+          repo_name="${{ github.event.repository.name }}"
+          
+          # --- Fetch Account Age ---
+          # We use `curl` to call the GitHub REST API's user endpoint.
+          # The `jq` command is used to parse the JSON response and extract the 'created_at' field.
+          created_at=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/users/$pr_creator" | jq -r '.created_at')
+          
+          # We calculate the account age in days by getting the difference between the current date
+          # and the account creation date, converted to Unix timestamps.
+          created_date=$(date -d "$created_at" '+%s')
+          current_date=$(date '+%s')
+          account_age_days=$(( ($current_date - $created_date) / (60*60*24) ))
+          
+          # --- Fetch Total Public Commits (Approximate) ---
+          # The GitHub API does not provide a direct global commit count.
+          # We can get an approximation by searching for all commits by the user
+          # and using the 'total_count' from the search results. This can be rate-limited
+          # for large numbers of commits, but works for most cases.
+          total_public_commits=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/search/commits?q=author:$pr_creator" \
+            -H "Accept: application/vnd.github.v3.text-match+json" | jq '.total_count')
+
+          # --- Fetch Commits to THIS Specific Repository ---
+          # This is a more reliable and highly relevant metric. We call the commits endpoint
+          # for the current repository and filter by the author. We set `per_page=1` and
+          # count the results, as the API returns a response for any matching commit,
+          # and this is the most efficient way to get a total count without fetching all commits.
+          repo_commits=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$repo_owner/$repo_name/commits?author=$pr_creator" | jq 'length')
+
+          # We make the calculated values available to subsequent steps using a special `::set-output` syntax.
+          echo "::set-output name=pr_creator::$pr_creator"
+          echo "::set-output name=account_age_days::$account_age_days"
+          echo "::set-output name=total_public_commits::$total_public_commits"
+          echo "::set-output name=repo_commits::$repo_commits"
+          
+      - name: Add Comment to PR
+        # This step uses a dedicated GitHub Action for running inline scripts.
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // We retrieve the outputs from the previous step.
+            const pr_creator = '${{ steps.contributor_info.outputs.pr_creator }}';
+            const account_age_days = '${{ steps.contributor_info.outputs.account_age_days }}';
+            const total_public_commits = '${{ steps.contributor_info.outputs.total_public_commits }}';
+            const repo_commits = '${{ steps.contributor_info.outputs.repo_commits }}';
+
+            // We construct the comment's message using Markdown for clarity.
+            // The message includes all the gathered metrics.
+            const message = `👋 **Contributor Profile**
+            
+            - **User:** @${pr_creator}
+            - **Account Age:** ${account_age_days} days
+            - **Total Public Commits:** ${total_public_commits}
+            - **Commits to this Repository:** ${repo_commits}
+            
+            This is an informational check.`;
+            
+            // This is the API call to create the comment on the pull request.
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: message
+            });
