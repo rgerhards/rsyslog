@@ -32,7 +32,7 @@ configuration.
    modules/idx_stringgen
    modules/idx_library
    templates
-   properties
+   ../rainerscript/properties
    property_replacer
    filters
    ../rainerscript/index
