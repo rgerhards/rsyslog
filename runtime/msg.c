@@ -870,7 +870,8 @@ ENDobjDestruct
      * modified while its content is copied - it's forbidden by definition.
      * rgerhards, 2007-07-10
      */
-    smsg_t *MsgDup(smsg_t *pOld) {
+    smsg_t *
+    MsgDup(smsg_t *pOld) {
     smsg_t *pNew;
     rsRetVal localRet;
 
@@ -3573,11 +3574,15 @@ uchar *MsgGetProp(smsg_t *__restrict__ const pMsg,
             } else {
                 const char *jstr;
                 MsgLock(pMsg);
-                int jflag = 0;
-                if (pProp->id == PROP_CEE_ALL_JSON) {
+                int jflag;
+                if (glbl.GetCompactJSON(runConf)) {
+                    jflag = JSON_C_TO_STRING_PLAIN;
+                } else if (pProp->id == PROP_CEE_ALL_JSON) {
                     jflag = JSON_C_TO_STRING_SPACED;
                 } else if (pProp->id == PROP_CEE_ALL_JSON_PLAIN) {
                     jflag = JSON_C_TO_STRING_PLAIN;
+                } else {
+                    jflag = 0;
                 }
                 jstr = json_object_to_json_string_ext(pMsg->json, jflag);
                 MsgUnlock(pMsg);

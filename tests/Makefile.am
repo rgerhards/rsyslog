@@ -1483,8 +1483,9 @@ TESTS +=  \
 	stop_when_array_has_element.sh \
 	json_null_array.sh \
 	json_null.sh \
-	json_var_cmpr.sh \
-	json_var_case.sh
+        json_var_cmpr.sh \
+        json_var_case.sh \
+        compact-json-global.sh
 endif
 
 if ENABLE_MMDBLOOKUP

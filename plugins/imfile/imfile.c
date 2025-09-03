@@ -66,6 +66,7 @@
 #include "srUtils.h"
 #include "parserif.h"
 #include "datetime.h"
+#include "rsconf.h"
 
 #include <regex.h>
 
@@ -612,7 +613,7 @@ static void ATTR_NONNULL() fen_setupWatch(act_obj_t *const act) {
     act->pfinf->fobj.fo_atime = fileInfo.st_atim;
     act->pfinf->fobj.fo_mtime = fileInfo.st_mtim;
     act->pfinf->fobj.fo_ctime = fileInfo.st_ctim;
-    if (port_associate(glport, PORT_SOURCE_FILE, (uintptr_t) & (act->pfinf->fobj), act->pfinf->events, (void *)act) ==
+    if (port_associate(glport, PORT_SOURCE_FILE, (uintptr_t)&(act->pfinf->fobj), act->pfinf->events, (void *)act) ==
         -1) {
         LogError(errno, RS_RET_SYS_ERR,
                  "fen_setupWatch: Failed to associate port for file "
@@ -2712,7 +2713,8 @@ static rsRetVal ATTR_NONNULL() persistStrmState(act_obj_t *const act) {
         json_object_object_add(json, "prev_msg_segment", jval);
     }
 
-    const char *jstr = json_object_to_json_string_ext(json, JSON_C_TO_STRING_SPACED);
+    int jflag = glbl.GetCompactJSON(runConf) ? JSON_C_TO_STRING_PLAIN : JSON_C_TO_STRING_SPACED;
+    const char *jstr = json_object_to_json_string_ext(json, jflag);
 
     CHKiRet(atomicWriteStateFile((const char *)statefname, jstr));
     json_object_put(json);

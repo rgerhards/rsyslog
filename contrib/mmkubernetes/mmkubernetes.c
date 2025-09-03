@@ -59,12 +59,14 @@
 #include "srUtils.h"
 #include "unicode-helper.h"
 #include "datetime.h"
+#include "glbl.h"
+#include "rsconf.h"
 
 /* static data */
 MODULE_TYPE_OUTPUT /* this is technically an output plugin */
     MODULE_TYPE_KEEP /* releasing the module would cause a leak through libcurl */
         MODULE_CNFNAME("mmkubernetes") DEF_OMOD_STATIC_DATA;
-DEFobjCurrIf(regexp) DEFobjCurrIf(statsobj) DEFobjCurrIf(datetime)
+DEFobjCurrIf(regexp) DEFobjCurrIf(statsobj) DEFobjCurrIf(datetime) DEFobjCurrIf(glbl)
 #define HAVE_LOADSAMPLESFROMSTRING 1
 #if defined(NO_LOADSAMPLESFROMSTRING)
     #undef HAVE_LOADSAMPLESFROMSTRING
@@ -1672,7 +1674,8 @@ static rsRetVal queryKB(wrkrInstanceData_t *pWrkrData, char *url, time_t now, st
         ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
     }
 
-    dbgprintf("mmkubernetes: queryKB reply:\n%s\n", json_object_to_json_string_ext(jo, JSON_C_TO_STRING_PRETTY));
+    int jflag = glbl.GetCompactJSON(runConf) ? JSON_C_TO_STRING_PLAIN : JSON_C_TO_STRING_PRETTY;
+    dbgprintf("mmkubernetes: queryKB reply:\n%s\n", json_object_to_json_string_ext(jo, jflag));
 
     *rply = jo;
 
@@ -1907,6 +1910,7 @@ BEGINmodExit
     CODESTARTmodExit;
     curl_global_cleanup();
 
+    objRelease(glbl, CORE_COMPONENT);
     objRelease(datetime, CORE_COMPONENT);
     objRelease(regexp, LM_REGEXP_FILENAME);
     objRelease(statsobj, CORE_COMPONENT);
@@ -1930,6 +1934,7 @@ BEGINmodInit()
     CHKiRet(objUse(statsobj, CORE_COMPONENT));
     CHKiRet(objUse(regexp, LM_REGEXP_FILENAME));
     CHKiRet(objUse(datetime, CORE_COMPONENT));
+    CHKiRet(objUse(glbl, CORE_COMPONENT));
     /* CURL_GLOBAL_ALL initializes more than is needed but the
      * libcurl documentation discourages use of other values
      */

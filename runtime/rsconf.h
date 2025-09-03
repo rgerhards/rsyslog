@@ -158,6 +158,7 @@ struct globals_s {
     int shutdownQueueDoubleSize;
     int optionDisallowWarning; /* complain if message from disallowed sender is received */
     int bSupportCompressionExtension;
+    int bCompactJSON; /* generate JSON in most compact form */
 #ifdef ENABLE_LIBLOGGING_STDLOG
     stdlog_channel_t stdlog_hdl; /* handle to be used for stdlog */
     uchar *stdlog_chanspec;

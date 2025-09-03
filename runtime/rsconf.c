@@ -225,6 +225,7 @@ static void cnfSetDefaults(rsconf_t *pThis) {
     pThis->globals.shutdownQueueDoubleSize = 0;
     pThis->globals.optionDisallowWarning = 1;
     pThis->globals.bSupportCompressionExtension = 1;
+    pThis->globals.bCompactJSON = 0;
 #ifdef ENABLE_LIBLOGGING_STDLOG
     pThis->globals.stdlog_hdl = stdlog_open("rsyslogd", 0, STDLOG_SYSLOG, NULL);
     pThis->globals.stdlog_chanspec = NULL;

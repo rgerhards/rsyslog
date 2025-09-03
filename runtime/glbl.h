@@ -108,10 +108,11 @@ BEGINinterface(glbl) /* name must also be changed in ENDinterface macro! */
     SIMP_PROP(ParserEscapeControlCharactersCStyle, int);
     SIMP_PROP(ParseHOSTNAMEandTAG, int);
     SIMP_PROP(OptionDisallowWarning, int);
+    SIMP_PROP(CompactJSON, int);
 
 #undef SIMP_PROP
 ENDinterface(glbl)
-#define glblCURR_IF_VERSION 10 /* increment whenever you change the interface structure! */
+#define glblCURR_IF_VERSION 11 /* increment whenever you change the interface structure! */
 /* version 2 had PreserveFQDN added - rgerhards, 2008-12-08 */
 
 /* the remaining prototypes */
@@ -140,8 +141,10 @@ extern DEF_ATOMIC_HELPER_MUT(mutTerminateInputs);
 #define DEV_OPTION_8_1905_HANG_TEST 2  // TODO: remove - temporary for bughunt
 
 #define glblGetOurPid() glbl_ourpid
-#define glblSetOurPid(pid) \
-    { glbl_ourpid = (pid); }
+#define glblSetOurPid(pid)   \
+    {                        \
+        glbl_ourpid = (pid); \
+    }
 
 void glblPrepCnf(void);
 void glblProcessCnf(struct cnfobj *o);

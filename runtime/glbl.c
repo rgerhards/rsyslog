@@ -180,6 +180,7 @@ static struct cnfparamdescr cnfparamdescr[] = {
     {"reverselookup.cache.ttl.default", eCmdHdlrNonNegInt, 0},
     {"reverselookup.cache.ttl.enable", eCmdHdlrBinary, 0},
     {"parser.supportcompressionextension", eCmdHdlrBinary, 0},
+    {"compactjsonstring", eCmdHdlrBinary, 0},
     {"shutdown.queue.doublesize", eCmdHdlrBinary, 0},
     {"debug.files", eCmdHdlrArray, 0},
     {"debug.whitelist", eCmdHdlrBinary, 0},
@@ -255,6 +256,7 @@ SIMP_PROP(DisableDNS, bDisableDNS, int)
 SIMP_PROP(ParserEscapeControlCharactersCStyle, parser.bParserEscapeCCCStyle, int)
 SIMP_PROP(ParseHOSTNAMEandTAG, parser.bParseHOSTNAMEandTAG, int)
 SIMP_PROP(OptionDisallowWarning, optionDisallowWarning, int)
+SIMP_PROP(CompactJSON, bCompactJSON, int)
 /* We omit setter on purpose, because we want to customize it */
 SIMP_PROP_GET(DfltNetstrmDrvrCAF, pszDfltNetstrmDrvrCAF, uchar *)
 SIMP_PROP_GET(DfltNetstrmDrvrCRLF, pszDfltNetstrmDrvrCRLF, uchar *)
@@ -950,6 +952,7 @@ BEGINobjQueryInterface(glbl)
     SIMP_PROP(LocalDomain)
     SIMP_PROP(ParserEscapeControlCharactersCStyle)
     SIMP_PROP(ParseHOSTNAMEandTAG)
+    SIMP_PROP(CompactJSON)
 #ifdef USE_UNLIMITED_SELECT
     SIMP_PROP(FdSetSize)
 #endif
@@ -994,6 +997,7 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) * pp, void __
     loadConf->globals.parser.bEscape8BitChars = 0; /* default is not to escape control characters */
     loadConf->globals.parser.bEscapeTab = 1; /* default is to escape tab characters */
     loadConf->globals.parser.bParserEscapeCCCStyle = 0;
+    loadConf->globals.bCompactJSON = 0;
 #ifdef USE_UNLIMITED_SELECT
     iFdSetSize = howmany(FD_SETSIZE, __NFDBITS) * sizeof(fd_mask);
 #endif
@@ -1403,6 +1407,8 @@ rsRetVal glblDoneLoadCnf(void) {
             loadConf->globals.dnscacheEnableTTL = cnfparamvals[i].val.d.n;
         } else if (!strcmp(paramblk.descr[i].name, "parser.supportcompressionextension")) {
             loadConf->globals.bSupportCompressionExtension = cnfparamvals[i].val.d.n;
+        } else if (!strcmp(paramblk.descr[i].name, "compactjsonstring")) {
+            loadConf->globals.bCompactJSON = cnfparamvals[i].val.d.n;
         } else {
             dbgprintf(
                 "glblDoneLoadCnf: program error, non-handled "
