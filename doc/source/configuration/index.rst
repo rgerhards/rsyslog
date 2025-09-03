@@ -56,6 +56,11 @@ configuration.
    conf_formats
    sysklogd_format
 
+.. toctree::
+   :hidden:
+
+   properties
+
 Additional Resources
 --------------------
 
