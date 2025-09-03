@@ -823,8 +823,17 @@ static rsRetVal ATTR_NONNULL(1, 3) writeKafka(instanceData *const pData,
     rd_kafka_headers_t *headers = NULL;
     if (pData->nHeaders > 0) {
         headers = rd_kafka_headers_new(pData->nHeaders);
+        if (headers == NULL) {
+            LogError(0, RS_RET_OUT_OF_MEMORY, "omkafka: failed to create kafka headers");
+            ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+        }
         for (int i = 0; i < pData->nHeaders; ++i) {
-            rd_kafka_header_add(headers, pData->headers[i].name, -1, pData->headers[i].val, -1);
+            if (rd_kafka_header_add(headers, pData->headers[i].name, -1, pData->headers[i].val, -1) !=
+                RD_KAFKA_RESP_ERR_NO_ERROR) {
+                LogError(0, RS_RET_KAFKA_ERROR, "omkafka: failed to add kafka header '%s'", pData->headers[i].name);
+                rd_kafka_headers_destroy(headers);
+                ABORT_FINALIZE(RS_RET_KAFKA_ERROR);
+            }
         }
     }
 
@@ -842,8 +851,9 @@ static rsRetVal ATTR_NONNULL(1, 3) writeKafka(instanceData *const pData,
             RD_KAFKA_V_KEY(key, strlen((char *)key)), RD_KAFKA_V_HEADERS(headers), RD_KAFKA_V_END);
     }
 
+    if (headers != NULL) rd_kafka_headers_destroy(headers);
+
     if (msg_kafka_response != RD_KAFKA_RESP_ERR_NO_ERROR) {
-        if (headers != NULL) rd_kafka_headers_destroy(headers);
         updateKafkaFailureCounts(msg_kafka_response);
 
         /* Put into kafka queue, again if configured! */
