@@ -231,6 +231,7 @@ typedef struct _instanceData {
     struct kafka_params *topicConfParams;
     int nHeaders;
     struct kafka_params *headers;
+    rd_kafka_headers_t *kafka_headers;
     uchar *errorFile;
     uchar *key;
     int bReopenOnHup;
@@ -820,38 +821,35 @@ static rsRetVal ATTR_NONNULL(1, 3) writeKafka(instanceData *const pData,
     }
     DBGPRINTF("omkafka: rd_kafka_producev timestamp=%s/%" PRId64 "\n", msgTimestamp, ttMsgTimestamp);
 
-    rd_kafka_headers_t *headers = NULL;
-    if (pData->nHeaders > 0) {
-        headers = rd_kafka_headers_new(pData->nHeaders);
-        if (headers == NULL) {
-            LogError(0, RS_RET_OUT_OF_MEMORY, "omkafka: failed to create kafka headers");
-            ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
-        }
-        for (int i = 0; i < pData->nHeaders; ++i) {
-            if (rd_kafka_header_add(headers, pData->headers[i].name, -1, pData->headers[i].val, -1) !=
-                RD_KAFKA_RESP_ERR_NO_ERROR) {
-                LogError(0, RS_RET_KAFKA_ERROR, "omkafka: failed to add kafka header '%s'", pData->headers[i].name);
-                rd_kafka_headers_destroy(headers);
-                ABORT_FINALIZE(RS_RET_KAFKA_ERROR);
-            }
-        }
-    }
-
     /* Using new kafka producev API, includes Timestamp! */
     if (key == NULL) {
-        msg_kafka_response = rd_kafka_producev(
-            pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition), RD_KAFKA_V_VALUE(msg, strlen((char *)msg)),
-            RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(NULL, 0),
-            RD_KAFKA_V_HEADERS(headers), RD_KAFKA_V_END);
+        if (pData->kafka_headers) {
+            msg_kafka_response =
+                rd_kafka_producev(pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition),
+                                  RD_KAFKA_V_VALUE(msg, strlen((char *)msg)), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                  RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(NULL, 0),
+                                  RD_KAFKA_V_HEADERS(pData->kafka_headers), RD_KAFKA_V_END);
+        } else {
+            msg_kafka_response =
+                rd_kafka_producev(pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition),
+                                  RD_KAFKA_V_VALUE(msg, strlen((char *)msg)), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                  RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(NULL, 0), RD_KAFKA_V_END);
+        }
     } else {
         DBGPRINTF("omkafka: rd_kafka_producev key=%s\n", key);
-        msg_kafka_response = rd_kafka_producev(
-            pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition), RD_KAFKA_V_VALUE(msg, strlen((char *)msg)),
-            RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp),
-            RD_KAFKA_V_KEY(key, strlen((char *)key)), RD_KAFKA_V_HEADERS(headers), RD_KAFKA_V_END);
+        if (pData->kafka_headers) {
+            msg_kafka_response =
+                rd_kafka_producev(pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition),
+                                  RD_KAFKA_V_VALUE(msg, strlen((char *)msg)), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                  RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(key, strlen((char *)key)),
+                                  RD_KAFKA_V_HEADERS(pData->kafka_headers), RD_KAFKA_V_END);
+        } else {
+            msg_kafka_response = rd_kafka_producev(
+                pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition),
+                RD_KAFKA_V_VALUE(msg, strlen((char *)msg)), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(key, strlen((char *)key)), RD_KAFKA_V_END);
+        }
     }
-
-    if (headers != NULL) rd_kafka_headers_destroy(headers);
 
     if (msg_kafka_response != RD_KAFKA_RESP_ERR_NO_ERROR) {
         updateKafkaFailureCounts(msg_kafka_response);
@@ -1687,6 +1685,7 @@ BEGINfreeInstance
         free((void *)pData->headers[i].val);
     }
     free(pData->headers);
+    if (pData->kafka_headers != NULL) rd_kafka_headers_destroy(pData->kafka_headers);
     DESTROY_ATOMIC_HELPER_MUT(pData->mutCurrPartition);
     pthread_rwlock_destroy(&pData->rkLock);
     pthread_mutex_destroy(&pData->mut_doAction);
@@ -1843,6 +1842,7 @@ static void setInstParamDefaults(instanceData *pData) {
     pData->topicConfParams = NULL;
     pData->nHeaders = 0;
     pData->headers = NULL;
+    pData->kafka_headers = NULL;
     pData->errorFile = NULL;
     pData->statsFile = NULL;
     pData->failedMsgFile = NULL;
@@ -1953,6 +1953,23 @@ BEGINnewActInst
         } else {
             LogError(0, RS_RET_INTERNAL_ERROR, "omkafka: program error, non-handled param '%s'\n",
                      actpblk.descr[i].name);
+        }
+    }
+
+    if (pData->nHeaders > 0) {
+        pData->kafka_headers = rd_kafka_headers_new(pData->nHeaders);
+        if (pData->kafka_headers == NULL) {
+            LogError(0, RS_RET_OUT_OF_MEMORY, "omkafka: failed to create kafka headers");
+            ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+        }
+        for (int j = 0; j < pData->nHeaders; ++j) {
+            if (rd_kafka_header_add(pData->kafka_headers, pData->headers[j].name, -1, pData->headers[j].val, -1) !=
+                RD_KAFKA_RESP_ERR_NO_ERROR) {
+                LogError(0, RS_RET_KAFKA_ERROR, "omkafka: failed to add kafka header '%s'", pData->headers[j].name);
+                rd_kafka_headers_destroy(pData->kafka_headers);
+                pData->kafka_headers = NULL;
+                ABORT_FINALIZE(RS_RET_KAFKA_ERROR);
+            }
         }
     }
 
