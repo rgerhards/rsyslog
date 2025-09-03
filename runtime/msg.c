@@ -3575,12 +3575,12 @@ uchar *MsgGetProp(smsg_t *__restrict__ const pMsg,
                 const char *jstr;
                 MsgLock(pMsg);
                 int jflag;
-                if (glbl.GetCompactJSON(runConf)) {
+                /* use plain formatting if globally requested or when
+                 * the property variant explicitly requests it */
+                if (glbl.GetCompactJSON(runConf) || pProp->id == PROP_CEE_ALL_JSON_PLAIN) {
                     jflag = JSON_C_TO_STRING_PLAIN;
                 } else if (pProp->id == PROP_CEE_ALL_JSON) {
                     jflag = JSON_C_TO_STRING_SPACED;
-                } else if (pProp->id == PROP_CEE_ALL_JSON_PLAIN) {
-                    jflag = JSON_C_TO_STRING_PLAIN;
                 } else {
                     jflag = 0;
                 }
