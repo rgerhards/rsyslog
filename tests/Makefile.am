@@ -1035,11 +1035,12 @@ if ENABLE_OMKAFKA
 if ENABLE_IMKAFKA
 if ENABLE_KAFKA_TESTS
 TESTS += \
-	kafka-selftest.sh \
-	omkafka.sh \
-	omkafkadynakey.sh \
-	imkafka.sh \
-	imkafka-backgrounded.sh \
+        kafka-selftest.sh \
+        omkafka.sh \
+        omkafkadynakey.sh \
+        omkafka-headers.sh \
+        imkafka.sh \
+        imkafka-backgrounded.sh \
 	imkafka-config-err-ruleset.sh \
 	imkafka-config-err-param.sh \
 	imkafka-hang-on-no-kafka.sh \
@@ -1065,13 +1066,14 @@ sndrcv_kafka.log: imkafka_multi_single.log
 imkafka_multi_group.log: sndrcv_kafka.log
 sndrcv_kafka_multi_topics.log: imkafka_multi_group.log
 omkafkadynakey.log: sndrcv_kafka_multi_topics.log
+omkafka-headers.log: omkafkadynakey.log
 
 if HAVE_VALGRIND
 TESTS += \
 	omkafka-vg.sh \
 	imkafka-vg.sh
 
-omkafka-vg.log: sndrcv_kafka_multi_topics.log
+omkafka-vg.log: omkafka-headers.log
 imkafka-vg.log: omkafka-vg.log
 endif
 endif

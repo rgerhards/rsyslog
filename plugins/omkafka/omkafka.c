@@ -39,6 +39,10 @@
 #include <unistd.h>
 #include <librdkafka/rdkafka.h>
 
+#if RD_KAFKA_VERSION < 0x000b0000
+    #error "omkafka requires librdkafka v0.11 or later"
+#endif
+
 #include "rsyslog.h"
 #include "syslogd-types.h"
 #include "srUtils.h"
@@ -225,6 +229,8 @@ typedef struct _instanceData {
     struct kafka_params *confParams;
     int nTopicConfParams;
     struct kafka_params *topicConfParams;
+    int nHeaders;
+    struct kafka_params *headers;
     uchar *errorFile;
     uchar *key;
     int bReopenOnHup;
@@ -278,6 +284,7 @@ static struct cnfparamdescr actpdescr[] = {
     {"broker", eCmdHdlrArray, 0},
     {"confparam", eCmdHdlrArray, 0},
     {"topicconfparam", eCmdHdlrArray, 0},
+    {"kafkaheader", eCmdHdlrArray, 0},
     {"errorfile", eCmdHdlrGetWord, 0},
     {"statsfile", eCmdHdlrGetWord, 0},
     {"key", eCmdHdlrGetWord, 0},
@@ -813,21 +820,30 @@ static rsRetVal ATTR_NONNULL(1, 3) writeKafka(instanceData *const pData,
     }
     DBGPRINTF("omkafka: rd_kafka_producev timestamp=%s/%" PRId64 "\n", msgTimestamp, ttMsgTimestamp);
 
+    rd_kafka_headers_t *headers = NULL;
+    if (pData->nHeaders > 0) {
+        headers = rd_kafka_headers_new(pData->nHeaders);
+        for (int i = 0; i < pData->nHeaders; ++i) {
+            rd_kafka_header_add(headers, pData->headers[i].name, -1, pData->headers[i].val, -1);
+        }
+    }
+
     /* Using new kafka producev API, includes Timestamp! */
     if (key == NULL) {
-        msg_kafka_response =
-            rd_kafka_producev(pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition),
-                              RD_KAFKA_V_VALUE(msg, strlen((char *)msg)), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                              RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(NULL, 0), RD_KAFKA_V_END);
+        msg_kafka_response = rd_kafka_producev(
+            pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition), RD_KAFKA_V_VALUE(msg, strlen((char *)msg)),
+            RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(NULL, 0),
+            RD_KAFKA_V_HEADERS(headers), RD_KAFKA_V_END);
     } else {
         DBGPRINTF("omkafka: rd_kafka_producev key=%s\n", key);
         msg_kafka_response = rd_kafka_producev(
             pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition), RD_KAFKA_V_VALUE(msg, strlen((char *)msg)),
             RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp),
-            RD_KAFKA_V_KEY(key, strlen((char *)key)), RD_KAFKA_V_END);
+            RD_KAFKA_V_KEY(key, strlen((char *)key)), RD_KAFKA_V_HEADERS(headers), RD_KAFKA_V_END);
     }
 
     if (msg_kafka_response != RD_KAFKA_RESP_ERR_NO_ERROR) {
+        if (headers != NULL) rd_kafka_headers_destroy(headers);
         updateKafkaFailureCounts(msg_kafka_response);
 
         /* Put into kafka queue, again if configured! */
@@ -1656,6 +1672,11 @@ BEGINfreeInstance
         free((void *)pData->topicConfParams[i].val);
     }
     free(pData->topicConfParams);
+    for (int i = 0; i < pData->nHeaders; ++i) {
+        free((void *)pData->headers[i].name);
+        free((void *)pData->headers[i].val);
+    }
+    free(pData->headers);
     DESTROY_ATOMIC_HELPER_MUT(pData->mutCurrPartition);
     pthread_rwlock_destroy(&pData->rkLock);
     pthread_mutex_destroy(&pData->mut_doAction);
@@ -1810,6 +1831,8 @@ static void setInstParamDefaults(instanceData *pData) {
     pData->confParams = NULL;
     pData->nTopicConfParams = 0;
     pData->topicConfParams = NULL;
+    pData->nHeaders = 0;
+    pData->headers = NULL;
     pData->errorFile = NULL;
     pData->statsFile = NULL;
     pData->failedMsgFile = NULL;
@@ -1889,6 +1912,14 @@ BEGINnewActInst
             for (int j = 0; j < pvals[i].val.d.ar->nmemb; ++j) {
                 char *cstr = es_str2cstr(pvals[i].val.d.ar->arr[j], NULL);
                 CHKiRet(processKafkaParam(cstr, &pData->topicConfParams[j].name, &pData->topicConfParams[j].val));
+                free(cstr);
+            }
+        } else if (!strcmp(actpblk.descr[i].name, "kafkaheader")) {
+            pData->nHeaders = pvals[i].val.d.ar->nmemb;
+            CHKmalloc(pData->headers = malloc(sizeof(struct kafka_params) * pvals[i].val.d.ar->nmemb));
+            for (int j = 0; j < pvals[i].val.d.ar->nmemb; ++j) {
+                char *cstr = es_str2cstr(pvals[i].val.d.ar->arr[j], NULL);
+                CHKiRet(processKafkaParam(cstr, &pData->headers[j].name, &pData->headers[j].val));
                 free(cstr);
             }
         } else if (!strcmp(actpblk.descr[i].name, "errorfile")) {
