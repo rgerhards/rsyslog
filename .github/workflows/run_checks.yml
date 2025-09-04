@@ -229,12 +229,22 @@ jobs:
           esac
           devtools/devcontainer.sh --rm devtools/run-ci.sh
 
-      - name: Upload coverage to Codecov
-        if: ${{ matrix.coverage && always() }}
+      - name: Upload coverage to Codecov (internal)
+        if: ${{ matrix.coverage && always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: codecov/codecov-action@v4
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.info
           flags: ${{ matrix.config }}
-          fail_ci_if_error: true
+          fail_ci_if_error: false
+
+      - name: Upload coverage to Codecov (fork PR, tokenless)
+        if: ${{ matrix.coverage && always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.info
+          flags: ${{ matrix.config }}
+          fail_ci_if_error: false
 
       - name: show error logs (if we errored)
         if: ${{ failure() || cancelled() }}
