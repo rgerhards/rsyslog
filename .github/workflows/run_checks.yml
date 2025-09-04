@@ -161,7 +161,8 @@ jobs:
               export UBSAN_OPTIONS='print_stacktrace=1'
               ;;
           'ubuntu_24_tsan')
-              export RSYSLOG_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+              export RSYSLOG_DEV_CONTAINER='rsyslog/rsyslog_dev_base_fedora:42'
+              #export RSYSLOG_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
               # This is CPU-heavy due to tsan, so we need less concurrency to prevent flakes
               export CI_MAKE_CHECK_OPT='-j2'
               export CI_VALGRIND_SUPPRESSIONS="ubuntu22.04.supp"
