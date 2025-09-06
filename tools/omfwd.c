@@ -1310,7 +1310,19 @@ static rsRetVal processMsg(targetData_t *__restrict__ const pTarget, actWrkrIPar
         CHKiRet(UDPSend(pWrkrData, psz, l));  // TODO-RG: always add "actualTarget"!
     } else {
         /* forward via TCP */
-        iRet = tcpclt.Send(pTarget->pTCPClt, pTarget, (char *)psz, l);
+        char *msg = (char *)psz;
+        size_t msgLen = l;
+        char *lfAppended = NULL;
+        if (pData->tcp_framing == TCP_FRAMING_OCTET_STUFFING && msgLen > 0 && msg[msgLen - 1] != '\n') {
+            CHKmalloc(lfAppended = (char *)malloc(msgLen + 1));
+            memcpy(lfAppended, msg, msgLen);
+            lfAppended[msgLen] = '\n';
+            msg = lfAppended;
+            ++msgLen;
+        }
+
+        iRet = tcpclt.Send(pTarget->pTCPClt, pTarget, msg, msgLen);
+        if (lfAppended != NULL) free(lfAppended);
         if (iRet != RS_RET_OK && iRet != RS_RET_DEFER_COMMIT && iRet != RS_RET_PREVIOUS_COMMITTED) {
             /* error! */
             LogError(0, iRet, "omfwd: error forwarding via tcp to %s:%s, suspending target", pTarget->target_name,
