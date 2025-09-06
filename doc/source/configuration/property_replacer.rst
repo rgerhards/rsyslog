@@ -22,7 +22,7 @@ property replacer. The full syntax is as follows:
 Available Properties
 ^^^^^^^^^^^^^^^^^^^^
 
-The property replacer can use all :doc:`rsyslog properties <properties>`.
+The property replacer can use all :doc:`rsyslog properties <../rainerscript/properties>`.
 
 Character Positions
 ^^^^^^^^^^^^^^^^^^^^
