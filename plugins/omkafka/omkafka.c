@@ -825,36 +825,39 @@ static rsRetVal ATTR_NONNULL(1, 3) writeKafka(instanceData *const pData,
     rd_kafka_vu_t v[8];
     int i = 0;
 
-    v[i].vtype = RD_KAFKA_VTYPE_RKT;
-    v[i++].u.rkt = rkt;
+    #define V_RKT(RKT) ((rd_kafka_vu_t){.vtype = RD_KAFKA_VTYPE_RKT, .u.rkt = (RKT)})
+    #define V_PART(PART) ((rd_kafka_vu_t){.vtype = RD_KAFKA_VTYPE_PARTITION, .u.i32 = (PART)})
+    #define V_VALUE(PTR, LEN) ((rd_kafka_vu_t){.vtype = RD_KAFKA_VTYPE_VALUE, .u.mem.ptr = (PTR), .u.mem.size = (LEN)})
+    #define V_MSGFLAGS(FLG) ((rd_kafka_vu_t){.vtype = RD_KAFKA_VTYPE_MSGFLAGS, .u.i = (FLG)})
+    #define V_TIMESTAMP(TS) ((rd_kafka_vu_t){.vtype = RD_KAFKA_VTYPE_TIMESTAMP, .u.i64 = (TS)})
+    #define V_KEY(KEYPTR, KEYLEN) \
+        ((rd_kafka_vu_t){.vtype = RD_KAFKA_VTYPE_KEY, .u.mem.ptr = (KEYPTR), .u.mem.size = (KEYLEN)})
+    #define V_HEADERS(HDRS) ((rd_kafka_vu_t){.vtype = RD_KAFKA_VTYPE_HEADERS, .u.headers = (HDRS)})
 
-    v[i].vtype = RD_KAFKA_VTYPE_PARTITION;
-    v[i++].u.i32 = partition;
+    v[i++] = V_RKT(rkt);
+    v[i++] = V_PART(partition);
+    v[i++] = V_VALUE(msg, strlen((char *)msg));
+    v[i++] = V_MSGFLAGS(RD_KAFKA_MSG_F_COPY);
+    v[i++] = V_TIMESTAMP(ttMsgTimestamp);
 
-    v[i].vtype = RD_KAFKA_VTYPE_VALUE;
-    v[i].u.mem.ptr = msg;
-    v[i++].u.mem.size = strlen((char *)msg);
-
-    v[i].vtype = RD_KAFKA_VTYPE_MSGFLAGS;
-    v[i++].u.i = RD_KAFKA_MSG_F_COPY;
-
-    v[i].vtype = RD_KAFKA_VTYPE_TIMESTAMP;
-    v[i++].u.i64 = ttMsgTimestamp;
-
-    v[i].vtype = RD_KAFKA_VTYPE_KEY;
     if (key == NULL) {
-        v[i].u.mem.ptr = NULL;
-        v[i++].u.mem.size = 0;
+        v[i++] = V_KEY(NULL, 0);
     } else {
         DBGPRINTF("omkafka: rd_kafka_producev key=%s\n", key);
-        v[i].u.mem.ptr = key;
-        v[i++].u.mem.size = strlen((char *)key);
+        v[i++] = V_KEY(key, strlen((char *)key));
     }
 
     if (pData->kafka_headers) {
-        v[i].vtype = RD_KAFKA_VTYPE_HEADERS;
-        v[i++].u.headers = pData->kafka_headers;
+        v[i++] = V_HEADERS(pData->kafka_headers);
     }
+
+    #undef V_RKT
+    #undef V_PART
+    #undef V_VALUE
+    #undef V_MSGFLAGS
+    #undef V_TIMESTAMP
+    #undef V_KEY
+    #undef V_HEADERS
 
     rd_kafka_error_t *rke = rd_kafka_produceva(pData->rk, v, i);
     if (rke == NULL) {
