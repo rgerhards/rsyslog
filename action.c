@@ -1,3 +1,4 @@
+/* TRIGGER CI RUN - REMOVE ME BEFORE MERGE! */
 /**
  * @file action.c
  * @brief Implementation of the action object.
