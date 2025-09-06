@@ -821,34 +821,47 @@ static rsRetVal ATTR_NONNULL(1, 3) writeKafka(instanceData *const pData,
     }
     DBGPRINTF("omkafka: rd_kafka_producev timestamp=%s/%" PRId64 "\n", msgTimestamp, ttMsgTimestamp);
 
-    /* Using new kafka producev API, includes Timestamp! */
+    /* Using new Kafka produceva API, build argument list dynamically */
+    rd_kafka_vu_t v[8];
+    int i = 0;
+
+    v[i].vtype = RD_KAFKA_VTYPE_RKT;
+    v[i++].u.rkt = rkt;
+
+    v[i].vtype = RD_KAFKA_VTYPE_PARTITION;
+    v[i++].u.i32 = partition;
+
+    v[i].vtype = RD_KAFKA_VTYPE_VALUE;
+    v[i].u.mem.ptr = msg;
+    v[i++].u.mem.size = strlen((char *)msg);
+
+    v[i].vtype = RD_KAFKA_VTYPE_MSGFLAGS;
+    v[i++].u.i = RD_KAFKA_MSG_F_COPY;
+
+    v[i].vtype = RD_KAFKA_VTYPE_TIMESTAMP;
+    v[i++].u.i64 = ttMsgTimestamp;
+
+    v[i].vtype = RD_KAFKA_VTYPE_KEY;
     if (key == NULL) {
-        if (pData->kafka_headers) {
-            msg_kafka_response =
-                rd_kafka_producev(pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition),
-                                  RD_KAFKA_V_VALUE(msg, strlen((char *)msg)), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                  RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(NULL, 0),
-                                  RD_KAFKA_V_HEADERS(pData->kafka_headers), RD_KAFKA_V_END);
-        } else {
-            msg_kafka_response =
-                rd_kafka_producev(pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition),
-                                  RD_KAFKA_V_VALUE(msg, strlen((char *)msg)), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                  RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(NULL, 0), RD_KAFKA_V_END);
-        }
+        v[i].u.mem.ptr = NULL;
+        v[i++].u.mem.size = 0;
     } else {
         DBGPRINTF("omkafka: rd_kafka_producev key=%s\n", key);
-        if (pData->kafka_headers) {
-            msg_kafka_response =
-                rd_kafka_producev(pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition),
-                                  RD_KAFKA_V_VALUE(msg, strlen((char *)msg)), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                  RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(key, strlen((char *)key)),
-                                  RD_KAFKA_V_HEADERS(pData->kafka_headers), RD_KAFKA_V_END);
-        } else {
-            msg_kafka_response = rd_kafka_producev(
-                pData->rk, RD_KAFKA_V_RKT(rkt), RD_KAFKA_V_PARTITION(partition),
-                RD_KAFKA_V_VALUE(msg, strlen((char *)msg)), RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                RD_KAFKA_V_TIMESTAMP(ttMsgTimestamp), RD_KAFKA_V_KEY(key, strlen((char *)key)), RD_KAFKA_V_END);
-        }
+        v[i].u.mem.ptr = key;
+        v[i++].u.mem.size = strlen((char *)key);
+    }
+
+    if (pData->kafka_headers) {
+        v[i].vtype = RD_KAFKA_VTYPE_HEADERS;
+        v[i++].u.headers = pData->kafka_headers;
+    }
+
+    rd_kafka_error_t *rke = rd_kafka_produceva(pData->rk, v, i);
+    if (rke == NULL) {
+        msg_kafka_response = RD_KAFKA_RESP_ERR_NO_ERROR;
+    } else {
+        msg_kafka_response = rd_kafka_error_code(rke);
+        rd_kafka_error_destroy(rke);
     }
 
     if (msg_kafka_response != RD_KAFKA_RESP_ERR_NO_ERROR) {
