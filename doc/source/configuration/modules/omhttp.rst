@@ -536,6 +536,19 @@ useHttps
 
 When switched to "on" you will use `https` instead of `http`.
 
+httpversion
+^^^^^^^^^^^
+
+.. csv-table::
+   :header: "type", "default", "mandatory", "|FmtObsoleteName| directive"
+   :widths: auto
+   :class: parameter-table
+
+   "word", "auto", "no", "none"
+
+Selects the HTTP protocol version libcurl should use. ``auto`` lets
+libcurl negotiate the best version. ``1.1`` forces HTTP/1.1 and ``2``
+forces HTTP/2. The default is ``auto``.
 
 tls.cacert
 ^^^^^^^^^^
