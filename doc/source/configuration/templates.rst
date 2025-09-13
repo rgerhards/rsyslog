@@ -11,7 +11,7 @@ formats and enable dynamic file name generation. Every output, including
 files, user messages, and database writes, relies on templates. When no
 explicit template is set, rsyslog uses built-in defaults compatible with
 stock syslogd formats. Key elements of templates are rsyslog
-properties; see :doc:`rsyslog properties <properties>`.
+properties; see :doc:`rsyslog properties <../rainerscript/properties>`.
 
 .. _templates.template-processing:
 

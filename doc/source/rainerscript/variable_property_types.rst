@@ -2,7 +2,7 @@ Variable (Property) types
 =========================
 
 All rsyslog properties (see the :doc:`properties
-<../configuration/properties>` page for a list) can be used in
+<properties>` page for a list) can be used in
 RainerScript by prefixing them with "$", for example :
 ::
 

@@ -32,7 +32,7 @@ configuration.
    modules/idx_stringgen
    modules/idx_library
    templates
-   properties
+   ../rainerscript/properties
    property_replacer
    filters
    ../rainerscript/index
@@ -55,6 +55,11 @@ configuration.
    converting_to_new_format
    conf_formats
    sysklogd_format
+
+.. toctree::
+   :hidden:
+
+   properties
 
 Additional Resources
 --------------------
