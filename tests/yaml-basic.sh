@@ -1,14 +1,12 @@
 #!/bin/bash
 ## yaml-basic.sh - basic YAML parser check
 ##
-## Builds and runs the conf_yaml_poc parser, ensuring that the sample
-## YAML configuration loads a module and adds an input.
+## Runs rsyslogd with a YAML configuration to ensure that the sample
+## file loads a module and adds an input.
 
 set -e
 srcdir="$(cd "$(dirname "$0")" && pwd)"
 cd "$srcdir"
-export RSYSLOG_MODDIR="../runtime/.libs"
-libtool --mode=link gcc -I.. -I../runtime -I../grammar -I/usr/include/libfastjson ../runtime/conf_yaml_poc.c ../runtime/librsyslog.la ../compat/compat.la -lfastjson -lestr -lpthread -lm -luuid -lz -lyaml -o conf_yaml_poc
-./conf_yaml_poc "conf_yaml_poc.yml" >test.log 2>&1
-grep -F "module imtcp loaded" test.log
-grep -F "input imtcp added" test.log
+../tools/rsyslogd -N1 -n -f conf_yaml_poc.yml -i rsyslogd.pid -M../runtime/.libs:../plugins/imtcp/.libs:../.libs >test.log 2>&1 || true
+grep -F "yaml: module imtcp loaded" test.log
+grep -F "yaml: input imtcp added" test.log

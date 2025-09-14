@@ -92,6 +92,9 @@ fi
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.1.9)
 
 PKG_CHECK_MODULES([LIBFASTJSON], [libfastjson >= 0.99.8],,)
+PKG_CHECK_MODULES([LIBYAML], [yaml-0.1],,
+  [PKG_CHECK_MODULES([LIBYAML], [libfyaml],,
+     [AC_MSG_ERROR([libyaml or libfyaml is required])])])
 
 AC_DEFINE_UNQUOTED([PLATFORM_ID], ["${host}"], [platform id for display purposes])
 # we don't mind if we don't have the lsb_release utility. But if we have, it's
@@ -1329,7 +1332,7 @@ if test "x$enable_rsyslogrt" = "xyes"; then
   RSRT_LIBS1="\$(top_builddir)/runtime/librsyslog.la"
 fi
 AM_CONDITIONAL(ENABLE_RSYSLOGRT, test x$enable_rsyslogrt = xyes)
-RSRT_CFLAGS="\$(RSRT_CFLAGS1) \$(LIBESTR_CFLAGS) \$(LIBFASTJSON_CFLAGS) \$(LIBSYSTEMD_CFLAGS)"
+RSRT_CFLAGS="\$(RSRT_CFLAGS1) \$(LIBESTR_CFLAGS) \$(LIBFASTJSON_CFLAGS) \$(LIBSYSTEMD_CFLAGS) \$(LIBYAML_CFLAGS)"
 if test "$GCC" = "yes"; then
   RSRT_CFLAGS="$RSRT_CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute"
   if $CC -Werror=implicit-function-declaration -x c -c /dev/null -o /dev/null 2>/dev/null; then
@@ -1343,7 +1346,7 @@ if test "$GCC" = "yes"; then
   fi
 fi
 RSRT_CFLAGS="$RSRT_CFLAGS $WARN_CFLAGS"
-RSRT_LIBS="\$(RSRT_LIBS1) \$(LIBESTR_LIBS) \$(LIBFASTJSON_LIBS) \$(LIBSYSTEMD_LIBS)"
+RSRT_LIBS="\$(RSRT_LIBS1) \$(LIBESTR_LIBS) \$(LIBFASTJSON_LIBS) \$(LIBSYSTEMD_LIBS) \$(LIBYAML_LIBS)"
 AC_SUBST(RSRT_CFLAGS1)
 AC_SUBST(RSRT_LIBS1)
 AC_SUBST(RSRT_CFLAGS)

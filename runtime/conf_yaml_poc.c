@@ -4,18 +4,24 @@
  *
  * This prototype reads `modules` and `inputs` sections from a YAML file
  * and converts them into `struct cnfobj` entries processed via
- * ::cnfDoObj.  It is part of the rsyslog project and released under
+ * ::cnfDoObj. It is part of the rsyslog project and released under
  * the terms of the Apache License 2.0.
  */
+
 #include "config.h"
+
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <yaml.h>
 #include <libestr.h>
+#include <syslog.h>
+
 #include "grammar/rainerscript.h"
 #include "grammar/parserif.h"
 #include "rsyslog.h"
+#include "errmsg.h"
+
+int cnfYamlParseFile(char *path);
 
 /**
  * @brief Append a key/value pair to a name-value list.
@@ -53,16 +59,15 @@ static void process_module(const char *name) {
     lst = add_kv(lst, "load", name);
     struct cnfobj *o = cnfobjNew(CNFOBJ_MODULE, lst);
     cnfDoObj(o);
-    cnfobjDestruct(o);
-    printf("module %s loaded\n", name);
+    LogMsg(0, RS_RET_OK, LOG_ERR, "yaml: module %s loaded", name);
 }
 
 /**
  * @brief Create a configuration object for an input stanza.
  *
- * The input is described by the mapping @p map. Each scalar key/value
- * pair becomes an entry in the ::nvlst list. The resulting object is
- * passed to ::cnfDoObj for further processing.
+ * Each scalar key/value pair in @p map becomes an entry in the
+ * ::nvlst list. The resulting object is passed to ::cnfDoObj for
+ * further processing.
  *
  * @param doc Parsed YAML document providing node storage.
  * @param map Mapping node describing a single input.
@@ -71,6 +76,7 @@ static void process_input(yaml_document_t *doc, yaml_node_t *map) {
     struct nvlst *lst = NULL;
     yaml_node_pair_t *pair;
     const char *type = NULL;
+
     for (pair = map->data.mapping.pairs.start; pair < map->data.mapping.pairs.top; ++pair) {
         yaml_node_t *key = yaml_document_get_node(doc, pair->key);
         yaml_node_t *val = yaml_document_get_node(doc, pair->value);
@@ -84,51 +90,42 @@ static void process_input(yaml_document_t *doc, yaml_node_t *map) {
             type = v;
         }
     }
+
     struct cnfobj *o = cnfobjNew(CNFOBJ_INPUT, lst);
     cnfDoObj(o);
-    cnfobjDestruct(o);
+
     if (type != NULL) {
-        printf("input %s added\n", type);
+        LogMsg(0, RS_RET_OK, LOG_ERR, "yaml: input %s added", type);
     } else {
-        printf("input added\n");
+        LogMsg(0, RS_RET_OK, LOG_ERR, "yaml: input added");
     }
 }
 
 /**
- * @brief Entry point that drives YAML configuration parsing.
+ * @brief Parse a YAML configuration file.
  *
- * @param argc Number of command-line arguments.
- * @param argv Argument vector. Expects a single YAML file path.
+ * Only `modules` and `inputs` sections are honoured. Each entry is
+ * converted into a `struct cnfobj` and processed via ::cnfDoObj.
+ *
+ * @param path Path to the YAML file to read.
  * @retval 0 on success.
- * @retval 1 on failure.
+ * @retval 1 on parse failure.
+ * @retval 2 if the file could not be opened.
  */
-int main(int argc, char **argv) {
-    if (argc != 2) {
-        fprintf(stderr, "usage: %s <file>\n", argv[0]);
-        return 1;
-    }
-
-    if (rsrtInit(NULL, NULL) != RS_RET_OK) {
-        fprintf(stderr, "runtime init failed\n");
-        return 1;
-    }
-
-    FILE *fh = fopen(argv[1], "r");
+int cnfYamlParseFile(char *path) {
+    FILE *fh = fopen(path, "r");
     if (fh == NULL) {
-        perror("fopen");
-        return 1;
+        return 2;
     }
 
     yaml_parser_t parser;
     yaml_document_t doc;
     if (!yaml_parser_initialize(&parser)) {
-        fprintf(stderr, "yaml parser init failed\n");
         fclose(fh);
         return 1;
     }
     yaml_parser_set_input_file(&parser, fh);
     if (!yaml_parser_load(&parser, &doc)) {
-        fprintf(stderr, "yaml parse failed\n");
         yaml_parser_delete(&parser);
         fclose(fh);
         return 1;
@@ -167,6 +164,5 @@ int main(int argc, char **argv) {
     yaml_document_delete(&doc);
     yaml_parser_delete(&parser);
     fclose(fh);
-    rsrtExit();
     return 0;
 }
