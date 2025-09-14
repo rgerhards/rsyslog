@@ -1,6 +1,11 @@
-/* Prototype YAML configuration parser proof of concept
- * Parses modules and inputs sections and feeds them into cnfDoObj.
- * This file is part of the rsyslog project, released under ASL 2.0.
+/**
+ * @file conf_yaml_poc.c
+ * @brief Proof-of-concept YAML configuration parser.
+ *
+ * This prototype reads `modules` and `inputs` sections from a YAML file
+ * and converts them into `struct cnfobj` entries processed via
+ * ::cnfDoObj.  It is part of the rsyslog project and released under
+ * the terms of the Apache License 2.0.
  */
 #include "config.h"
 #include <stdio.h>
@@ -10,8 +15,16 @@
 #include <libestr.h>
 #include "grammar/rainerscript.h"
 #include "grammar/parserif.h"
-#include "runtime/rsyslog.h"
+#include "rsyslog.h"
 
+/**
+ * @brief Append a key/value pair to a name-value list.
+ *
+ * @param lst Existing list or NULL.
+ * @param name Key name to insert.
+ * @param val Value associated with @p name.
+ * @return Head of the updated list.
+ */
 static struct nvlst *add_kv(struct nvlst *lst, const char *name, const char *val) {
     struct nvlst *n = nvlstNewStr(es_newStrFromCStr(val, strlen(val)));
     if (n == NULL) {
@@ -30,6 +43,11 @@ static struct nvlst *add_kv(struct nvlst *lst, const char *name, const char *val
     return lst;
 }
 
+/**
+ * @brief Create a configuration object that loads a module.
+ *
+ * @param name Module name as specified in the YAML file.
+ */
 static void process_module(const char *name) {
     struct nvlst *lst = NULL;
     lst = add_kv(lst, "load", name);
@@ -39,6 +57,16 @@ static void process_module(const char *name) {
     printf("module %s loaded\n", name);
 }
 
+/**
+ * @brief Create a configuration object for an input stanza.
+ *
+ * The input is described by the mapping @p map. Each scalar key/value
+ * pair becomes an entry in the ::nvlst list. The resulting object is
+ * passed to ::cnfDoObj for further processing.
+ *
+ * @param doc Parsed YAML document providing node storage.
+ * @param map Mapping node describing a single input.
+ */
 static void process_input(yaml_document_t *doc, yaml_node_t *map) {
     struct nvlst *lst = NULL;
     yaml_node_pair_t *pair;
@@ -66,6 +94,14 @@ static void process_input(yaml_document_t *doc, yaml_node_t *map) {
     }
 }
 
+/**
+ * @brief Entry point that drives YAML configuration parsing.
+ *
+ * @param argc Number of command-line arguments.
+ * @param argv Argument vector. Expects a single YAML file path.
+ * @retval 0 on success.
+ * @retval 1 on failure.
+ */
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "usage: %s <file>\n", argv[0]);
