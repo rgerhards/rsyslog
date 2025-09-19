@@ -132,6 +132,14 @@ Action Parameters
      - .. include:: ../../reference/parameters/omelasticsearch-errorfile.rst
         :start-after: .. summary-start
         :end-before: .. summary-end
+   * - :ref:`param-omelasticsearch-erroronly`
+     - .. include:: ../../reference/parameters/omelasticsearch-erroronly.rst
+        :start-after: .. summary-start
+        :end-before: .. summary-end
+   * - :ref:`param-omelasticsearch-interleaved`
+     - .. include:: ../../reference/parameters/omelasticsearch-interleaved.rst
+        :start-after: .. summary-start
+        :end-before: .. summary-end
    * - :ref:`param-omelasticsearch-tls-cacert`
      - .. include:: ../../reference/parameters/omelasticsearch-tls-cacert.rst
         :start-after: .. summary-start
@@ -212,6 +220,8 @@ Action Parameters
    ../../reference/parameters/omelasticsearch-uid
    ../../reference/parameters/omelasticsearch-pwd
    ../../reference/parameters/omelasticsearch-errorfile
+   ../../reference/parameters/omelasticsearch-erroronly
+   ../../reference/parameters/omelasticsearch-interleaved
    ../../reference/parameters/omelasticsearch-tls-cacert
    ../../reference/parameters/omelasticsearch-tls-mycert
    ../../reference/parameters/omelasticsearch-tls-myprivkey
