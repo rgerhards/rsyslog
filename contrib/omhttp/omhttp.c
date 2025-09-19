@@ -143,6 +143,7 @@ typedef struct instanceConf_s {
     sbool useHttps;
     sbool allowUnsignedCerts;
     sbool skipVerifyHost;
+    long httpVersion;
     uchar *caCertFile;
     uchar *myCertFile;
     uchar *myPrivKeyFile;
@@ -232,6 +233,7 @@ static struct cnfparamdescr actpdescr[] = {
     {"compress", eCmdHdlrBinary, 0},
     {"compress.level", eCmdHdlrInt, 0},
     {"usehttps", eCmdHdlrBinary, 0},
+    {"httpversion", eCmdHdlrGetWord, 0},
     {"errorfile", eCmdHdlrGetWord, 0},
     {"template", eCmdHdlrGetWord, 0},
     {"allowunsignedcerts", eCmdHdlrBinary, 0},
@@ -1705,6 +1707,7 @@ static void ATTR_NONNULL() curlSetupCommon(wrkrInstanceData_t *const pWrkrData, 
     curl_easy_setopt(handle, CURLOPT_NOSIGNAL, TRUE);
     curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, curlResult);
     curl_easy_setopt(handle, CURLOPT_WRITEDATA, pWrkrData);
+    curl_easy_setopt(handle, CURLOPT_HTTP_VERSION, pWrkrData->pData->httpVersion);
     if (pWrkrData->pData->proxyHost != NULL) {
         curl_easy_setopt(handle, CURLOPT_PROXY, pWrkrData->pData->proxyHost);
     }
@@ -1833,6 +1836,7 @@ static void ATTR_NONNULL() setInstParamDefaults(instanceData *const pData) {
     pData->compressionLevel = -1;  // default compression
     pData->allowUnsignedCerts = 0;
     pData->skipVerifyHost = 0;
+    pData->httpVersion = CURL_HTTP_VERSION_NONE;
     pData->tplName = NULL;
     pData->errorFile = NULL;
     pData->caCertFile = NULL;
@@ -2056,6 +2060,19 @@ BEGINnewActInst
             pData->skipVerifyHost = pvals[i].val.d.n;
         } else if (!strcmp(actpblk.descr[i].name, "usehttps")) {
             pData->useHttps = pvals[i].val.d.n;
+        } else if (!strcmp(actpblk.descr[i].name, "httpversion")) {
+            char *const version = es_str2cstr(pvals[i].val.d.estr, NULL);
+            if (!strcmp(version, "auto")) {
+                pData->httpVersion = CURL_HTTP_VERSION_NONE;
+            } else if (!strcmp(version, "1.1")) {
+                pData->httpVersion = CURL_HTTP_VERSION_1_1;
+            } else if (!strcmp(version, "2")) {
+                pData->httpVersion = CURL_HTTP_VERSION_2_0;
+            } else {
+                LogError(0, NO_ERRCODE, "error: 'httpversion' %s unknown defaulting to 'auto'", version);
+                pData->httpVersion = CURL_HTTP_VERSION_NONE;
+            }
+            free(version);
         } else if (!strcmp(actpblk.descr[i].name, "template")) {
             pData->tplName = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
         } else if (!strcmp(actpblk.descr[i].name, "tls.cacert")) {
