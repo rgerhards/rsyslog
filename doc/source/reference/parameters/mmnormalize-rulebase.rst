@@ -25,11 +25,13 @@ This parameter applies to :doc:`../../configuration/modules/mmnormalize`.
 
 Description
 -----------
-Specifies which rulebase file is to use. If there are multiple mmnormalize
+Specifies which rulebase file to use. If there are multiple mmnormalize
 instances, each one can use a different file. However, a single instance can
 use only a single file. This parameter or :ref:`param-mmnormalize-rule` MUST be given, because
-normalization can only happen based on a rulebase. It is recommended that an
-be found in the `liblognorm manual <https://www.liblognorm.com/manual/>`_.
+normalization can only happen based on a rulebase. Normalization itself is
+performed by `liblognorm <https://www.liblognorm.com/>`_; see the
+`liblognorm configuration documentation <https://www.liblognorm.com/files/manual/configuration.html>`_
+for details on creating and managing rulebases.
 
 Action usage
 -------------
