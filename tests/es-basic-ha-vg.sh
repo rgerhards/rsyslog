@@ -2,7 +2,7 @@
 # This file is part of the rsyslog project, released under ASL 2.0
 . ${srcdir:=.}/diag.sh init
 export NUMMESSAGES=100
-export ES_DOWNLOAD=elasticsearch-6.0.0.tar.gz
+export ES_DOWNLOAD=elasticsearch-7.14.1-linux-x86_64.tar.gz
 export ES_PORT=19200
 ensure_elasticsearch_ready
 
@@ -14,10 +14,11 @@ template(name="tpl" type="string"
 
 module(load="../plugins/omelasticsearch/.libs/omelasticsearch")
 :msg, contains, "msgnum:" action(type="omelasticsearch"
-				 template="tpl"
-				 serverport=`echo $ES_PORT`
-				 searchIndex="rsyslog_testbench"
-				 bulkmode="on")
+                                 template="tpl"
+                                 serverport=`echo $ES_PORT`
+                                 searchType="_doc"
+                                 searchIndex="rsyslog_testbench"
+                                 bulkmode="on")
 '
 startup_vg
 injectmsg
