@@ -48,6 +48,9 @@ Parameters
   - ``jsonr`` – avoid double escaping while keeping JSON safe
   - ``jsonfr`` – combination of ``jsonf`` and ``jsonr``
 
+  When omitted, the template-level ``format`` parameter (if provided)
+  selects the default formatting behaviour.
+
 - ``position.to`` – end position. Since 8.2302.0, negative values strip
   characters from the end. For example, ``position.from="2"
   position.to="-1"`` removes the first and last character. This is handy

@@ -245,12 +245,19 @@ TESTS +=  \
 	template-pure-json.sh \
 	template-pos-from-to.sh \
 	template-pos-from-to-lowercase.sh \
-	template-pos-from-to-oversize.sh \
-	template-pos-from-to-oversize-lowercase.sh \
-	template-pos-from-to-missing-jsonvar.sh \
-	template-const-jsonf.sh \
-	template-topos-neg.sh \
-	fac_authpriv.sh \
+        template-pos-from-to-oversize.sh \
+        template-pos-from-to-oversize-lowercase.sh \
+        template-pos-from-to-missing-jsonvar.sh \
+        template-const-jsonf.sh \
+        template-topos-neg.sh \
+        tpl-format-json-canonical-basic.sh \
+        tpl-format-json-quoted-basic.sh \
+        tpl-format-precedence-per-prop.sh \
+        tpl-format-legacy-fallback.sh \
+        tpl-format-mixed-warning.sh \
+        tpl-format-sql-mysql.sh \
+        tpl-format-sql-std.sh \
+        fac_authpriv.sh \
 	fac_local0.sh \
 	fac_local7.sh \
 	fac_mail.sh \
@@ -2363,12 +2370,19 @@ EXTRA_DIST= \
 	template-pure-json.sh \
 	template-pos-from-to.sh \
 	template-pos-from-to-lowercase.sh \
-	template-pos-from-to-oversize.sh \
-	template-pos-from-to-oversize-lowercase.sh \
-	template-pos-from-to-missing-jsonvar.sh \
-	template-const-jsonf.sh \
-	template-topos-neg.sh \
-	fac_authpriv.sh \
+        template-pos-from-to-oversize.sh \
+        template-pos-from-to-oversize-lowercase.sh \
+        template-pos-from-to-missing-jsonvar.sh \
+        template-const-jsonf.sh \
+        template-topos-neg.sh \
+        tpl-format-json-canonical-basic.sh \
+        tpl-format-json-quoted-basic.sh \
+        tpl-format-precedence-per-prop.sh \
+        tpl-format-legacy-fallback.sh \
+        tpl-format-mixed-warning.sh \
+        tpl-format-sql-mysql.sh \
+        tpl-format-sql-std.sh \
+        fac_authpriv.sh \
 	fac_local0.sh \
 	fac_local0-vg.sh \
 	fac_local7.sh \

@@ -3239,6 +3239,60 @@ finalize_it:
     RETiRet;
 }
 
+static int jsonValueIsNull(const uchar *pSrc, const unsigned buflen) {
+    return (buflen == 4 && !strncmp((const char *)pSrc, "null", 4));
+}
+
+static int jsonValueIsBool(const uchar *pSrc, const unsigned buflen, int *val) {
+    if (buflen == 4 && !strncmp((const char *)pSrc, "true", 4)) {
+        if (val != NULL) *val = 1;
+        return 1;
+    }
+    if (buflen == 5 && !strncmp((const char *)pSrc, "false", 5)) {
+        if (val != NULL) *val = 0;
+        return 1;
+    }
+    return 0;
+}
+
+static int jsonValueIsNumber(const uchar *pSrc, const unsigned buflen) {
+    if (buflen == 0) return 0;
+
+    unsigned i = 0;
+    if (pSrc[i] == '-') {
+        ++i;
+        if (i == buflen) return 0;
+    }
+
+    if (pSrc[i] == '0') {
+        ++i;
+        if (i < buflen && isdigit((unsigned char)pSrc[i])) return 0;
+    } else {
+        if (!isdigit((unsigned char)pSrc[i])) return 0;
+        while (i < buflen && isdigit((unsigned char)pSrc[i])) ++i;
+    }
+
+    if (i < buflen && pSrc[i] == '.') {
+        ++i;
+        if (i == buflen) return 0;
+        if (!isdigit((unsigned char)pSrc[i])) return 0;
+        while (i < buflen && isdigit((unsigned char)pSrc[i])) ++i;
+    }
+
+    if (i < buflen && (pSrc[i] == 'e' || pSrc[i] == 'E')) {
+        ++i;
+        if (i == buflen) return 0;
+        if (pSrc[i] == '+' || pSrc[i] == '-') {
+            ++i;
+            if (i == buflen) return 0;
+        }
+        if (!isdigit((unsigned char)pSrc[i])) return 0;
+        while (i < buflen && isdigit((unsigned char)pSrc[i])) ++i;
+    }
+
+    return (i == buflen);
+}
+
 
 /* Format a property as JSON field, that means
  * "name"="value"
@@ -3257,7 +3311,6 @@ static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
     unsigned buflen;
     uchar *pSrc;
     es_str_t *dst = NULL;
-    int is_numeric = 1;
     DEFiRet;
 
     pSrc = *ppRes;
@@ -3268,7 +3321,6 @@ static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
         if (pTpe->data.field.options.onEmpty == TPE_DATAEMPTY_SKIP) {
             FINALIZE;
         }
-        is_numeric = 0;
     }
     /* we hope we have only few escapes... */
     dst = es_newStr(buflen + pTpe->lenFieldName + 15);
@@ -3278,19 +3330,48 @@ static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
     if (buflen == 0 && pTpe->data.field.options.onEmpty == TPE_DATAEMPTY_NULL) {
         es_addBufConstcstr(&dst, "null");
     } else {
-        if (pTpe->data.field.options.dataType == TPE_DATATYPE_AUTO) {
-            for (unsigned i = 0; i < buflen; ++i) {
-                if (pSrc[i] < '0' || pSrc[i] > '9') {
-                    is_numeric = 0;
-                    break;
+        if (pTpe->data.field.options.bJSONfr) {
+            es_addBuf(&dst, (const char *)pSrc, buflen);
+        } else if (pTpe->data.field.options.dataType == TPE_DATATYPE_AUTO) {
+            int handled = 0;
+            if (pTpe->data.field.canonicalJSON && buflen > 0) {
+                int boolVal = 0;
+                if (jsonValueIsNull(pSrc, buflen)) {
+                    es_addBufConstcstr(&dst, "null");
+                    handled = 1;
+                } else if (jsonValueIsBool(pSrc, buflen, &boolVal)) {
+                    if (boolVal) {
+                        es_addBufConstcstr(&dst, "true");
+                    } else {
+                        es_addBufConstcstr(&dst, "false");
+                    }
+                    handled = 1;
+                } else if (jsonValueIsNumber(pSrc, buflen)) {
+                    CHKiRet(jsonAddVal(pSrc, buflen, &dst, escapeAll));
+                    handled = 1;
                 }
             }
-            if (!is_numeric) {
-                es_addChar(&dst, '"');
-            }
-            CHKiRet(jsonAddVal(pSrc, buflen, &dst, escapeAll));
-            if (!is_numeric) {
-                es_addChar(&dst, '"');
+            if (!handled) {
+                if (pTpe->data.field.canonicalJSON) {
+                    es_addChar(&dst, '"');
+                    CHKiRet(jsonAddVal(pSrc, buflen, &dst, escapeAll));
+                    es_addChar(&dst, '"');
+                } else {
+                    int is_numeric = 1;
+                    for (unsigned i = 0; i < buflen; ++i) {
+                        if (pSrc[i] < '0' || pSrc[i] > '9') {
+                            is_numeric = 0;
+                            break;
+                        }
+                    }
+                    if (!is_numeric) {
+                        es_addChar(&dst, '"');
+                    }
+                    CHKiRet(jsonAddVal(pSrc, buflen, &dst, escapeAll));
+                    if (!is_numeric) {
+                        es_addChar(&dst, '"');
+                    }
+                }
             }
         } else if (pTpe->data.field.options.dataType == TPE_DATATYPE_STRING) {
             es_addChar(&dst, '"');

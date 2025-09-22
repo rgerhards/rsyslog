@@ -1,5 +1,9 @@
 ----------------------------------------------------------------------------------------
 Scheduled Release 8.2510.0 (aka 2025.10) 2025-10-??
+- 2025-09-??: templates: add template-level ``format=`` parameter (raw,
+  json-quoted, json-canonical, sql-mysql, sql-std); legacy JSON/SQL options
+  remain supported but are ignored with a warning when mixed with
+  ``format``.
 - overall improved documentation via a large set of topic updates.
 - 2025-09-22: mmleefparse: new message modification module for LEEF format
   This parses the LEEF message (if it is) and creates a JSON subtree.
