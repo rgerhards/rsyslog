@@ -4,8 +4,8 @@
 
 generate_conf
 add_conf '
-template(name="snarejson" type="list" option.jsonf="on") {
-    property(outname="snare" name="$!snare" format="jsonf")
+template(name="snarejson" type="list") {
+    property(outname="snare" name="$!snare")
 }
 module(load="../plugins/mmsnarewinevtsec/.libs/mmsnarewinevtsec")
 module(load="../plugins/imptcp/.libs/imptcp")
@@ -31,17 +31,19 @@ input(type="imptcp" port="0" listenPortFileName="'$RSYSLOG_DYNNAME'.strict_port"
 startup
 payload=$'<13>1 2025-09-18T13:07:00.000000Z host app - - - MSWinEventLog\t1\tSecurity\t999\tThu Sep 18 13:07:00 2025\t4624\tWindows\tN/A\tN/A\tSuccess Audit\thost\tLogon\t\tLogon event with trailing field.    Subject:   Security ID:  S-1-0-0   Account Name:  -   Account Domain:  -   Logon ID:  0x0\t54321\tEXTRA'
 lenient_port=$(cat "$RSYSLOG_DYNNAME.lenient_port")
-tcpflood -m1 -p "$lenient_port" -M "$payload"
+tcpflood -m1 -p "$lenient_port" -M "\"$payload\""
 strict_port=$(cat "$RSYSLOG_DYNNAME.strict_port")
-tcpflood -m1 -p "$strict_port" -M "$payload"
+tcpflood -m1 -p "$strict_port" -M "\"$payload\""
 shutdown_when_empty
 wait_shutdown
 
-python3 <<'PY'
+python3 - "$RSYSLOG_DYNNAME.lenient.log" "$RSYSLOG_DYNNAME.strict.log" <<'PY'
 import json
+import sys
 from pathlib import Path
-lenient = Path("${RSYSLOG_DYNNAME}.lenient.log")
-strict = Path("${RSYSLOG_DYNNAME}.strict.log")
+
+lenient = Path(sys.argv[1])
+strict = Path(sys.argv[2])
 assert lenient.exists(), "lenient output missing"
 len_lines = [line.strip() for line in lenient.read_text().splitlines() if line.strip()]
 assert len(len_lines) == 1, f"lenient mode should parse message, got {len(len_lines)}"

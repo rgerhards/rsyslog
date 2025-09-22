@@ -92,14 +92,14 @@ DEF_OMOD_STATIC_DATA;
 DEFobjCurrIf(datetime);
 DEFobjCurrIf(statsobj);
 
-static struct json_object *json_new_string_or_int(const strfrag_t *frag);
-
-typedef enum { SNARE_MODE_LENIENT = 0, SNARE_MODE_STRICT = 1 } snare_mode_t;
-
 typedef struct {
     const char *ptr;
     size_t len;
 } strfrag_t;
+
+static struct json_object *json_new_string_or_int(const strfrag_t *frag);
+
+typedef enum { SNARE_MODE_LENIENT = 0, SNARE_MODE_STRICT = 1 } snare_mode_t;
 
 typedef struct {
     snare_mode_t mode;
@@ -979,6 +979,21 @@ ENDnewActInst
 
 NO_LEGACY_CONF_parseSelectorAct
 
+BEGINmodExit
+    CODESTARTmodExit;
+    statsobj.Destruct(&snareStats);
+    objRelease(datetime, CORE_COMPONENT);
+    objRelease(statsobj, CORE_COMPONENT);
+ENDmodExit
+
+BEGINqueryEtryPt
+    CODESTARTqueryEtryPt;
+    CODEqueryEtryPt_STD_OMOD_QUERIES;
+    CODEqueryEtryPt_STD_OMOD8_QUERIES;
+    CODEqueryEtryPt_STD_CONF2_OMOD_QUERIES;
+    CODEqueryEtryPt_STD_CONF2_QUERIES;
+ENDqueryEtryPt
+
 /* clang-format off */
 BEGINmodInit()
     CODESTARTmodInit;
@@ -1011,18 +1026,3 @@ BEGINmodInit()
     CHKiRet(statsobj.ConstructFinalize(snareStats));
 ENDmodInit
 /* clang-format on */
-
-BEGINmodExit
-    CODESTARTmodExit;
-    statsobj.Destruct(&snareStats);
-    objRelease(datetime, CORE_COMPONENT);
-    objRelease(statsobj, CORE_COMPONENT);
-ENDmodExit
-
-BEGINqueryEtryPt
-    CODESTARTqueryEtryPt;
-    CODEqueryEtryPt_STD_OMOD_QUERIES;
-    CODEqueryEtryPt_STD_OMOD8_QUERIES;
-    CODEqueryEtryPt_STD_CONF2_OMOD_QUERIES;
-    CODEqueryEtryPt_STD_CONF2_QUERIES;
-ENDqueryEtryPt

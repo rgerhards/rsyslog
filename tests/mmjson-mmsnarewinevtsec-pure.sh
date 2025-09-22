@@ -4,8 +4,8 @@
 
 generate_conf
 add_conf '
-template(name="snarejson" type="list" option.jsonf="on") {
-    property(outname="snare" name="$!snare" format="jsonf")
+template(name="snarejson" type="list") {
+    property(outname="snare" name="$!snare")
 }
 module(load="../plugins/mmsnarewinevtsec/.libs/mmsnarewinevtsec")
 module(load="../plugins/imfile/.libs/imfile")
@@ -25,10 +25,12 @@ MSG
 shutdown_when_empty
 wait_shutdown
 
-python3 <<'PY'
+python3 - "$RSYSLOG_OUT_LOG" <<'PY'
 import json
 from pathlib import Path
-out = Path("${RSYSLOG_OUT_LOG}")
+import sys
+
+out = Path(sys.argv[1])
 lines = [line.strip() for line in out.read_text().splitlines() if line.strip()]
 assert len(lines) == 1, f"expected one parsed line, got {len(lines)}"
 record = json.loads(lines[0])["snare"]

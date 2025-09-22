@@ -4,8 +4,8 @@
 
 generate_conf
 add_conf '
-template(name="snarejson" type="list" option.jsonf="on") {
-    property(outname="snare" name="$!snare" format="jsonf")
+template(name="snarejson" type="list") {
+    property(outname="snare" name="$!snare")
 }
 module(load="../plugins/mmsnarewinevtsec/.libs/mmsnarewinevtsec")
 module(load="../plugins/imptcp/.libs/imptcp")
@@ -19,14 +19,15 @@ if $parsesuccess == "OK" then {
 
 startup
 payload=$'<13>1 2025-09-18T13:05:10.000000Z host app - - - MSWinEventLog\t1\tSecurity\t284138677\tThu Sep 18 13:05:10 2025\t4672\tMicrosoft-Windows-Security-Auditing\tSYSTEM\tSidTypeUser\tSuccess Audit\thost\tSpecial Logon\t\tSpecial privileges assigned to new logon.    Subject:   Security ID:  S-1-5-18   Account Name:  WINHOST$   Account Domain:  CONTOSO   Logon ID:  0x3e7    Privileges:  SeTcbPrivilege   SeBackupPrivilege   SeRestorePrivilege   SeDebugPrivilege   SeImpersonatePrivilege\t78901'
-tcpflood -m1 -M "$payload"
+tcpflood -m1 -M "\"$payload\""
 shutdown_when_empty
 wait_shutdown
 
-python3 <<'PY'
+python3 - "$RSYSLOG_OUT_LOG" <<'PY'
 import json
+import sys
 from pathlib import Path
-out = Path("${RSYSLOG_OUT_LOG}")
+out = Path(sys.argv[1])
 lines = [line.strip() for line in out.read_text().splitlines() if line.strip()]
 assert len(lines) == 1, f"expected one parsed line, got {len(lines)}"
 record = json.loads(lines[0])["snare"]
