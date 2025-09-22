@@ -1514,6 +1514,18 @@ AC_ARG_ENABLE(mmleefparse,
 )
 AM_CONDITIONAL(ENABLE_MMLEEFPARSE, test x$enable_mmleefparse = xyes)
 
+# mmsnarewinevtsec
+AC_ARG_ENABLE(mmsnarewinevtsec,
+        [AS_HELP_STRING([--enable-mmsnarewinevtsec],[Enable building mmsnarewinevtsec support @<:@default=yes@:>@])],
+        [case "${enableval}" in
+         yes) enable_mmsnarewinevtsec="yes" ;;
+          no) enable_mmsnarewinevtsec="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-mmsnarewinevtsec) ;;
+         esac],
+        [enable_mmsnarewinevtsec=yes]
+)
+AM_CONDITIONAL(ENABLE_MMSNAREWINEVTSEC, test x$enable_mmsnarewinevtsec = xyes)
+
 # mmnjsonparse
 AC_ARG_ENABLE(mmjsonparse,
         [AS_HELP_STRING([--enable-mmjsonparse],[Enable building mmjsonparse support @<:@default=no@:>@])],
@@ -3114,10 +3126,11 @@ AC_CONFIG_FILES([Makefile \
 		plugins/omsnmp/Makefile \
 		plugins/omudpspoof/Makefile \
 		plugins/ommongodb/Makefile \
-		plugins/mmnormalize/Makefile \
-		plugins/mmjsonparse/Makefile \
-		plugins/mmleefparse/Makefile \
-		plugins/mmaudit/Makefile \
+                plugins/mmnormalize/Makefile \
+                plugins/mmjsonparse/Makefile \
+                plugins/mmleefparse/Makefile \
+                plugins/mmsnarewinevtsec/Makefile \
+                plugins/mmaudit/Makefile \
 		plugins/mmanon/Makefile \
 		plugins/mmrm1stspace/Makefile \
 		plugins/mmutf8fix/Makefile \
@@ -3262,6 +3275,7 @@ echo "---{ message modification modules }---"
 echo "    mmnormalize module will be compiled:      $enable_mmnormalize"
 echo "    mmjsonparse module will be compiled:      $enable_mmjsonparse"
 echo "    mmleefparse module will be compiled:      $enable_mmleefparse"
+echo "    mmsnarewinevtsec module will be compiled:  $enable_mmsnarewinevtsec"
 echo "    mmgrok module will be compiled:           $enable_mmgrok"
 echo "    mmjaduit module will be compiled:         $enable_mmaudit"
 echo "    mmsnmptrapd module will be compiled:      $enable_mmsnmptrapd"

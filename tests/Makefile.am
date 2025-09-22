@@ -1497,11 +1497,27 @@ TESTS +=  \
 	json_null-vg.sh
 endif
 TESTS +=  \
-	stop_when_array_has_element.sh \
-	json_null_array.sh \
-	json_null.sh \
-	json_var_cmpr.sh \
-	json_var_case.sh
+        stop_when_array_has_element.sh \
+        json_null_array.sh \
+        json_null.sh \
+        json_var_cmpr.sh \
+        json_var_case.sh
+endif
+
+if ENABLE_MMSNAREWINEVTSEC
+if ENABLE_IMPTCP
+TESTS +=  \
+        mmjson-mmsnarewinevtsec-wrapped-4624.sh \
+        mmjson-mmsnarewinevtsec-wrapped-4672.sh \
+        mmjson-mmsnarewinevtsec-delim.sh \
+        mmjson-mmsnarewinevtsec-strict.sh \
+        mmjson-mmsnarewinevtsec-parse-time.sh \
+        mmjson-mmsnarewinevtsec-eventlogcounter.sh
+endif
+if ENABLE_IMFILE
+TESTS +=  \
+        mmjson-mmsnarewinevtsec-pure.sh
+endif
 endif
 
 if ENABLE_MMDBLOOKUP

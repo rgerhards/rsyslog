@@ -252,6 +252,10 @@ if ENABLE_MMLEEFPARSE
 SUBDIRS += plugins/mmleefparse
 endif
 
+if ENABLE_MMSNAREWINEVTSEC
+SUBDIRS += plugins/mmsnarewinevtsec
+endif
+
 if ENABLE_MMJSONPARSE
 SUBDIRS += plugins/mmjsonparse
 endif
