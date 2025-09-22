@@ -46,7 +46,8 @@
 #include "datetime.h"
 #include "statsobj.h"
 #include "msg.h"
-#include "timezones.h"
+
+extern tzinfo_t *glblFindTimezone(rsconf_t *cnf, char *id);
 
 #include "mmsnarewinevtsec.h"
 
@@ -88,12 +89,12 @@ static struct cnfparamblk actpblk = {CNFPARAMBLK_VERSION, sizeof(actpdescr) / si
 
 /* internal structures */
 DEF_OMOD_STATIC_DATA;
-DEFobjCurrIf(datetime) DEFobjCurrIf(statsobj)
+DEFobjCurrIf(datetime);
+DEFobjCurrIf(statsobj);
 
-    typedef enum {
-        SNARE_MODE_LENIENT = 0,
-        SNARE_MODE_STRICT = 1
-    } snare_mode_t;
+static struct json_object *json_new_string_or_int(const strfrag_t *frag);
+
+typedef enum { SNARE_MODE_LENIENT = 0, SNARE_MODE_STRICT = 1 } snare_mode_t;
 
 typedef struct {
     const char *ptr;
@@ -593,6 +594,7 @@ static sbool format_datetime_rfc3339(const instanceData *pData,
                                      size_t bufsz) {
     if (!pData->parse_time || !pData->tz_offset_valid) return 0;
     if (datetime_str->len == 0 || datetime_str->len >= 128) return 0;
+    if (bufsz < 32) return 0;
 
     char tmp[128];
     memcpy(tmp, datetime_str->ptr, datetime_str->len);
@@ -820,10 +822,11 @@ static rsRetVal parse_message(wrkrInstanceData_t *pWrkrData, smsg_t *pMsg) {
     }
 #endif
 
-    if (ext_ok)
+    if (ext_ok) {
         STATSCOUNTER_INC(ctrExpandedParseOk, mutCtrExpandedParseOk);
-    else
+    } else {
         STATSCOUNTER_INC(ctrExpandedParseFail, mutCtrExpandedParseFail);
+    }
 
     json_object_object_add(snare, "extended_info", extended);
 
@@ -859,15 +862,22 @@ BEGINendCnfLoad
     loadModConf = NULL;
 ENDendCnfLoad
 
+BEGINcheckCnf
+    CODESTARTcheckCnf;
+ENDcheckCnf
+
 BEGINactivateCnf
     CODESTARTactivateCnf;
     runModConf = pModConf;
 ENDactivateCnf
 
+BEGINfreeCnf
+    CODESTARTfreeCnf;
+ENDfreeCnf
+
 BEGINcreateInstance
     CODESTARTcreateInstance;
     setInstParamDefaults(pData);
-finalize_it:
 ENDcreateInstance
 
 BEGINfreeInstance
@@ -901,7 +911,6 @@ ENDtryResume
 
 BEGINnewActInst
     struct cnfparamvals *pvals;
-    instanceData *pData = NULL;
     int i;
     CODESTARTnewActInst;
 
@@ -909,6 +918,7 @@ BEGINnewActInst
         ABORT_FINALIZE(RS_RET_MISSING_CNFPARAMS);
     }
 
+    CODE_STD_STRING_REQUESTnewActInst(1);
     CHKiRet(OMSRsetEntry(*ppOMSR, 0, NULL, OMSR_TPL_AS_MSG));
     CHKiRet(createInstance(&pData));
 
@@ -967,10 +977,14 @@ BEGINnewActInst
     cnfparamvalsDestruct(pvals, &actpblk);
 ENDnewActInst
 
+NO_LEGACY_CONF_parseSelectorAct
+
+/* clang-format off */
 BEGINmodInit()
     CODESTARTmodInit;
     *ipIFVersProvided = CURR_MOD_IF_VERSION;
-    CODEmodInit_QueryRegCFSLineHdlr CHKiRet(objUse(statsobj, CORE_COMPONENT));
+    CODEmodInit_QueryRegCFSLineHdlr
+    CHKiRet(objUse(statsobj, CORE_COMPONENT));
     CHKiRet(objUse(datetime, CORE_COMPONENT));
 
     CHKiRet(statsobj.Construct(&snareStats));
@@ -996,6 +1010,7 @@ BEGINmodInit()
 
     CHKiRet(statsobj.ConstructFinalize(snareStats));
 ENDmodInit
+/* clang-format on */
 
 BEGINmodExit
     CODESTARTmodExit;
