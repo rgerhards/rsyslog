@@ -3358,10 +3358,14 @@ static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
                     es_addChar(&dst, '"');
                 } else {
                     int is_numeric = 1;
-                    for (unsigned i = 0; i < buflen; ++i) {
-                        if (pSrc[i] < '0' || pSrc[i] > '9') {
-                            is_numeric = 0;
-                            break;
+                    if (buflen == 0) {
+                        is_numeric = 0;
+                    } else {
+                        for (unsigned i = 0; i < buflen; ++i) {
+                            if (pSrc[i] < '0' || pSrc[i] > '9') {
+                                is_numeric = 0;
+                                break;
+                            }
                         }
                     }
                     if (!is_numeric) {

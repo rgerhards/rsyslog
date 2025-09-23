@@ -2148,10 +2148,11 @@ rsRetVal ATTR_NONNULL() tplProcessCnf(struct cnfobj *o) {
     }
 
     if (pTpl->legacyOptsIgnored && haveFormat) {
-        LogError(0, RS_RET_CONF_PARSE_WARNING,
-                 "template '%s': legacy JSON/SQL options are ignored because 'format' is set; behavior is controlled by "
-                 "'format'",
-                 pTpl->pszName);
+        LogError(
+            0, RS_RET_CONF_PARSE_WARNING,
+            "template '%s': legacy JSON/SQL options are ignored because 'format' is set; behavior is controlled by "
+            "'format'",
+            pTpl->pszName);
     }
 
     if (haveFormat) {
