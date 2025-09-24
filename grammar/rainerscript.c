@@ -2642,6 +2642,73 @@ static int estimateYear(int cy, int cm, int im) {
     return cy;
 }
 
+static int formatContainsDirective(const char *fmt, const char *directives) {
+    const char *p = fmt;
+    while (*p != '\0') {
+        if (*p != '%') {
+            ++p;
+            continue;
+        }
+
+        ++p;
+        if (*p == '\0') break;
+        if (*p == '%') {
+            ++p;
+            continue;
+        }
+
+        if (*p == 'E' || *p == 'O') {
+            ++p;
+            if (*p == '\0') break;
+        }
+
+        if (strchr(directives, *p) != NULL) return 1;
+        ++p;
+    }
+
+    return 0;
+}
+
+static int parseTimezoneTail(const char *input, int *offsetMinutes, char *offsetMode) {
+    size_t len = strlen(input);
+
+    while (len > 0 && isspace((unsigned char)input[len - 1])) --len;
+    if (len == 0) return 0;
+
+    const char *tail = input + len - 1;
+    if (*tail == 'Z' || *tail == 'z') {
+        *offsetMinutes = 0;
+        *offsetMode = 'Z';
+        return 1;
+    }
+
+    if (len >= 5) {
+        const char *start = input + len - 5;
+        if ((*start == '+' || *start == '-') && isdigit((unsigned char)start[1]) && isdigit((unsigned char)start[2]) &&
+            isdigit((unsigned char)start[3]) && isdigit((unsigned char)start[4])) {
+            int hours = (start[1] - '0') * 10 + (start[2] - '0');
+            int mins = (start[3] - '0') * 10 + (start[4] - '0');
+            *offsetMinutes = hours * 60 + mins;
+            *offsetMode = *start;
+            return 1;
+        }
+    }
+
+    if (len >= 6) {
+        const char *start = input + len - 6;
+        if ((*start == '+' || *start == '-') && isdigit((unsigned char)start[1]) && isdigit((unsigned char)start[2]) &&
+            start[3] == ':' && isdigit((unsigned char)start[4]) && isdigit((unsigned char)start[5])) {
+            int hours = (start[1] - '0') * 10 + (start[2] - '0');
+            int mins = (start[4] - '0') * 10 + (start[5] - '0');
+            *offsetMinutes = hours * 60 + mins;
+            *offsetMode = *start;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static void ATTR_NONNULL() doFunct_ParseTime(struct cnffunc *__restrict__ const func,
                                              struct svar *__restrict__ const ret,
                                              void *__restrict__ const usrptr,
@@ -2683,6 +2750,110 @@ static void ATTR_NONNULL() doFunct_ParseTime(struct cnffunc *__restrict__ const 
         free(str);
     }
     varFreeMembers(&srcVal);
+}
+
+static void ATTR_NONNULL() doFunct_StrptimeToRFC3339(struct cnffunc *__restrict__ const func,
+                                                     struct svar *__restrict__ const ret,
+                                                     void *__restrict__ const usrptr,
+                                                     wti_t *__restrict__ const pWti) {
+    struct svar srcVal[2];
+    int bMustFreeStr;
+    int bMustFreeFmt;
+    char *input = NULL;
+    char *format = NULL;
+    struct tm parsedTime;
+    struct syslogTime sysTime;
+    char result[64];
+    int haveYear;
+    int haveTimezone;
+    int tzMinutes = 0;
+    char tzMode = 'Z';
+    char *rest;
+
+    ret->datatype = 'S';
+    ret->d.estr = NULL;
+    wtiSetScriptErrno(pWti, RS_SCRIPT_EOK);
+
+    cnfexprEval(func->expr[0], &srcVal[0], usrptr, pWti);
+    cnfexprEval(func->expr[1], &srcVal[1], usrptr, pWti);
+
+    input = (char *)var2CString(&srcVal[0], &bMustFreeStr);
+    format = (char *)var2CString(&srcVal[1], &bMustFreeFmt);
+
+    if (objUse(datetime, CORE_COMPONENT) != RS_RET_OK) goto finalize;
+
+    memset(&parsedTime, 0, sizeof(parsedTime));
+    parsedTime.tm_isdst = -1;
+    rest = strptime(input, format, &parsedTime);
+    if (rest == NULL) {
+        wtiSetScriptErrno(pWti, RS_SCRIPT_EINVAL);
+        goto finalize;
+    }
+
+    while (*rest != '\0' && isspace((unsigned char)*rest)) ++rest;
+    if (*rest != '\0') {
+        wtiSetScriptErrno(pWti, RS_SCRIPT_EINVAL);
+        goto finalize;
+    }
+
+    haveYear = formatContainsDirective(format, "YyGgC");
+    if (!haveYear) {
+        time_t now = time(NULL);
+        struct tm current;
+        gmtime_r(&now, &current);
+        parsedTime.tm_year = estimateYear(current.tm_year + 1900, current.tm_mon + 1, parsedTime.tm_mon + 1) - 1900;
+    }
+
+    if (parsedTime.tm_mday == 0) parsedTime.tm_mday = 1;
+    if (parsedTime.tm_mon < 0) parsedTime.tm_mon = 0;
+
+    haveTimezone = formatContainsDirective(format, "z");
+    if (haveTimezone) {
+        if (!parseTimezoneTail(input, &tzMinutes, &tzMode)) {
+            tzMinutes = 0;
+            tzMode = 'Z';
+        }
+    }
+
+    memset(&sysTime, 0, sizeof(sysTime));
+    sysTime.year = parsedTime.tm_year + 1900;
+    sysTime.month = parsedTime.tm_mon + 1;
+    sysTime.day = parsedTime.tm_mday;
+    sysTime.hour = parsedTime.tm_hour;
+    sysTime.minute = parsedTime.tm_min;
+    sysTime.second = parsedTime.tm_sec;
+    sysTime.wday = parsedTime.tm_wday;
+    sysTime.secfrac = 0;
+    sysTime.secfracPrecision = 0;
+    sysTime.timeType = TIME_TYPE_RFC5424;
+
+    if (tzMode == 'Z' || tzMinutes == 0) {
+        sysTime.OffsetMode = 'Z';
+        sysTime.OffsetHour = 0;
+        sysTime.OffsetMinute = 0;
+        sysTime.inUTC = 1;
+    } else {
+        sysTime.OffsetMode = tzMode;
+        sysTime.OffsetHour = tzMinutes / 60;
+        sysTime.OffsetMinute = tzMinutes % 60;
+        sysTime.inUTC = 0;
+    }
+
+    int len = datetime.formatTimestamp3339(&sysTime, result);
+    if (len <= 0) {
+        wtiSetScriptErrno(pWti, RS_SCRIPT_EINVAL);
+        goto finalize;
+    }
+
+    ret->d.estr = es_newStrFromCStr(result, len);
+
+finalize:
+    if (ret->d.estr == NULL) ret->d.estr = es_newStrFromCStr("", 0);
+
+    if (input != NULL) free(input);
+    if (format != NULL) free(format);
+    varFreeMembers(&srcVal[0]);
+    varFreeMembers(&srcVal[1]);
 }
 
 static int ATTR_NONNULL(1, 3, 4) doFunc_is_time(const char *__restrict__ const str,
@@ -3790,6 +3961,7 @@ static struct scriptFunct functions[] = {
     {"random", 1, 1, doFunct_RandomGen, NULL, NULL},
     {"format_time", 2, 2, doFunct_FormatTime, NULL, NULL},
     {"parse_time", 1, 1, doFunct_ParseTime, NULL, NULL},
+    {"strptime_to_rfc3339", 2, 2, doFunct_StrptimeToRFC3339, NULL, NULL},
     {"is_time", 1, 2, doFunct_IsTime, NULL, NULL},
     {"parse_json", 2, 2, doFunc_parse_json, NULL, NULL},
     {"get_property", 2, 2, doFunc_get_property, NULL, NULL},

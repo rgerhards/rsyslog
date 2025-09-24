@@ -445,8 +445,9 @@ TESTS +=  \
 	rscript_trim.sh \
 	rscript_substring.sh \
 	rscript_toupper.sh \
-	rscript_format_time.sh \
-	rscript_parse_time.sh \
+        rscript_format_time.sh \
+        rscript_parse_time.sh \
+        rscript_strptime_to_rfc3339.sh \
 	rscript_is_time.sh \
 	rscript_script_error.sh \
 	rscript_parse_json.sh \
@@ -2171,9 +2172,11 @@ EXTRA_DIST= \
 	rscript_trim.sh \
 	rscript_substring.sh \
 	rscript_toupper.sh \
-	rscript_format_time.sh \
-	rscript_parse_time.sh \
-	rscript_parse_time_get-ts.py \
+        rscript_format_time.sh \
+        rscript_parse_time.sh \
+        rscript_strptime_to_rfc3339.sh \
+        rscript_parse_time_get-ts.py \
+        rscript_strptime_to_rfc3339_expect.py \
 	rscript_is_time.sh \
 	rscript_script_error.sh \
 	rscript_parse_json.sh \
