@@ -1,0 +1,55 @@
+services:
+  es:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.14.0
+    container_name: es-dev
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.license.self_generated.type=basic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}   # superuser
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - "127.0.0.1:9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:${ELASTIC_PASSWORD:-changeme} http://localhost:9200 >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+
+  # One-shot init that sets kibana_system password in ES
+  setup-kibana-pass:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      es: { condition: service_healthy }
+    entrypoint:
+      - sh
+      - -c
+      - |
+        echo "Setting kibana_system password..."
+        curl -s -u elastic:${ELASTIC_PASSWORD:-changeme} \
+             -H 'Content-Type: application/json' \
+             -X POST http://es:9200/_security/user/kibana_system/_password \
+             -d "{\"password\":\"${KIBANA_PASSWORD:-kibanapass}\"}" \
+        && echo "done"
+    restart: "no"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.14.0
+    container_name: kibana-dev
+    depends_on:
+      setup-kibana-pass: { condition: service_completed_successfully }
+    environment:
+      - ELASTICSEARCH_HOSTS=http://es:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD:-kibanapass}
+      - SERVER_PUBLICBASEURL=http://localhost:5601
+    ports:
+      - "127.0.0.1:5601:5601"
+
+volumes:
+  esdata:
+
