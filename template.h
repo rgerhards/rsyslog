@@ -35,6 +35,15 @@
     #include "regexp.h"
     #include "stringbuf.h"
 
+typedef enum tpl_default_fmt {
+    TPLFMT_UNSET = 0,
+    TPLFMT_RAW,
+    TPLFMT_JSON_QUOTED,
+    TPLFMT_JSON_CANONICAL,
+    TPLFMT_SQL_MYSQL,
+    TPLFMT_SQL_STD
+} tpl_default_fmt_t;
+
 struct template {
     struct template *pNext;
     char *pszName;
@@ -56,6 +65,8 @@ struct template {
      * than short...
      */
     char optCaseSensitive; /* case-sensitive variable property references, default False, 0 */
+    tpl_default_fmt_t defaultFormat; /* template-level default formatting */
+    char legacyOptsIgnored; /* legacy options present but ignored due to format */
 };
 
 enum EntryTypes { UNDEFINED = 0, CONSTANT = 1, FIELD = 2 };
@@ -162,6 +173,8 @@ struct templateEntry {
     #define TPE_DATAEMPTY_NULL 2
                 unsigned onEmpty : 2;
             } options; /* options as bit fields */
+            unsigned char dataTypeExplicit; /* datatype parameter explicitly set */
+            unsigned char canonicalJSON; /* canonical json auto typing */
         } field;
     } data;
 };

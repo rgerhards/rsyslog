@@ -139,6 +139,88 @@ List templates additionally support a block form:
 See the type-specific subpages for details.
 
 
+Template parameter: ``format``
+------------------------------
+
+The optional ``format`` parameter centralizes default escaping and
+framing for templates. It allows new configurations to pick a JSON or SQL
+profile in one place while preserving full control over individual
+``property()`` statements.
+
+Accepted values (case-insensitive):
+
+.. list-table:: ``format`` values
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Value
+     - Meaning
+   * - ``raw``
+     - No additional escaping or framing; legacy behaviour.
+   * - ``json-quoted``
+     - Render the template as a JSON object and quote values as strings
+       by default. Equivalent to ``option.json="on"`` together with
+       ``option.jsonf="on``.
+   * - ``json-canonical``
+     - Render the template as a JSON object with automatic typing. Values
+       that look like numbers, booleans, or ``null`` remain unquoted,
+       while strings are escaped and quoted.
+   * - ``sql-mysql``
+     - Escape values using MySQL/MariaDB rules (single quotes become
+       ``\'`` and backslashes double). Matches ``option.sql``.
+   * - ``sql-std``
+     - Escape single quotes using SQL-standard doubling (``'`` → ``''``).
+       Matches ``option.stdsql``.
+
+Precedence and compatibility notes:
+
+* ``property()`` statements that set their own ``format=`` continue to
+  take precedence over template defaults.
+* When ``format`` is specified, the legacy ``option.json``,
+  ``option.jsonf``, ``option.sql``, and ``option.stdsql`` parameters for
+  the same template are ignored and a one-time warning is logged during
+  configuration load.
+* If ``format`` is omitted, the legacy options behave exactly as before,
+  including their mutual exclusion rules and the requirement that SQL
+  writers enable either ``option.sql`` or ``option.stdsql`` before they
+  start.
+
+Examples:
+
+.. code-block:: none
+
+   template(name="out_json" type="list" format="json-quoted") {
+        property(outname="message" name="msg")
+   }
+   # Result: {"message":" msgnum:00000000:"}
+
+.. code-block:: none
+
+   template(name="out_canon" type="list" format="json-canonical") {
+        property(outname="counter" name="$!counter")
+        property(outname="rawJSON" name="$!payload" format="jsonfr")
+   }
+   # Result: {"counter":42, "rawJSON":{"custom":true}}
+
+Migration hints:
+
+.. list-table:: Legacy to ``format`` mapping
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Legacy setting(s)
+     - Preferred ``format`` value
+   * - ``option.json`` + ``option.jsonf``
+     - ``format="json-quoted"``
+   * - ``option.json`` with per-property ``format="jsonf"``
+     - ``format="json-quoted"``
+   * - Want typed JSON everywhere
+     - ``format="json-canonical"``
+   * - ``option.sql``
+     - ``format="sql-mysql"``
+   * - ``option.stdsql``
+     - ``format="sql-std"``
+
 .. _templates.types:
 
 Template types

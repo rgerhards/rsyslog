@@ -53,12 +53,17 @@ PRAGMA_IGNORE_Wswitch_enum
     DEFobjCurrIf(obj) DEFobjCurrIf(strgen)
 
     /* tables for interfacing with the v6 config system */
-    static struct cnfparamdescr cnfparamdescr[] = {
-        {"name", eCmdHdlrString, 1},         {"type", eCmdHdlrString, 1},
-        {"string", eCmdHdlrString, 0},       {"plugin", eCmdHdlrString, 0},
-        {"subtree", eCmdHdlrString, 0},      {"option.stdsql", eCmdHdlrBinary, 0},
-        {"option.sql", eCmdHdlrBinary, 0},   {"option.json", eCmdHdlrBinary, 0},
-        {"option.jsonf", eCmdHdlrBinary, 0}, {"option.casesensitive", eCmdHdlrBinary, 0}};
+    static struct cnfparamdescr cnfparamdescr[] = {{"name", eCmdHdlrString, 1},
+                                                   {"type", eCmdHdlrString, 1},
+                                                   {"string", eCmdHdlrString, 0},
+                                                   {"plugin", eCmdHdlrString, 0},
+                                                   {"subtree", eCmdHdlrString, 0},
+                                                   {"format", eCmdHdlrString, 0},
+                                                   {"option.stdsql", eCmdHdlrBinary, 0},
+                                                   {"option.sql", eCmdHdlrBinary, 0},
+                                                   {"option.json", eCmdHdlrBinary, 0},
+                                                   {"option.jsonf", eCmdHdlrBinary, 0},
+                                                   {"option.casesensitive", eCmdHdlrBinary, 0}};
 static struct cnfparamblk pblk = {CNFPARAMBLK_VERSION, sizeof(cnfparamdescr) / sizeof(struct cnfparamdescr),
                                   cnfparamdescr};
 
@@ -99,6 +104,9 @@ static struct cnfparamblk pblkConstant = {
 #ifdef FEATURE_REGEXP
 DEFobjCurrIf(regexp) static int bFirstRegexpErrmsg = 1; /**< did we already do a "can't load regexp" error message? */
 #endif
+
+static rsRetVal parseTplFormat(const char *val, tpl_default_fmt_t *fmt);
+static void applyTemplateDefaultFormat(struct template *pTpl);
 
 /* helper to tplToString and strgen's, extends buffer */
 #define ALLOC_INC 128
@@ -599,7 +607,43 @@ finalize_it:
  */
 static int hasFormat(struct templateEntry *pTpe) {
     return (pTpe->data.field.options.bCSV || pTpe->data.field.options.bJSON || pTpe->data.field.options.bJSONf ||
-            pTpe->data.field.options.bJSONr);
+            pTpe->data.field.options.bJSONr || pTpe->data.field.options.bJSONfr);
+}
+
+static rsRetVal parseTplFormat(const char *val, tpl_default_fmt_t *fmt) {
+    if (val == NULL || fmt == NULL) return RS_RET_ERR;
+    if (!strcasecmp(val, "raw"))
+        *fmt = TPLFMT_RAW;
+    else if (!strcasecmp(val, "json-quoted"))
+        *fmt = TPLFMT_JSON_QUOTED;
+    else if (!strcasecmp(val, "json-canonical"))
+        *fmt = TPLFMT_JSON_CANONICAL;
+    else if (!strcasecmp(val, "sql-mysql"))
+        *fmt = TPLFMT_SQL_MYSQL;
+    else if (!strcasecmp(val, "sql-std"))
+        *fmt = TPLFMT_SQL_STD;
+    else
+        return RS_RET_ERR;
+    return RS_RET_OK;
+}
+
+static void applyTemplateDefaultFormat(struct template *pTpl) {
+    if (pTpl == NULL) return;
+
+    if (pTpl->defaultFormat != TPLFMT_JSON_QUOTED && pTpl->defaultFormat != TPLFMT_JSON_CANONICAL) return;
+
+    for (struct templateEntry *pTpe = pTpl->pEntryRoot; pTpe != NULL; pTpe = pTpe->pNext) {
+        if (pTpe->eEntryType != FIELD) continue;
+        if (hasFormat(pTpe)) continue;
+        pTpe->bComplexProcessing = 1;
+        pTpe->data.field.options.bJSONf = 1;
+        if (pTpl->defaultFormat == TPLFMT_JSON_CANONICAL) {
+            if (!pTpe->data.field.dataTypeExplicit) {
+                pTpe->data.field.options.dataType = TPE_DATATYPE_AUTO;
+            }
+            pTpe->data.field.canonicalJSON = 1;
+        }
+    }
 }
 
 /* Helper to do_Parameter(). This parses the formatting options
@@ -1416,6 +1460,7 @@ static rsRetVal createPropertyTpe(struct template *pTpl, struct cnfobj *o) {
     int bDateInUTC = 0;
     int bCompressSP = 0;
     unsigned dataType = TPE_DATATYPE_STRING;
+    int dataTypeExplicit = 0;
     unsigned onEmpty = TPE_DATAEMPTY_KEEP;
     char *re_expr = NULL;
     struct cnfparamvals *pvals = NULL;
@@ -1441,6 +1486,7 @@ static rsRetVal createPropertyTpe(struct template *pTpl, struct cnfobj *o) {
         if (!strcmp(pblkProperty.descr[i].name, "name")) {
             name = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
         } else if (!strcmp(pblkProperty.descr[i].name, "datatype")) {
+            dataTypeExplicit = 1;
             if (!es_strbufcmp(pvals[i].val.d.estr, (uchar *)"string", sizeof("string") - 1)) {
                 dataType = TPE_DATATYPE_STRING;
             } else if (!es_strbufcmp(pvals[i].val.d.estr, (uchar *)"number", sizeof("number") - 1)) {
@@ -1693,6 +1739,7 @@ static rsRetVal createPropertyTpe(struct template *pTpl, struct cnfobj *o) {
     pTpe->data.field.options.bMandatory = mandatory;
     pTpe->data.field.options.bFixedWidth = fixedwidth;
     pTpe->data.field.options.dataType = dataType;
+    pTpe->data.field.dataTypeExplicit = dataTypeExplicit;
     pTpe->data.field.options.onEmpty = onEmpty;
     pTpe->data.field.eCaseConv = caseconv;
     switch (formatType) {
@@ -1850,7 +1897,8 @@ rsRetVal ATTR_NONNULL() tplProcessCnf(struct cnfobj *o) {
     } tplType = T_STRING; /* init just to keep compiler happy: mandatory parameter */
     int i;
     int o_sql = 0, o_stdsql = 0, o_jsonf = 0, o_json = 0, o_casesensitive = 0; /* options */
-    int numopts;
+    int haveFormat = 0;
+    tpl_default_fmt_t defaultFmt = TPLFMT_UNSET;
     rsRetVal localRet;
     DEFiRet;
 
@@ -1881,6 +1929,19 @@ rsRetVal ATTR_NONNULL() tplProcessCnf(struct cnfobj *o) {
                 free(typeStr);
                 ABORT_FINALIZE(RS_RET_ERR);
             }
+        } else if (!strcmp(pblk.descr[i].name, "format")) {
+            char *fmtStr = es_str2cstr(pvals[i].val.d.estr, NULL);
+            if (parseTplFormat(fmtStr, &defaultFmt) != RS_RET_OK) {
+                const char *tplNameForErr = (name == NULL) ? "<unnamed template>" : name;
+                LogError(0, RS_RET_ERR,
+                         "template '%s': invalid format value '%s'; valid values are "
+                         "raw, json-quoted, json-canonical, sql-mysql, sql-std",
+                         tplNameForErr, fmtStr);
+                free(fmtStr);
+                ABORT_FINALIZE(RS_RET_ERR);
+            }
+            haveFormat = 1;
+            free(fmtStr);
         } else if (!strcmp(pblk.descr[i].name, "string")) {
             tplStr = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
         } else if (!strcmp(pblk.descr[i].name, "subtree")) {
@@ -2000,12 +2061,7 @@ rsRetVal ATTR_NONNULL() tplProcessCnf(struct cnfobj *o) {
         }
     }
 
-    numopts = 0;
-    if (o_sql) ++numopts;
-    if (o_stdsql) ++numopts;
-    if (o_json) ++numopts;
-    if (o_jsonf) ++numopts;
-    if (numopts > 1) {
+    if (!haveFormat && ((o_sql && o_stdsql) || ((o_sql || o_stdsql) && (o_json || o_jsonf)))) {
         LogError(0, RS_RET_ERR,
                  "template '%s' has multiple incompatible "
                  "options of sql, stdsql or json specified",
@@ -2020,6 +2076,8 @@ rsRetVal ATTR_NONNULL() tplProcessCnf(struct cnfobj *o) {
     }
     pTpl->pszName = name;
     pTpl->iLenName = lenName;
+    pTpl->defaultFormat = defaultFmt;
+    if (haveFormat && (o_sql || o_stdsql || o_json || o_jsonf)) pTpl->legacyOptsIgnored = 1;
 
     switch (tplType) {
         case T_STRING:
@@ -2061,14 +2119,45 @@ rsRetVal ATTR_NONNULL() tplProcessCnf(struct cnfobj *o) {
     }
 
     pTpl->optFormatEscape = NO_ESCAPE;
-    if (o_stdsql)
-        pTpl->optFormatEscape = STDSQL_ESCAPE;
-    else if (o_sql)
-        pTpl->optFormatEscape = SQL_ESCAPE;
-    else if (o_json)
-        pTpl->optFormatEscape = JSON_ESCAPE;
-    else if (o_jsonf)
-        pTpl->optFormatEscape = JSONF;
+    if (haveFormat) {
+        switch (defaultFmt) {
+            case TPLFMT_JSON_QUOTED:
+            case TPLFMT_JSON_CANONICAL:
+                pTpl->optFormatEscape = JSONF;
+                break;
+            case TPLFMT_SQL_MYSQL:
+                pTpl->optFormatEscape = SQL_ESCAPE;
+                break;
+            case TPLFMT_SQL_STD:
+                pTpl->optFormatEscape = STDSQL_ESCAPE;
+                break;
+            case TPLFMT_RAW:
+            case TPLFMT_UNSET:
+            default:
+                break;
+        }
+    } else {
+        if (o_stdsql)
+            pTpl->optFormatEscape = STDSQL_ESCAPE;
+        else if (o_sql)
+            pTpl->optFormatEscape = SQL_ESCAPE;
+        else if (o_json)
+            pTpl->optFormatEscape = JSON_ESCAPE;
+        else if (o_jsonf)
+            pTpl->optFormatEscape = JSONF;
+    }
+
+    if (pTpl->legacyOptsIgnored && haveFormat) {
+        LogError(
+            0, RS_RET_CONF_PARSE_WARNING,
+            "template '%s': legacy JSON/SQL options are ignored because 'format' is set; behavior is controlled by "
+            "'format'",
+            pTpl->pszName);
+    }
+
+    if (haveFormat) {
+        applyTemplateDefaultFormat(pTpl);
+    }
 
     if (o_casesensitive) pTpl->optCaseSensitive = 1;
     apply_case_sensitivity(pTpl);

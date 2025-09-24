@@ -44,6 +44,15 @@ Either ``option.sql`` or ``option.stdsql`` must be specified when writing
 into a database to guard against SQL injection. The database writer checks
 for the presence of one of these options and refuses to run otherwise.
 
+.. note::
+
+   New configurations should prefer the :ref:`format parameter
+   <templates.template-object>` on ``template()`` objects. It provides the
+   same JSON and SQL defaults with clearer precedence rules. Legacy
+   options remain fully supported for backward compatibility; when a
+   template also sets ``format``, the legacy options for that template are
+   ignored and a warning is logged during configuration load.
+
 These options can also be useful when generating files intended for later
 import into a database. Do not enable them without need as they introduce
 extra processing overhead.
