@@ -3249,70 +3249,6 @@ finalize_it:
  * that makes any sense from a performance PoV - definitely
  * something to consider at a later stage. rgerhards, 2012-04-19
  */
-static int jsonNumberIsZero(const uchar *const pSrc, unsigned buflen) {
-    unsigned start = 0;
-    while (start < buflen && isspace((unsigned char)pSrc[start])) {
-        ++start;
-    }
-    if (start == buflen) {
-        return 0;
-    }
-    unsigned end = buflen;
-    while (end > start && isspace((unsigned char)pSrc[end - 1])) {
-        --end;
-    }
-    if (start == end) {
-        return 0;
-    }
-
-    unsigned i = start;
-    if (pSrc[i] == '+' || pSrc[i] == '-') {
-        ++i;
-        if (i == end) {
-            return 0;
-        }
-    }
-
-    int mantissaDigits = 0;
-    int mantissaNonZero = 0;
-    int sawDecimal = 0;
-    for (; i < end; ++i) {
-        const unsigned char c = pSrc[i];
-        if (isdigit(c)) {
-            mantissaDigits = 1;
-            if (c != '0') {
-                mantissaNonZero = 1;
-            }
-            continue;
-        }
-        if (c == '.' && !sawDecimal) {
-            sawDecimal = 1;
-            continue;
-        }
-        if ((c == 'e' || c == 'E') && mantissaDigits) {
-            ++i;
-            if (i < end && (pSrc[i] == '+' || pSrc[i] == '-')) {
-                ++i;
-            }
-            if (i >= end) {
-                return 0;
-            }
-            unsigned expDigits = 0;
-            for (; i < end; ++i) {
-                const unsigned char expChar = pSrc[i];
-                if (!isdigit(expChar)) {
-                    return 0;
-                }
-                ++expDigits;
-            }
-            return (expDigits > 0) && mantissaDigits && !mantissaNonZero;
-        }
-        return 0;
-    }
-
-    return mantissaDigits && !mantissaNonZero;
-}
-
 static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
                                          uchar **const ppRes,
                                          unsigned short *const pbMustBeFreed,
@@ -3329,14 +3265,47 @@ static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
     dbgprintf("jsonEncode: datatype: %u, onEmpty: %u val %*s\n", (unsigned)pTpe->data.field.options.dataType,
               (unsigned)pTpe->data.field.options.onEmpty, buflen, pSrc);
     if (pTpe->data.field.options.bOmitIfZero && pTpe->data.field.options.dataType == TPE_DATATYPE_NUMBER &&
-        buflen > 0 && jsonNumberIsZero(pSrc, buflen)) {
-        if (*pbMustBeFreed) {
-            free(*ppRes);
-            *pbMustBeFreed = 0;
+        buflen > 0) {
+        unsigned start = 0;
+        while (start < buflen && isspace((unsigned char)pSrc[start])) {
+            ++start;
         }
-        *ppRes = UCHAR_CONSTANT("");
-        *pBufLen = 0;
-        FINALIZE;
+        unsigned end = buflen;
+        while (end > start && isspace((unsigned char)pSrc[end - 1])) {
+            --end;
+        }
+        if (start < end) {
+            const unsigned trimmed_len = end - start;
+            char *json_buf = malloc(trimmed_len + 1);
+            if (json_buf != NULL) {
+                int omitField = 0;
+                memcpy(json_buf, pSrc + start, trimmed_len);
+                json_buf[trimmed_len] = '\0';
+                enum fjson_tokener_error parse_err;
+                struct json_object *parsed = fjson_tokener_parse_verbose(json_buf, &parse_err);
+                if (parsed != NULL && parse_err == fjson_tokener_success) {
+                    const enum json_type parsed_type = json_object_get_type(parsed);
+                    if (parsed_type == json_type_double) {
+                        omitField = json_object_get_double(parsed) == 0.0;
+                    } else if (parsed_type == json_type_int) {
+                        omitField = json_object_get_int64(parsed) == 0;
+                    }
+                    json_object_put(parsed);
+                } else if (parsed != NULL) {
+                    json_object_put(parsed);
+                }
+                free(json_buf);
+                if (omitField) {
+                    if (*pbMustBeFreed) {
+                        free(*ppRes);
+                        *pbMustBeFreed = 0;
+                    }
+                    *ppRes = UCHAR_CONSTANT("");
+                    *pBufLen = 0;
+                    FINALIZE;
+                }
+            }
+        }
     }
     if (buflen == 0) {
         if (pTpe->data.field.options.onEmpty == TPE_DATAEMPTY_SKIP) {
