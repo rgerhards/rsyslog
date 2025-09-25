@@ -3249,6 +3249,70 @@ finalize_it:
  * that makes any sense from a performance PoV - definitely
  * something to consider at a later stage. rgerhards, 2012-04-19
  */
+static int jsonNumberIsZero(const uchar *const pSrc, unsigned buflen) {
+    unsigned start = 0;
+    while (start < buflen && isspace((unsigned char)pSrc[start])) {
+        ++start;
+    }
+    if (start == buflen) {
+        return 0;
+    }
+    unsigned end = buflen;
+    while (end > start && isspace((unsigned char)pSrc[end - 1])) {
+        --end;
+    }
+    if (start == end) {
+        return 0;
+    }
+
+    unsigned i = start;
+    if (pSrc[i] == '+' || pSrc[i] == '-') {
+        ++i;
+        if (i == end) {
+            return 0;
+        }
+    }
+
+    int mantissaDigits = 0;
+    int mantissaNonZero = 0;
+    int sawDecimal = 0;
+    for (; i < end; ++i) {
+        const unsigned char c = pSrc[i];
+        if (isdigit(c)) {
+            mantissaDigits = 1;
+            if (c != '0') {
+                mantissaNonZero = 1;
+            }
+            continue;
+        }
+        if (c == '.' && !sawDecimal) {
+            sawDecimal = 1;
+            continue;
+        }
+        if ((c == 'e' || c == 'E') && mantissaDigits) {
+            ++i;
+            if (i < end && (pSrc[i] == '+' || pSrc[i] == '-')) {
+                ++i;
+            }
+            if (i >= end) {
+                return 0;
+            }
+            unsigned expDigits = 0;
+            for (; i < end; ++i) {
+                const unsigned char expChar = pSrc[i];
+                if (!isdigit(expChar)) {
+                    return 0;
+                }
+                ++expDigits;
+            }
+            return (expDigits > 0) && mantissaDigits && !mantissaNonZero;
+        }
+        return 0;
+    }
+
+    return mantissaDigits && !mantissaNonZero;
+}
+
 static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
                                          uchar **const ppRes,
                                          unsigned short *const pbMustBeFreed,
@@ -3265,24 +3329,14 @@ static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
     dbgprintf("jsonEncode: datatype: %u, onEmpty: %u val %*s\n", (unsigned)pTpe->data.field.options.dataType,
               (unsigned)pTpe->data.field.options.onEmpty, buflen, pSrc);
     if (pTpe->data.field.options.bOmitIfZero && pTpe->data.field.options.dataType == TPE_DATATYPE_NUMBER &&
-        buflen > 0) {
-        char *endptr = NULL;
-        errno = 0;
-        const double numericVal = strtod((char *)pSrc, &endptr);
-        if (errno == 0 && endptr != (char *)pSrc) {
-            while (endptr < (char *)pSrc + buflen && isspace((unsigned char)*endptr)) {
-                ++endptr;
-            }
-            if (endptr == (char *)pSrc + buflen && numericVal == 0.0) {
-                if (*pbMustBeFreed) {
-                    free(*ppRes);
-                    *pbMustBeFreed = 0;
-                }
-                *ppRes = UCHAR_CONSTANT("");
-                *pBufLen = 0;
-                FINALIZE;
-            }
+        buflen > 0 && jsonNumberIsZero(pSrc, buflen)) {
+        if (*pbMustBeFreed) {
+            free(*ppRes);
+            *pbMustBeFreed = 0;
         }
+        *ppRes = UCHAR_CONSTANT("");
+        *pBufLen = 0;
+        FINALIZE;
     }
     if (buflen == 0) {
         if (pTpe->data.field.options.onEmpty == TPE_DATAEMPTY_SKIP) {
