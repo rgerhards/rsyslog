@@ -88,4 +88,6 @@ Parameters
 
 - ``onEmpty`` – for ``jsonf`` format only; handling of empty values:
   ``keep``, ``skip``, or ``null``
+- ``omitIfZero`` – for ``jsonf`` format with ``dataType="number"``; omit the
+  field when the rendered numeric value is zero
 

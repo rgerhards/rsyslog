@@ -3264,6 +3264,26 @@ static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
     buflen = (*pBufLen == -1) ? (int)ustrlen(pSrc) : *pBufLen;
     dbgprintf("jsonEncode: datatype: %u, onEmpty: %u val %*s\n", (unsigned)pTpe->data.field.options.dataType,
               (unsigned)pTpe->data.field.options.onEmpty, buflen, pSrc);
+    if (pTpe->data.field.options.bOmitIfZero && pTpe->data.field.options.dataType == TPE_DATATYPE_NUMBER &&
+        buflen > 0) {
+        char *endptr = NULL;
+        errno = 0;
+        const double numericVal = strtod((char *)pSrc, &endptr);
+        if (errno == 0 && endptr != (char *)pSrc) {
+            while (endptr < (char *)pSrc + buflen && isspace((unsigned char)*endptr)) {
+                ++endptr;
+            }
+            if (endptr == (char *)pSrc + buflen && numericVal == 0.0) {
+                if (*pbMustBeFreed) {
+                    free(*ppRes);
+                    *pbMustBeFreed = 0;
+                }
+                *ppRes = UCHAR_CONSTANT("");
+                *pBufLen = 0;
+                FINALIZE;
+            }
+        }
+    }
     if (buflen == 0) {
         if (pTpe->data.field.options.onEmpty == TPE_DATAEMPTY_SKIP) {
             FINALIZE;
