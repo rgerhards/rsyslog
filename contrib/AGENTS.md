@@ -18,9 +18,10 @@ These instructions apply to everything under `contrib/`.
   modules are disabled unless their dependencies are detected.  Use
   `./configure --help` and the module's `MODULE_METADATA.yaml` to identify
   the relevant `--enable`/`--with` flags.
-- Build with `make -j$(nproc)` and run `make check`.  If the full test suite is
-  impractical (for example because the module talks to external services), run
-  and document the narrowest reproducible subset of tests.
+- Build with `make -j$(nproc)` and execute the most relevant smoke test
+  directly (for example `./tests/imtcp-basic.sh` or a module-specific script).
+  Reserve `make check` for cases where you must mirror CI or diagnose harness
+  behavior.
 
 ## Metadata required for every module
 Each contrib module directory (for example `contrib/mmkubernetes/`) must contain
@@ -46,9 +47,10 @@ requirements, CI coverage, and reviewer notes.  Copy
 `contrib/MODULE_METADATA_TEMPLATE.yaml` when creating the file.
 
 ## Testing expectations
-- Prefer smoke tests that can run under `make check` without proprietary
-  services.  If that is impossible, provide script stubs in `tests/` that mock
-  or skip the integration but keep API coverage verifiable.
+- Prefer smoke tests that can run directly via `./tests/<script>.sh` without
+  proprietary services.  If that is impossible, provide script stubs in `tests/`
+  that mock or skip the integration but keep API coverage verifiable, and note
+  any CI limitations in the metadata.
 - Record any external test environments (container images, cloud resources) in
   the module metadata so reviewers understand the manual steps required.
 

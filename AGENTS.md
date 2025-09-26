@@ -165,11 +165,13 @@ If possible, agents should:
 
 ## Testing & Validation
 
-All test definitions live under the `tests/` directory and are driven by the `tests/diag.sh` framework. In CI, `make check` remains the canonical way to run the full suite; **AI agents should avoid invoking `make check` by default**, because:
+All test definitions live under the `tests/` directory and are driven by the `tests/diag.sh` framework. Continuous-integration jobs still execute the full suite via `make check`, but **AI agents should stick to direct test scripts** unless a reviewer explicitly requests a CI reproduction. Direct invocation keeps stdout/stderr visible and avoids the 10+ minute runtime of the harness.
 
-  - It wraps all tests in a harness that hides stdout/stderr on failure
-  - It requires parsing `tests/test-suite.log` for details
-  - It can take 10+ minutes and consume significant resources
+Avoiding the harness matters because `make check`:
+
+  - Wraps tests in a harness that hides stdout/stderr on failure
+  - Requires parsing `tests/test-suite.log` for details
+  - Consumes significant resources on large suites
 
 Instead, AI agents should invoke individual test scripts directly. This yields unfiltered output and immediate feedback, without the CI harness. The `diag.sh` framework now builds any required test support automatically, so there is **no longer** a need for a separate “build core components” step.
 
@@ -198,7 +200,7 @@ Instead, AI agents should invoke individual test scripts directly. This yields u
 
 ### Full Test Suite (CI-Only)
 
-For continuous-integration pipelines or when you need to validate the entire suite, use the autotools harness:
+For continuous-integration pipelines or when you explicitly need to validate the entire suite, use the autotools harness:
 
 ```bash
 ./configure --enable-imdiag --enable-testbench
@@ -207,6 +209,7 @@ make check
 
   - To limit parallelism (avoid flaky failures), pass `-j2` or `-j4` to `make`.
   - If a failure occurs, inspect `tests/test-suite.log` for detailed diagnostics.
+  - Note in your report why a full harness run was necessary so reviewers understand the extra runtime.
 
 -----
 
@@ -223,16 +226,16 @@ Minimum setup requires:
   - Autotools toolchain: `autoconf`, `automake`, `libtool`, `make`, `gcc`
   - Side libraries: `libestr`, `librelp`, `libfastjson`, `liblognorm` (must be installed or built manually)
 
-Example commands:
+Example commands (swap the final step for the most relevant smoke test):
 
 ```bash
 ./autogen.sh
 ./configure --enable-debug --enable-testbench
 make -j$(nproc)
-make check
+./tests/imtcp-basic.sh
 ```
 
-Use `make check -j2` or `-j4` max for reliability.
+Reserve `make check` for cases where you must mirror CI or chase harness-only failures. When you do run it, prefer `make check -j2` or `-j4` for reliability.
 
 -----
 

@@ -14,9 +14,10 @@ which vendors third-party code; do not modify it unless specifically requested).
   to constrain the build.
 - Keep the testbench enabled with `./configure --enable-testbench` so
   module-specific tests continue to compile.
-- Build with `make -j$(nproc)` and run at least `make check` before submitting
-  changes.  To focus on one module, run `make <testname>.log` as described in
-  `tests/README`.
+- Build with `make -j$(nproc)` and execute the most relevant smoke/regression
+  test directly (for example `./tests/imtcp-basic.sh` or a module-specific
+  script).  Direct invocation keeps stdout/stderr visible.  Use `make check`
+  only when mirroring CI or chasing harness-specific failures.
 
 ## Module-level agent guides
 High-complexity modules benefit from their own `AGENTS.md` living directly
@@ -86,7 +87,9 @@ support expectations change.
 ## Testing expectations
 - Prefer module-focused tests in `tests/` named after the module (e.g.
   `omxyz-basic.sh`).
-- Ensure new tests run cleanly under `make check`.
+- Ensure new tests run cleanly when invoked directly via `./tests/<script>.sh`.
+  When reviewers request a CI reproduction, confirm the test also passes under
+  `make check`.
 - When a module requires external services (databases, message queues, etc.),
   document setup steps in the module metadata and reference any helper scripts
   placed under `tests/`.
