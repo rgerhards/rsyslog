@@ -1,6 +1,6 @@
 # Copy this file into a contrib module directory and adjust values.
 support_status: contributor-supported  # contributor-supported | stalled
-maturity_level: fresh                  # fully-mature | mature | fresh | experimental
+maturity_level: fresh                  # fully-mature | mature | fresh | experimental | deprecated
 primary_contact: "(unassigned)"
 last_reviewed: 2024-01-01
 build_dependencies: []

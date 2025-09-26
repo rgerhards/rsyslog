@@ -31,7 +31,7 @@ with different default expectations.
 ### Required keys
 ```yaml
 support_status: contributor-supported | stalled
-maturity_level: fully-mature | mature | fresh | experimental
+maturity_level: fully-mature | mature | fresh | experimental | deprecated
 primary_contact: "Full Name <email@example.com>" | "(unassigned)"
 last_reviewed: YYYY-MM-DD
 ```

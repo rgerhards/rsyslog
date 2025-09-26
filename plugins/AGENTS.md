@@ -44,7 +44,7 @@ for both humans and agents.
 ### Required keys
 ```yaml
 support_status: core-supported | contributor-supported | stalled
-maturity_level: fully-mature | mature | fresh | experimental
+maturity_level: fully-mature | mature | fresh | experimental | deprecated
 primary_contact: "Full Name <email@example.com>" | "(unassigned)"
 last_reviewed: YYYY-MM-DD
 ```
@@ -61,6 +61,8 @@ last_reviewed: YYYY-MM-DD
 - `fresh`: Recently added or lightly used; expect feedback-driven revisions.
 - `experimental`: Works, but explicitly needs broader testing feedback before it
   can be considered stable.
+- `deprecated`: Kept only for backward compatibility; avoid new feature work and
+  document migration paths in user-facing docs.
 
 ### Optional keys
 Add keys as needed to help future contributors:

@@ -1,7 +1,7 @@
 # Copy this file into a module directory (e.g. plugins/omfile/) and adjust values.
 # Keep the keys ordered as shown so diffs stay readable.
 support_status: core-supported        # core-supported | contributor-supported | stalled
-maturity_level: mature                # fully-mature | mature | fresh | experimental
+maturity_level: mature                # fully-mature | mature | fresh | experimental | deprecated
 primary_contact: "(unassigned)"       # Use "Full Name <email>" when known.
 last_reviewed: 2024-01-01             # Update whenever metadata changes.
 build_dependencies: []                # Optional: list pkg-config names or tools.

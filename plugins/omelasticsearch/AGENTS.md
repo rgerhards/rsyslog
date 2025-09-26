@@ -13,17 +13,16 @@
   `configure.ac`, any `Makefile.am`, or files under `m4/`.
 
 ## Local testing
-- Enable module-specific tests with `--enable-elasticsearch-tests=minimal` (or
-  `yes`) during `./configure`.
-- Smoke test: `make es-basic.log`. Additional coverage: `make
-  es-basic-ha.log`, `make es-bulk-errfile-popul.log`, and
-  `make es-bulk-retry.log`.
-- Tests require a local Elasticsearch instance. Use the helpers in
-  `tests/diag.sh`, e.g.:
-  ```bash
-  (. ./tests/diag.sh; ensure_elasticsearch_ready; init_elasticsearch)
-  ```
-  `ES_DOWNLOAD` can be set before sourcing to pin a different release.
+- **Do not run the integration tests during routine agent work.** They require
+  downloading and launching an Elasticsearch node, which is too heavy for the
+  sandbox environment.
+- Compiling the module is sufficient validation. Rebuild the tree with
+  `./configure --enable-elasticsearch` followed by `make modules` to ensure the
+  plugin links correctly.
+- Maintainers who need full coverage can enable the suite with
+  `--enable-elasticsearch-tests=minimal` and run `make es-basic.log` (additional
+  scenarios live beside it), but expect multi-minute startup overhead for the
+  embedded Elasticsearch instance.
 
 ## Diagnostics & troubleshooting
 - impstats exposes the `omelasticsearch` counter set (submitted, fail.http,

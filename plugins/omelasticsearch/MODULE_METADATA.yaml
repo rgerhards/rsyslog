@@ -13,4 +13,5 @@ ci_targets:
 documentation:
   - doc/source/configuration/modules/omelasticsearch.rst
 notes:
-  - Testbench downloads Elasticsearch via `tests/diag.sh`; set ES_DOWNLOAD to pin versions.
+  - Tests require launching Elasticsearch; agents typically skip them and only build the module.
+  - Testbench downloads Elasticsearch via `tests/diag.sh`; set ES_DOWNLOAD to pin versions when maintaining the suite.
