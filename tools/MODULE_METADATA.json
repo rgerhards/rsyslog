@@ -3,7 +3,7 @@
     "module": "omdiscard",
     "support_status": "core-supported",
     "maturity_level": "mature",
-    "primary_contact": "(unassigned)",
+    "primary_contact": "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>",
     "last_reviewed": "2025-09-26",
     "documentation": [],
     "notes": [
@@ -14,7 +14,7 @@
     "module": "omfile",
     "support_status": "core-supported",
     "maturity_level": "fully-mature",
-    "primary_contact": "(unassigned)",
+    "primary_contact": "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>",
     "last_reviewed": "2025-09-26",
     "documentation": [
       "doc/source/configuration/modules/omfile.rst"
@@ -27,7 +27,7 @@
     "module": "omfwd",
     "support_status": "core-supported",
     "maturity_level": "fully-mature",
-    "primary_contact": "(unassigned)",
+    "primary_contact": "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>",
     "last_reviewed": "2025-09-26",
     "documentation": [
       "doc/source/configuration/modules/omfwd.rst"
@@ -40,7 +40,7 @@
     "module": "ompipe",
     "support_status": "core-supported",
     "maturity_level": "mature",
-    "primary_contact": "(unassigned)",
+    "primary_contact": "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>",
     "last_reviewed": "2025-09-26",
     "documentation": [
       "doc/source/configuration/modules/ompipe.rst"
@@ -53,7 +53,7 @@
     "module": "omshell",
     "support_status": "core-supported",
     "maturity_level": "mature",
-    "primary_contact": "(unassigned)",
+    "primary_contact": "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>",
     "last_reviewed": "2025-09-26",
     "documentation": [],
     "notes": [
@@ -64,7 +64,7 @@
     "module": "omusrmsg",
     "support_status": "core-supported",
     "maturity_level": "mature",
-    "primary_contact": "(unassigned)",
+    "primary_contact": "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>",
     "last_reviewed": "2025-09-26",
     "documentation": [
       "doc/source/configuration/modules/omusrmsg.rst"

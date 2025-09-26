@@ -45,7 +45,7 @@ for both humans and agents.
 ```yaml
 support_status: core-supported | contributor-supported | stalled
 maturity_level: fully-mature | mature | fresh | experimental | deprecated
-primary_contact: "Full Name <email@example.com>" | "(unassigned)"
+primary_contact: "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>"
 last_reviewed: YYYY-MM-DD
 ```
 
@@ -71,7 +71,13 @@ Add keys as needed to help future contributors:
 - `runtime_dependencies`: Libraries or services the module needs at runtime.
 - `ci_targets`: Names of CI jobs or scripts that exercise this module.
 - `documentation`: Links into `doc/` or external references.
+- `support_channels`: Overrides or supplements the default GitHub Discussions
+  and Issues flow when a module has a bespoke support process.
 - `notes`: Free-form guidance for reviewers and contributors.
+
+Replace `primary_contact` with a specific maintainer string (e.g.
+`"Full Name <email@example.com>"`) when a module has an active owner outside the
+standard GitHub Discussions and Issues queue.
 
 ### Template
 Copy `plugins/MODULE_METADATA_TEMPLATE.yaml` when creating or updating

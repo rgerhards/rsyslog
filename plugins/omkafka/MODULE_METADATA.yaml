@@ -1,6 +1,6 @@
 support_status: contributor-supported
 maturity_level: mature
-primary_contact: "(unassigned)"
+primary_contact: "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>"
 last_reviewed: 2025-09-26
 build_dependencies:
   - librdkafka development headers (`./devtools/codex-setup.sh`)

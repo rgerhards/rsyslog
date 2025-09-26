@@ -11,6 +11,9 @@ This guide applies to everything under `doc/`.
 - Keep headings consistent with the existing `doc/README.md` conventions.
 - Cross-link new material from `doc/README.md` or the relevant `index.rst` so it is discoverable.
 - When touching shared style guidance, update `doc/STRATEGY.md` if needed.
+- Prime new contributors with the doc-builder base prompt at
+  `ai/rsyslog_doc_builder/base_prompt.txt` when scoping AI-driven documentation
+  work.
 
 ## Build & validation
 - After content changes, run `./doc/tools/build-doc-linux.sh --clean --format html` locally when possible to catch Sphinx errors.

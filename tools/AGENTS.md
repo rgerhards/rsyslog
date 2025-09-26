@@ -25,6 +25,9 @@ core but are compiled directly into the rsyslog binary:
   YAML files beside each source.
 - Keep the JSON array sorted by module name and update the `last_reviewed` field
   whenever support status, maturity, or contacts change.
+- The default `primary_contact` points at the rsyslog GitHub Discussions and
+  Issues queue; replace it with a specific maintainer only when a new owner is
+  explicitly assigned.
 
 ## Documentation touchpoints
 - Most of these modules have reference guides under

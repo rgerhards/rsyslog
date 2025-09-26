@@ -32,7 +32,7 @@ with different default expectations.
 ```yaml
 support_status: contributor-supported | stalled
 maturity_level: fully-mature | mature | fresh | experimental | deprecated
-primary_contact: "Full Name <email@example.com>" | "(unassigned)"
+primary_contact: "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>"
 last_reviewed: YYYY-MM-DD
 ```
 
@@ -45,6 +45,20 @@ last_reviewed: YYYY-MM-DD
 Use the optional keys from the template to document build/runtime
 requirements, CI coverage, and reviewer notes.  Copy
 `contrib/MODULE_METADATA_TEMPLATE.yaml` when creating the file.
+
+- `build_dependencies`: List library or tool requirements (match configure
+  options when possible).
+- `runtime_dependencies`: Libraries or services the module needs at runtime.
+- `ci_targets`: Names of CI jobs or scripts that exercise this module.
+- `documentation`: Links into `doc/` or external references.
+- `support_channels`: Overrides or supplements the default GitHub Discussions
+  and Issues flow when a module has a bespoke support process.
+- `notes`: Free-form guidance for reviewers and contributors.
+
+Replace `primary_contact` with a specific maintainer string when a contrib
+module has an active owner outside the standard GitHub Discussions and Issues
+queue, and record any bespoke escalation path via the optional
+`support_channels` array if needed.
 
 ## Testing expectations
 - Prefer smoke tests that can run directly via `./tests/<script>.sh` without

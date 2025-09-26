@@ -2,12 +2,14 @@
 # Keep the keys ordered as shown so diffs stay readable.
 support_status: core-supported        # core-supported | contributor-supported | stalled
 maturity_level: mature                # fully-mature | mature | fresh | experimental | deprecated
-primary_contact: "(unassigned)"       # Use "Full Name <email>" when known.
+primary_contact: "GitHub Discussions & Issues <https://github.com/rsyslog/rsyslog/discussions>"
+                                      # Use "Full Name <email>" when a dedicated maintainer exists.
 last_reviewed: 2024-01-01             # Update whenever metadata changes.
 build_dependencies: []                # Optional: list pkg-config names or tools.
 runtime_dependencies: []              # Optional: list services or daemons.
 ci_targets: []                        # Optional: list CI jobs or scripts.
 documentation: []                     # Optional: list doc/*.rst paths or URLs.
+support_channels: []                  # Optional: alternative escalation paths.
 notes: |-
   Replace this block with free-form context such as:
   - Known limitations
