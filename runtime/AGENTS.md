@@ -23,7 +23,8 @@ collection, and process orchestration).
 ## Build & validation
 - Bootstrap with `./autogen.sh` only when build scripts change (see root
   instructions) and configure with `./configure --enable-testbench` so runtime
-  helpers used by the testbench stay available.
+  helpers used by the testbench stay available. Run these commands from the
+  repository root, not from within `runtime/`.
 - Build the core with `make -j$(nproc)`; this compiles the runtime and shared
   libraries that tests dynamically load via `-M../runtime/.libs:../.libs`.
 - Prefer targeted test runs over a full `make check`:
@@ -53,8 +54,8 @@ collection, and process orchestration).
   plugins.
 - Cross-reference user docs in `doc/` if behavior visible to operators changes
   (configuration syntax, stats counters, TLS requirements, etc.).
-- Keep `NEWS` or `ChangeLog` in sync for behavior changes that should reach
-  release notes.
+- Leave `ChangeLog` and `NEWS` edits to the maintainers; do not modify those
+  files in routine patches.
 
 ## Debugging tips
 - Enable extra runtime logging with `export RSYSLOG_DEBUG="..."` in tests (see
