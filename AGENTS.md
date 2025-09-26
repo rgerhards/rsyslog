@@ -30,7 +30,7 @@ This file defines guidelines and instructions for AI assistants (e.g., Codex, Gi
   - **Module author checklist:** [`MODULE_AUTHOR_CHECKLIST.md`](./MODULE_AUTHOR_CHECKLIST.md)
   - **Developer overview:** [`DEVELOPING.md`](./DEVELOPING.md)
   - **Commit prompt template:** [`ai/rsyslog_commit_assistant/base_prompt.txt`](./ai/rsyslog_commit_assistant/base_prompt.txt)
-  - **Doc builder prompt template:** [`ai/rsyslog_doc_builder/base_prompt.txt`](./ai/rsyslog_doc_builder/base_prompt.txt)
+  - **Doc builder prompt template:** [`ai/rsyslog_code_doc_builder/base_prompt.txt`](./ai/rsyslog_code_doc_builder/base_prompt.txt)
 
 Use these jump points together with this file to locate the workflow and
 component notes that apply to your task.

@@ -12,7 +12,7 @@ This guide applies to everything under `doc/`.
 - Cross-link new material from `doc/README.md` or the relevant `index.rst` so it is discoverable.
 - When touching shared style guidance, update `doc/STRATEGY.md` if needed.
 - Prime new contributors with the doc-builder base prompt at
-  `ai/rsyslog_doc_builder/base_prompt.txt` when scoping AI-driven documentation
+  `ai/rsyslog_code_doc_builder/base_prompt.txt` when scoping AI-driven documentation
   work.
 
 ## Build & validation
