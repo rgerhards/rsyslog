@@ -52,7 +52,7 @@ last_reviewed: YYYY-MM-DD
 - `core-supported`: Maintained by the rsyslog core team.
 - `contributor-supported`: Maintained primarily by a community contributor; the
   core team reviews but does not lead feature work.
-- `stalled`: No active maintainer; use extra caution before changing behaviour.
+- `stalled`: No active maintainer; use extra caution before changing behavior.
 
 #### Maturity level values
 - `fully-mature`: Long-standing module with well-established interfaces.
@@ -78,10 +78,10 @@ support expectations change.
 ## Coding expectations
 - Follow `MODULE_AUTHOR_CHECKLIST.md` for concurrency and documentation tasks.
 - Update the module's top-of-file "Concurrency & Locking" comment when
-  behaviour changes.
+  behavior changes.
 - Update `doc/ai/module_map.yaml` if concurrency expectations change.
 - When adding a new module, update `plugins/Makefile.am`, `configure.ac`, and
-  provide tests under `tests/` to cover the new behaviour.
+  provide tests under `tests/` to cover the new behavior.
 
 ## Testing expectations
 - Prefer module-focused tests in `tests/` named after the module (e.g.
@@ -92,7 +92,7 @@ support expectations change.
   placed under `tests/`.
 
 ## Documentation touchpoints
-- Mention significant behaviour or dependency changes in `doc/` (for example,
+- Mention significant behavior or dependency changes in `doc/` (for example,
   module reference guides or changelog entries).
 - Cross-link any new documentation from the appropriate `index.rst` so users
   can discover it easily.

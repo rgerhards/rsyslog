@@ -21,7 +21,7 @@
 
 ## Cross-component coordination
 - Shared helpers or configuration formats that must stay aligned.
-- Other modules or docs to update when behaviour changes.
+- Other modules or docs to update when behavior changes.
 
 ## Metadata & housekeeping
 - Remind contributors to update `MODULE_METADATA.yaml`.

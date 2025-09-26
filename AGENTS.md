@@ -16,7 +16,8 @@ This file defines guidelines and instructions for AI assistants (e.g., Codex, Gi
       - [`liblognorm`](https://github.com/rsyslog/liblognorm)
       - [`librelp`](https://github.com/rsyslog/librelp)
       - [`libestr`](https://github.com/rsyslog/libestr)
-  - [`libfastjson`](https://github.com/rsyslog/libfastjson): A fork of libfastjson by the rsyslog project, optimized for speed. This library is used by multiple external projects.
+      - [`libfastjson`](https://github.com/rsyslog/libfastjson): A fork of libfastjson by the rsyslog project, optimized for speed.
+        This library is used by multiple external projects.
 
 -----
 

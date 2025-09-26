@@ -5,13 +5,13 @@ These instructions apply to everything under `contrib/`.
 ## Expectations for contrib work
 - Contrib modules are not part of the core support contract.  Changes should
   preserve backward compatibility for existing users and clearly call out
-  behaviour shifts in commit messages and documentation.
+  behavior shifts in commit messages and documentation.
 - Many contrib modules depend on third-party SDKs or services that are not
   available in CI.  Document any manual setup that reviewers must perform.
 
 ## Build & bootstrap reminders
 - Run `./autogen.sh` before your first build in a fresh checkout and whenever
-  you modify autotools inputs (`configure.ac`, `Makefile.am`, `m4/`).  Expect
+  you modify autotools inputs (`configure.ac`, `Makefile.am`, files under `m4/`).  Expect
   the bootstrap step to take up to about 2 minutes; you can skip it when the
   task does not require building (for example, documentation-only changes).
 - Configure with the switches needed to include the contrib module.  Some
@@ -41,8 +41,8 @@ last_reviewed: YYYY-MM-DD
   the module has moved to `plugins/`.
 
 ### Optional keys
-Reuse the optional keys from `plugins/MODULE_METADATA_TEMPLATE.yaml` to document
-build/runtime requirements, CI coverage, and reviewer notes.  Copy
+Use the optional keys from the template to document build/runtime
+requirements, CI coverage, and reviewer notes.  Copy
 `contrib/MODULE_METADATA_TEMPLATE.yaml` when creating the file.
 
 ## Testing expectations

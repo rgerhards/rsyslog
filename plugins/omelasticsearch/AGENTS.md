@@ -10,7 +10,7 @@
 - `./devtools/codex-setup.sh` installs the required libcurl development headers
   inside the sandbox.
 - Re-run `./configure` after toggling the flag; rerun `./autogen.sh` if you touch
-  `configure.ac`, any `Makefile.am`, or macros under `m4/`.
+  `configure.ac`, any `Makefile.am`, or files under `m4/`.
 
 ## Local testing
 - Enable module-specific tests with `--enable-elasticsearch-tests=minimal` (or
