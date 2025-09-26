@@ -1,0 +1,59 @@
+# AGENTS.md – Contrib modules subtree
+
+These instructions apply to everything under `contrib/`.
+
+## Expectations for contrib work
+- Contrib modules are not part of the core support contract.  Changes should
+  preserve backward compatibility for existing users and clearly call out
+  behaviour shifts in commit messages and documentation.
+- Many contrib modules depend on third-party SDKs or services that are not
+  available in CI.  Document any manual setup that reviewers must perform.
+
+## Build & bootstrap reminders
+- Run `./autogen.sh` before your first build in a fresh checkout and whenever
+  you modify autotools inputs (`configure.ac`, `Makefile.am`, `m4/`).  Expect
+  the bootstrap step to take up to about 2 minutes; you can skip it when the
+  task does not require building (for example, documentation-only changes).
+- Configure with the switches needed to include the contrib module.  Some
+  modules are disabled unless their dependencies are detected.  Use
+  `./configure --help` and the module's `MODULE_METADATA.yaml` to identify
+  the relevant `--enable`/`--with` flags.
+- Build with `make -j$(nproc)` and run `make check`.  If the full test suite is
+  impractical (for example because the module talks to external services), run
+  and document the narrowest reproducible subset of tests.
+
+## Metadata required for every module
+Each contrib module directory (for example `contrib/mmkubernetes/`) must contain
+`MODULE_METADATA.yaml`.  Contrib metadata uses the same schema as core plugins,
+with different default expectations.
+
+### Required keys
+```yaml
+support_status: contributor-supported | stalled
+maturity_level: fully-mature | mature | fresh | experimental
+primary_contact: "Full Name <email@example.com>" | "(unassigned)"
+last_reviewed: YYYY-MM-DD
+```
+
+- Default `support_status` is `contributor-supported` unless the core team has
+  formally adopted the module.
+- Use `stalled` if no maintainer is known.  Do not set `core-supported` unless
+  the module has moved to `plugins/`.
+
+### Optional keys
+Reuse the optional keys from `plugins/MODULE_METADATA_TEMPLATE.yaml` to document
+build/runtime requirements, CI coverage, and reviewer notes.  Copy
+`contrib/MODULE_METADATA_TEMPLATE.yaml` when creating the file.
+
+## Testing expectations
+- Prefer smoke tests that can run under `make check` without proprietary
+  services.  If that is impossible, provide script stubs in `tests/` that mock
+  or skip the integration but keep API coverage verifiable.
+- Record any external test environments (container images, cloud resources) in
+  the module metadata so reviewers understand the manual steps required.
+
+## Documentation touchpoints
+- Update `doc/` to mention new or changed contrib modules, especially when the
+  module has prerequisites or manual installation steps.
+- When a contrib module becomes core-supported, move it under `plugins/`, update
+  the metadata accordingly, and inform maintainers via the changelog.

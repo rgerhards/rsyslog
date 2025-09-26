@@ -16,7 +16,21 @@ This file defines guidelines and instructions for AI assistants (e.g., Codex, Gi
       - [`liblognorm`](https://github.com/rsyslog/liblognorm)
       - [`librelp`](https://github.com/rsyslog/librelp)
       - [`libestr`](https://github.com/rsyslog/libestr)
-      - [`libfastjson`](https://github.com/rsyslog/libfastjson): A fork of libfastjson by the rsyslog project, optimized for speed. This library is used by multiple external projects.
+  - [`libfastjson`](https://github.com/rsyslog/libfastjson): A fork of libfastjson by the rsyslog project, optimized for speed. This library is used by multiple external projects.
+
+-----
+
+## Quick links for agents
+
+  - **Documentation subtree guide:** [`doc/AGENTS.md`](./doc/AGENTS.md)
+  - **Core plugin subtree guide:** [`plugins/AGENTS.md`](./plugins/AGENTS.md)
+  - **Contrib module subtree guide:** [`contrib/AGENTS.md`](./contrib/AGENTS.md)
+  - **Module author checklist:** [`MODULE_AUTHOR_CHECKLIST.md`](./MODULE_AUTHOR_CHECKLIST.md)
+  - **Developer overview:** [`DEVELOPING.md`](./DEVELOPING.md)
+  - **Commit prompt template:** [`ai/rsyslog_commit_assistant/base_prompt.txt`](./ai/rsyslog_commit_assistant/base_prompt.txt)
+
+Use these jump points together with this file to locate the workflow and
+component notes that apply to your task.
 
 -----
 
@@ -114,6 +128,28 @@ will automatically apply these rules.
 
 Whenever `.c` or `.h` files are modified, a build should be performed using `make`.
 If new functionality is introduced, at least a basic test should be created and run.
+
+### Generating the autotools build system
+
+The `configure` script and `Makefile.in` files are **not** stored in git. After a
+fresh checkout—or any time `configure.ac`, `Makefile.am`, or macros under `m4/`
+change—you **must** run:
+
+```bash
+./autogen.sh
+```
+
+This bootstraps autotools, downloads any required macros, and generates
+`configure`. Skipping this step is the most common reason for messages such as
+`configure: error: cannot find install-sh, install.sh, or shtool` or `make:
+*** No targets specified and no makefile found`. If a cleanup removed the
+generated files (e.g., `git clean -xfd`), re-run `./autogen.sh` before
+configuring again.
+
+If `autogen.sh` fails, run `./devtools/codex-setup.sh` first to install the
+toolchain dependencies inside the sandbox, then retry `./autogen.sh`.
+
+### Configure & build
 
 If possible, agents should:
 
