@@ -3,7 +3,8 @@
 FROM    openeuler/openeuler:24.03-lts
 
 # czmq is not packaged on openEuler 24.03 LTS, so the related modules are
-# omitted from the build options below.
+# omitted from the build options below. The distro also ships rpm macros by
+# default, so there is no separate redhat-rpm-config package to install.
 
 RUN     dnf -y update && \
         dnf -y install dnf-plugins-core && \
@@ -74,7 +75,6 @@ RUN     dnf -y install \
         python3-setuptools \
         python3-sphinx \
         qpid-proton-c-devel \
-        redhat-rpm-config \
         sudo \
         swig \
         systemd-devel \
