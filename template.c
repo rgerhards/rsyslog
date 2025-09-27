@@ -667,6 +667,7 @@ static struct cnfparamdescr cnfparamdescrProperty[] = {{"name", eCmdHdlrString, 
                                                        {"fixedwidth", eCmdHdlrBinary, 0},
                                                        {"datatype", eCmdHdlrString, 0},
                                                        {"onempty", eCmdHdlrString, 0},
+                                                       {"omitifzero", eCmdHdlrBinary, 0},
                                                        {"mandatory", eCmdHdlrBinary, 0},
                                                        {"spifno1stsp", eCmdHdlrBinary, 0}};
 static struct cnfparamblk pblkProperty = {
@@ -2029,6 +2030,7 @@ static rsRetVal createPropertyTpe(struct template *pTpl, struct cnfobj *o) {
     int droplastlf = 0;
     int spifno1stsp = 0;
     int mandatory = 0;
+    int omitIfZero = 0;
     int frompos = -1;
     int topos = 0;
     int topos_set = 0;
@@ -2102,6 +2104,8 @@ static rsRetVal createPropertyTpe(struct template *pTpl, struct cnfobj *o) {
             bComplexProcessing = 1;
         } else if (!strcmp(pblkProperty.descr[i].name, "mandatory")) {
             mandatory = pvals[i].val.d.n;
+        } else if (!strcmp(pblkProperty.descr[i].name, "omitifzero")) {
+            omitIfZero = pvals[i].val.d.n;
         } else if (!strcmp(pblkProperty.descr[i].name, "spifno1stsp")) {
             spifno1stsp = pvals[i].val.d.n;
             bComplexProcessing = 1;
@@ -2310,6 +2314,14 @@ static rsRetVal createPropertyTpe(struct template *pTpl, struct cnfobj *o) {
         ABORT_FINALIZE(RS_RET_ERR);
     }
 
+    if (omitIfZero && dataType != TPE_DATATYPE_NUMBER) {
+        LogError(0, RS_RET_ERR, "omitIfZero requires dataType=\"number\" for property");
+        ABORT_FINALIZE(RS_RET_ERR);
+    }
+    if (omitIfZero && formatType != F_JSONF && formatType != F_JSONFR) {
+        LogError(0, RS_RET_ERR, "omitIfZero requires format=\"jsonf\" for property");
+        ABORT_FINALIZE(RS_RET_ERR);
+    }
     /* apply */
     CHKmalloc(pTpe = tpeConstruct(pTpl));
     pTpe->eEntryType = FIELD;
@@ -2317,6 +2329,7 @@ static rsRetVal createPropertyTpe(struct template *pTpl, struct cnfobj *o) {
     pTpe->data.field.options.bDropLastLF = droplastlf;
     pTpe->data.field.options.bSPIffNo1stSP = spifno1stsp;
     pTpe->data.field.options.bMandatory = mandatory;
+    pTpe->data.field.options.bOmitIfZero = omitIfZero;
     pTpe->data.field.options.bFixedWidth = fixedwidth;
     pTpe->data.field.options.dataType = dataType;
     pTpe->data.field.options.onEmpty = onEmpty;
