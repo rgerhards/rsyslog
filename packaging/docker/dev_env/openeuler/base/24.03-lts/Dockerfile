@@ -2,6 +2,9 @@
 # creates the build environment for openEuler
 FROM    openeuler/openeuler:24.03-lts
 
+# czmq is not packaged on openEuler 24.03 LTS, so the related modules are
+# omitted from the build options below.
+
 RUN     dnf -y update && \
         dnf -y install dnf-plugins-core && \
         (dnf config-manager --set-enabled everything || true) && \
@@ -16,7 +19,6 @@ RUN     dnf -y install \
         ca-certificates \
         clang \
         cmake \
-        czmq-devel \
         cyrus-sasl \
         cyrus-sasl-devel \
         diffutils \
@@ -26,6 +28,7 @@ RUN     dnf -y install \
         gdb \
         git \
         gnutls-devel \
+        hiredis \
         hiredis-devel \
         iproute \
         java-11-openjdk \
@@ -34,20 +37,15 @@ RUN     dnf -y install \
         libbson-devel \
         libcap-ng-devel \
         libcurl-devel \
-        libdbi-dbd-mysql \
         libdbi-devel \
         libestr-devel \
         libfastjson-devel \
-        libfaketime \
         libgcrypt-devel \
-        libhiredis \
-        libkrb5 \
-        liblz4-devel \
+        lz4-devel \
         libmaxminddb-devel \
-        libmongoc-devel \
+        mongo-c-driver-devel \
         libnet \
         libnet-devel \
-        liblogging-stdlog-devel \
         liblognorm-devel \
         libpcap-devel \
         librabbitmq-devel \
@@ -100,7 +98,6 @@ ENV     RSYSLOG_CONFIGURE_OPTIONS=" \
         --enable-gnutls \
         --enable-gssapi-krb5 \
         --enable-imbatchreport \
-        --enable-imczmq \
         --enable-imdiag \
         --enable-imfile \
         --enable-imhttp \
@@ -111,7 +108,6 @@ ENV     RSYSLOG_CONFIGURE_OPTIONS=" \
         --enable-imptcp \
         --enable-kafka-tests \
         --enable-libdbi \
-        --enable-libfaketime \
         --enable-libgcrypt \
         --enable-libzstd \
         --enable-mmanon \
@@ -128,7 +124,6 @@ ENV     RSYSLOG_CONFIGURE_OPTIONS=" \
         --enable-mmutf8fix \
         --enable-mysql \
         --enable-omamqp1 \
-        --enable-omczmq \
         --enable-omhiredis \
         --enable-omhttpfs \
         --enable-omjournal \
@@ -154,7 +149,6 @@ ENV     RSYSLOG_CONFIGURE_OPTIONS=" \
         --enable-snmp-tests \
         --enable-usertools \
         --enable-valgrind \
-        \
         --enable-testbench \
         "
 
