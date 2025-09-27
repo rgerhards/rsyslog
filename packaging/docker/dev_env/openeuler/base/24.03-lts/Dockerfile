@@ -86,6 +86,24 @@ RUN     dnf -y install \
         zlib-devel \
         && dnf clean all
 
+RUN     set -euxo pipefail; \
+        # openEuler ships MariaDB client libraries that install mysql_config but
+        # only expose libmariadb.so. Ensure compatibility symlinks exist so the
+        # rsyslog configure checks that still look for libmysqlclient succeed.
+        libdir="$(pkg-config --variable=libdir libmariadb 2>/dev/null || echo /usr/lib64)"; \
+        if [ -d "$libdir" ]; then \
+            cd "$libdir"; \
+            if [ -e libmariadb.so.3 ] && [ ! -e libmariadb.so ]; then \
+                ln -s libmariadb.so.3 libmariadb.so; \
+            fi; \
+            if [ -e libmariadb.so ] && [ ! -e libmysqlclient.so ]; then \
+                ln -s libmariadb.so libmysqlclient.so; \
+            fi; \
+            if [ -e libmariadb.so.3 ] && [ ! -e libmysqlclient.so.21 ]; then \
+                ln -s libmariadb.so.3 libmysqlclient.so.21; \
+            fi; \
+        fi
+
 RUN     pip3 install --no-cache-dir pysnmp
 
 RUN     mkdir /local_dep_cache
