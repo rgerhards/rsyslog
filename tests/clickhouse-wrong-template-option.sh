@@ -3,13 +3,10 @@
 . ${srcdir:=.}/diag.sh init
 export NUMMESSAGES=1
 generate_conf
-cat <<'RSYSLOG_CONF' >> ${TESTCONF_NM}.conf
-module(load="../plugins/omclickhouse/.libs/omclickhouse")
+add_conf "module(load=\"../plugins/omclickhouse/.libs/omclickhouse\")
 
-template(name="outfmt" type="string" string="INSERT INTO rsyslog.template (id, severity, facility, timestamp, ipaddress, tag, message) VALUES (%msg:F,58:2%, %syslogseverity%, %syslogfacility%, '%timereported:::date-unixtimestamp%', '%fromhost-ip%', '%syslogtag%', '%msg%')")
-RSYSLOG_CONF
+template(name=\"outfmt\" type=\"string\" string=\"INSERT INTO rsyslog.template (id, severity, facility, timestamp, ipaddress, tag, message) VALUES (%msg:F,58:2%, %syslogseverity%, %syslogfacility%, '%timereported:::date-unixtimestamp%', '%fromhost-ip%', '%syslogtag%', '%msg%')\")
 
-add_conf "
 :syslogtag, contains, \"tag\" action(type=\"omclickhouse\" $(clickhouse_action_params \"off\")
                                         bulkmode=\"off\" user=\"default\" pwd=\"\"
                                         template=\"outfmt\")

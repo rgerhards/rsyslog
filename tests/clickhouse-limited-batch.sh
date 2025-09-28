@@ -4,13 +4,10 @@
 export NUMMESSAGES=100000
 
 generate_conf
-cat <<'RSYSLOG_CONF' >> ${TESTCONF_NM}.conf
-module(load="../plugins/omclickhouse/.libs/omclickhouse")
+add_conf "module(load=\"../plugins/omclickhouse/.libs/omclickhouse\")
 
-template(name="outfmt" option.stdsql="on" type="string" string="INSERT INTO rsyslog.limited (id, ipaddress, message) VALUES (%msg:F,58:2%, '%fromhost-ip%', '%msg:F,58:2%')")
-RSYSLOG_CONF
+template(name=\"outfmt\" option.stdsql=\"on\" type=\"string\" string=\"INSERT INTO rsyslog.limited (id, ipaddress, message) VALUES (%msg:F,58:2%, '%fromhost-ip%', '%msg:F,58:2%')\")
 
-add_conf "
 :syslogtag, contains, \"tag\" action(type=\"omclickhouse\" $(clickhouse_action_params)
                                         user=\"default\" pwd=\"\" template=\"outfmt\"
                                         maxbytes=\"1k\")

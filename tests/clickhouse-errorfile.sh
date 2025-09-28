@@ -4,15 +4,12 @@
 echo looks like clickhouse does no longer generate exceptions on error - skip until investigated
 exit 77
 generate_conf
-cat <<RSYSLOG_CONF >> ${TESTCONF_NM}.conf
-module(load="../plugins/imtcp/.libs/imtcp")
-module(load="../plugins/omclickhouse/.libs/omclickhouse")
-input(type="imtcp" port="0" listenPortFileName="${RSYSLOG_DYNNAME}.tcpflood_port")
+add_conf "module(load=\"../plugins/imtcp/.libs/imtcp\")
+module(load=\"../plugins/omclickhouse/.libs/omclickhouse\")
+input(type=\"imtcp\" port=\"0\" listenPortFileName=\"${RSYSLOG_DYNNAME}.tcpflood_port\")
 
-template(name="outfmt" option.stdsql="on" type="string" string="INSERT INTO rsyslog.errorfile (id, severity, facility, timestamp, ipaddress, tag, message) VALUES (%msg:F,58:2%, %syslogseverity%, %syslogfacility%, '%timereported:::date-unixtimestamp%', '%fromhost-ip%', '%syslogtag%', '%msg%')")
-RSYSLOG_CONF
+template(name=\"outfmt\" option.stdsql=\"on\" type=\"string\" string=\"INSERT INTO rsyslog.errorfile (id, severity, facility, timestamp, ipaddress, tag, message) VALUES (%msg:F,58:2%, %syslogseverity%, %syslogfacility%, '%timereported:::date-unixtimestamp%', '%fromhost-ip%', '%syslogtag%', '%msg%')\")
 
-add_conf "
 :syslogtag, contains, \"tag\" action(type=\"omclickhouse\" $(clickhouse_action_params)
                                         user=\"default\" pwd=\"\" template=\"outfmt\"
                                         bulkmode=\"off\" errorfile=\"$RSYSLOG_OUT_LOG\")

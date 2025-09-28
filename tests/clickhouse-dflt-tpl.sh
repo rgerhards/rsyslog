@@ -3,11 +3,8 @@
 . ${srcdir:=.}/diag.sh init
 export NUMMESSAGES=1
 generate_conf
-cat <<'RSYSLOG_CONF' >> ${TESTCONF_NM}.conf
-module(load="../plugins/omclickhouse/.libs/omclickhouse")
-RSYSLOG_CONF
+add_conf "module(load=\"../plugins/omclickhouse/.libs/omclickhouse\")
 
-add_conf "
 :syslogtag, contains, \"tag\" action(type=\"omclickhouse\" $(clickhouse_action_params) bulkmode=\"off\"
                                         user=\"default\" pwd=\"\")
 "

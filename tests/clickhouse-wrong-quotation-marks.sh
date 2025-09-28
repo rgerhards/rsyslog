@@ -2,15 +2,12 @@
 # add 2018-12-19 by Pascal Withopf, released under ASL 2.0
 . ${srcdir:=.}/diag.sh init
 generate_conf
-cat <<RSYSLOG_CONF >> ${TESTCONF_NM}.conf
-module(load="../plugins/imtcp/.libs/imtcp")
-module(load="../plugins/omclickhouse/.libs/omclickhouse")
-input(type="imtcp" port="0" listenPortFileName="${RSYSLOG_DYNNAME}.tcpflood_port")
+add_conf "module(load=\"../plugins/imtcp/.libs/imtcp\")
+module(load=\"../plugins/omclickhouse/.libs/omclickhouse\")
+input(type=\"imtcp\" port=\"0\" listenPortFileName=\"${RSYSLOG_DYNNAME}.tcpflood_port\")
 
-template(name="outfmt" option.stdsql="on" type="string" string="INSERT INTO rsyslog.quotation (id, severity, message) VALUES ( 1, %syslogseverity%, '%msg%')")
-RSYSLOG_CONF
+template(name=\"outfmt\" option.stdsql=\"on\" type=\"string\" string=\"INSERT INTO rsyslog.quotation (id, severity, message) VALUES ( 1, %syslogseverity%, '%msg%')\")
 
-add_conf "
 :syslogtag, contains, \"tag\" action(type=\"omclickhouse\" $(clickhouse_action_params)
                                         bulkmode=\"off\"
                                         user=\"default\" pwd=\"\" template=\"outfmt\")
