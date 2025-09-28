@@ -22,7 +22,12 @@ class _IndexDoc:
 
     __slots__ = ("source", "version", "order")
 
-    def __init__(self, source: Dict[str, object], version: int, order: int) -> None:
+    def __init__(
+        self,
+        source: Dict[str, object],
+        version: int,
+        order: int,
+    ) -> None:
         self.source = source
         self.version = version
         self.order = order
@@ -81,7 +86,9 @@ def _load_json(body: bytes) -> Dict[str, object]:
     return json.loads(data or "{}")
 
 
-def _normalize_properties(mapping: Dict[str, object]) -> Dict[str, Dict[str, object]]:
+def _normalize_properties(
+    mapping: Dict[str, object],
+) -> Dict[str, Dict[str, object]]:
     """Flatten mapping definitions into a property -> spec lookup."""
 
     if not mapping:
@@ -92,7 +99,9 @@ def _normalize_properties(mapping: Dict[str, object]) -> Dict[str, Dict[str, obj
     if "properties" in mapping:
         raw_props = mapping.get("properties", {})
         if isinstance(raw_props, dict):
-            props.update({k: v for k, v in raw_props.items() if isinstance(v, dict)})
+            props.update(
+                {k: v for k, v in raw_props.items() if isinstance(v, dict)}
+            )
         return props
 
     for maybe_type in mapping.values():
@@ -103,7 +112,10 @@ def _normalize_properties(mapping: Dict[str, object]) -> Dict[str, Dict[str, obj
     return props
 
 
-def _validate_against_mapping(index: _IndexState, doc: Dict[str, object]) -> Optional[Tuple[str, str]]:
+def _validate_against_mapping(
+    index: _IndexState,
+    doc: Dict[str, object],
+) -> Optional[Tuple[str, str]]:
     """Return an error tuple (type, reason) if mapping validation fails."""
 
     if not index.mappings:
@@ -141,8 +153,12 @@ class MockHandler(BaseHTTPRequestHandler):
     def log_message(self, *_args, **_kwargs):  # type: ignore[override]
         """Silence default logging to keep test output clean."""
 
-    # Utilities -----------------------------------------------------------------
-    def _json_response(self, payload: Dict[str, object], status: int = 200) -> None:
+    # Utilities -----------------------------------------------------------
+    def _json_response(
+        self,
+        payload: Dict[str, object],
+        status: int = 200,
+    ) -> None:
         data = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -155,7 +171,7 @@ class MockHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    # Endpoint handlers ---------------------------------------------------------
+    # Endpoint handlers ---------------------------------------------------
     def do_GET(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
         parsed = urlparse(self.path)
         parts = [part for part in parsed.path.split("/") if part]
@@ -167,7 +183,9 @@ class MockHandler(BaseHTTPRequestHandler):
 
         if len(parts) == 2 and parts[1] == "_refresh":
             # Refresh is a no-op but succeeds even if the index is unknown.
-            self._json_response({"_shards": {"total": 1, "successful": 1, "failed": 0}})
+            self._json_response(
+                {"_shards": {"total": 1, "successful": 1, "failed": 0}}
+            )
             return
 
         if len(parts) == 2 and parts[1] == "_search":
@@ -193,7 +211,10 @@ class MockHandler(BaseHTTPRequestHandler):
             payload = {
                 "took": 1,
                 "timed_out": False,
-                "hits": {"total": {"value": total, "relation": "eq"}, "hits": hits},
+                "hits": {
+                    "total": {"value": total, "relation": "eq"},
+                    "hits": hits,
+                },
             }
             self._json_response(payload)
             return
@@ -267,7 +288,10 @@ class MockHandler(BaseHTTPRequestHandler):
             index_name = parts[0]
             doc_id = parts[2] if len(parts) >= 3 else None
             if doc_id is None:
-                self._json_response({"error": "missing document id"}, status=400)
+                self._json_response(
+                    {"error": "missing document id"},
+                    status=400,
+                )
                 return
             index = STATE.get_index(index_name)
             doc_body = _load_json(body)
@@ -281,16 +305,28 @@ class MockHandler(BaseHTTPRequestHandler):
                 self._json_response(payload, status=400)
                 return
             with index.lock:
-                version = index.docs.get(doc_id).version + 1 if doc_id in index.docs else 1
+                version = (
+                    index.docs.get(doc_id).version + 1
+                    if doc_id in index.docs
+                    else 1
+                )
                 STATE.global_order += 1
-                index.docs[doc_id] = _IndexDoc(doc_body, version, STATE.global_order)
+                index.docs[doc_id] = _IndexDoc(
+                    doc_body,
+                    version,
+                    STATE.global_order,
+                )
             payload = {
                 "_index": index_name,
                 "_type": "_doc",
                 "_id": doc_id,
                 "result": "created" if version == 1 else "updated",
                 "_version": version,
-                "_shards": {"total": 1, "successful": 1, "failed": 0},
+                "_shards": {
+                    "total": 1,
+                    "successful": 1,
+                    "failed": 0,
+                },
                 "status": 201 if version == 1 else 200,
             }
             self._json_response(payload, status=payload["status"])
@@ -326,16 +362,28 @@ class MockHandler(BaseHTTPRequestHandler):
                     doc_id = str(index.next_id)
                     index.next_id += 1
                 existing = doc_id in index.docs
-                version = index.docs[doc_id].version + 1 if existing else 1
+                version = (
+                    index.docs[doc_id].version + 1
+                    if existing
+                    else 1
+                )
                 STATE.global_order += 1
-                index.docs[doc_id] = _IndexDoc(doc_body, version, STATE.global_order)
+                index.docs[doc_id] = _IndexDoc(
+                    doc_body,
+                    version,
+                    STATE.global_order,
+                )
             payload = {
                 "_index": index_name,
                 "_type": "_doc",
                 "_id": doc_id,
                 "result": "created" if version == 1 else "updated",
                 "_version": version,
-                "_shards": {"total": 1, "successful": 1, "failed": 0},
+                "_shards": {
+                    "total": 1,
+                    "successful": 1,
+                    "failed": 0,
+                },
                 "status": 201 if version == 1 else 200,
             }
             self._json_response(payload, status=payload["status"])
@@ -343,12 +391,15 @@ class MockHandler(BaseHTTPRequestHandler):
 
         self._json_response({"error": "not_found"}, status=404)
 
-    # Bulk helpers --------------------------------------------------------------
+    # Bulk helpers --------------------------------------------------------
     def _handle_bulk(self, body: bytes) -> None:
         text = body.decode("utf-8") if body else ""
         lines = [line for line in text.splitlines() if line.strip()]
         if len(lines) % 2 != 0:
-            self._json_response({"error": "malformed bulk request"}, status=400)
+            self._json_response(
+                {"error": "malformed bulk request"},
+                status=400,
+            )
             return
 
         items: List[Dict[str, object]] = []
@@ -360,7 +411,14 @@ class MockHandler(BaseHTTPRequestHandler):
             doc_line = lines[idx + 1] if action != "delete" else None
             index_name = meta.get("_index")
             if not index_name:
-                items.append({action: {"status": 400, "error": {"type": "invalid_index"}}})
+                items.append(
+                    {
+                        action: {
+                            "status": 400,
+                            "error": {"type": "invalid_index"},
+                        }
+                    }
+                )
                 errors = True
                 continue
             index_state = STATE.get_index(index_name)
@@ -399,7 +457,10 @@ class MockHandler(BaseHTTPRequestHandler):
                 if validation_error is not None:
                     err_type, err_reason = validation_error
                     status = 400
-                    error_info = {"type": err_type, "reason": err_reason}
+                    error_info = {
+                        "type": err_type,
+                        "reason": err_reason,
+                    }
                 elif action == "create" and existing:
                     status = 409
                     result = "conflict"
@@ -411,9 +472,17 @@ class MockHandler(BaseHTTPRequestHandler):
                     if doc_id is None:
                         doc_id = str(index_state.next_id)
                         index_state.next_id += 1
-                    version = index_state.docs.get(doc_id).version + 1 if existing else 1
+                    version = (
+                        index_state.docs.get(doc_id).version + 1
+                        if existing
+                        else 1
+                    )
                     STATE.global_order += 1
-                    index_state.docs[doc_id] = _IndexDoc(doc, version, STATE.global_order)
+                    index_state.docs[doc_id] = _IndexDoc(
+                        doc,
+                        version,
+                        STATE.global_order,
+                    )
                     status = 201 if version == 1 else 200
                     result = "created" if version == 1 else "updated"
 
@@ -432,15 +501,41 @@ class MockHandler(BaseHTTPRequestHandler):
                 errors = True
             items.append(item)
 
-        payload = {"took": 1, "errors": errors, "items": items}
-        self._json_response(payload, status=200 if not errors else 400)
+        payload = {
+            "took": 1,
+            "errors": errors,
+            "items": items,
+        }
+        self._json_response(
+            payload,
+            status=200 if not errors else 400,
+        )
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Mock Elasticsearch server for tests")
-    parser.add_argument("-p", "--port", type=int, default=0, help="listen port (0 for auto)")
-    parser.add_argument("--port-file", type=str, default="", help="write bound port to file")
-    parser.add_argument("-i", "--interface", type=str, default="127.0.0.1", help="listen interface")
+    parser = argparse.ArgumentParser(
+        description="Mock Elasticsearch server for tests"
+    )
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        default=0,
+        help="listen port (0 for auto)",
+    )
+    parser.add_argument(
+        "--port-file",
+        type=str,
+        default="",
+        help="write bound port to file",
+    )
+    parser.add_argument(
+        "-i",
+        "--interface",
+        type=str,
+        default="127.0.0.1",
+        help="listen interface",
+    )
     args = parser.parse_args()
 
     httpd = HTTPServer((args.interface, args.port), MockHandler)

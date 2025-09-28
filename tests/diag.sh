@@ -2656,6 +2656,9 @@ prepare_elasticsearch() {
 }
 
 
+##
+## es_mock_enabled
+## Determine if the shell tests should use the Python Elasticsearch mock.
 es_mock_enabled() {
         case "${RSYSLOG_TEST_ES_MOCK:-}" in
         1|true|TRUE|on|ON|yes|YES)
@@ -2665,18 +2668,30 @@ es_mock_enabled() {
         return 1
 }
 
+##
+## es_mock_work_dir
+## Return the working directory path for the mock Elasticsearch instance.
 es_mock_work_dir() {
         printf '%s\n' "$RSYSLOG_DYNNAME/es-mock"
 }
 
+##
+## es_mock_pidfile
+## Return the PID file path of the mock Elasticsearch process.
 es_mock_pidfile() {
         printf '%s\n' "$(es_mock_work_dir)/mock-es.pid"
 }
 
+##
+## es_mock_portfile
+## Return the file path that stores the dynamically chosen port.
 es_mock_portfile() {
         printf '%s\n' "$(es_mock_work_dir)/mock-es.port"
 }
 
+##
+## es_mock_start
+## Launch the mock Elasticsearch server if it is not already running.
 es_mock_start() {
         es_mock_server_py="$srcdir/es_mock_server.py"
         if [ ! -f "$es_mock_server_py" ]; then
@@ -2691,7 +2706,8 @@ es_mock_start() {
         mkdir -p "$work_dir"
 
         if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-                printf 'Mock Elasticsearch already running at pid %s\n' "$(cat "$pidfile")"
+                existing_pid=$(cat "$pidfile")
+                printf 'Mock ES already running (pid %s)\n' "$existing_pid"
                 return
         fi
 
@@ -2705,7 +2721,12 @@ es_mock_start() {
         fi
         port_args=(--port "$mock_port")
 
-        server_args=("$es_mock_server_py" --interface 127.0.0.1 "${port_args[@]}" --port-file "$portfile")
+        server_args=(
+                "$es_mock_server_py"
+                --interface 127.0.0.1
+                "${port_args[@]}"
+                --port-file "$portfile"
+        )
         timeout 30m "$PYTHON" "${server_args[@]}" >>"$logfile" 2>&1 &
         mock_pid=$!
         echo "$mock_pid" >"$pidfile"
@@ -2718,9 +2739,12 @@ es_mock_start() {
 
         ES_PORT=$(cat "$portfile")
         export ES_PORT
-        printf 'Started mock Elasticsearch at 127.0.0.1:%s (pid %s)\n' "$ES_PORT" "$mock_pid"
+        printf 'Mock ES ready on 127.0.0.1:%s (pid %s)\n' "$ES_PORT" "$mock_pid"
 }
 
+##
+## es_mock_stop
+## Terminate the running mock Elasticsearch server, if any.
 es_mock_stop() {
         work_dir=$(es_mock_work_dir)
         pidfile=$(es_mock_pidfile)
@@ -2736,6 +2760,9 @@ es_mock_stop() {
         rm -rf "$work_dir"
 }
 
+##
+## es_mock_ensure
+## Ensure that the mock server is running unless --no-start was requested.
 es_mock_ensure() {
         if [ "$1" = "--no-start" ]; then
                 return 0
