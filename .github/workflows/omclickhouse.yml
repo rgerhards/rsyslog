@@ -60,10 +60,70 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            autoconf automake libtool pkg-config flex bison \
-            libcurl4-openssl-dev libjson-c-dev libssl-dev \
-            libgcrypt20-dev libzstd-dev libestr-dev \
-            libfastjson-dev liblognorm-dev zlib1g-dev
+            lcov \
+            clang-tools \
+            curl \
+            cmake-curses-gui \
+            python3-dev \
+            ruby-dev \
+            python3-sphinx \
+            default-jre-headless \
+            faketime \
+            libdbd-mysql \
+            gdb \
+            libaprutil1-dev \
+            libbson-dev \
+            libcivetweb-dev \
+            libcap-ng-dev \
+            libcap-ng0 \
+            libcurl4-gnutls-dev \
+            libdbi-dev \
+            libgcrypt20-dev \
+            libglib2.0-dev \
+            libgnutls28-dev \
+            libhiredis-dev \
+            libkrb5-dev \
+            liblz4-dev \
+            libmaxminddb-dev libmongoc-dev \
+            libmongoc-dev \
+            libmysqlclient-dev \
+            libnet1-dev \
+            libpcap-dev \
+            librabbitmq-dev \
+            libsnmp-dev \
+            libssl-dev libsasl2-dev libsasl2-2 libsasl2-modules \
+            libsystemd-dev \
+            libtirpc-dev \
+            libtokyocabinet-dev \
+            libtool \
+            libtool-bin \
+            libzstd-dev \
+            mysql-server \
+            net-tools \
+            postgresql-client libpq-dev \
+            python3-docutils  \
+            python3-pip \
+            python3-pysnmp4 \
+            software-properties-common \
+            uuid-dev \
+            valgrind \
+            zlib1g-dev \
+            libestr-dev \
+            libfastjson-dev \
+            librdkafka-dev \
+            libfastjson-dev \
+            librelp-dev \
+            liblognorm-dev \
+            libczmq-dev \
+            tcl-dev \
+            libsodium-dev \
+            cmake \
+            autoconf \
+            automake \
+            pkg-config \
+            flex \
+            bison \
+            build-essential
 
       - name: configure clickhouse client access
         run: |
