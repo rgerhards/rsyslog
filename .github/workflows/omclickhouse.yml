@@ -90,6 +90,8 @@ jobs:
 
       - name: configure
         run: |
+          # Disable libuuid so the workflow can configure without pulling
+          # additional dependencies that the omclickhouse tests do not need.
           ./configure --enable-testbench --enable-omclickhouse \
             --disable-kafka-tests --disable-elasticsearch-tests \
             --disable-omamqp1 --disable-omazureeventhubs \
