@@ -86,7 +86,7 @@ jobs:
           exit 1
 
       - name: bootstrap
-        run: ./autogen.sh
+        run: autoreconf -fvi
 
       - name: configure
         run: |
