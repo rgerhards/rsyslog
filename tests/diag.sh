@@ -123,6 +123,21 @@ clickhouse_action_params() {
         "$CLICKHOUSE_SERVER" "$port" "$use_https"
 }
 
+clickhouse_wait_ready() {
+    local attempts="${1:-30}"
+    local delay="${2:-2}"
+    local try
+
+    for try in $(seq 1 "$attempts"); do
+        if clickhouse_query "SELECT 1" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep "$delay"
+    done
+
+    return 1
+}
+
 #valgrind="valgrind --malloc-fill=ff --free-fill=fe --log-fd=1"
 #valgrind="valgrind --tool=callgrind" # for kcachegrind profiling
 

@@ -12,21 +12,37 @@ test_error_exit_handler() {
         $SUDO cat /var/log/clickhouse-server/clickhouse-server.err.log
 }
 
+started_locally=0
 if [ -n "$CLICKHOUSE_START_CMD" ]; then
+        started_locally=1
         printf 'starting clickhouse...\n'
         eval "$CLICKHOUSE_START_CMD" &
-        sleep 10
-        #wait_startup_pid /var/run/clickhouse-server/clickhouse-server.pid
-else
-        printf 'using externally managed clickhouse instance...\n'
 fi
+
+printf 'waiting for clickhouse to become ready...\n'
+if ! clickhouse_wait_ready 30 2; then
+        if [ $started_locally -eq 1 ]; then
+                printf 'clickhouse failed to start within timeout\n'
+                error_exit 100
+        fi
+        printf 'no reachable clickhouse instance, skipping tests\n'
+        exit 77
+fi
+
 printf 'preparing clickhouse for testbench use...\n'
-$SUDO ${srcdir}/../devtools/prepare_clickhouse.sh
-clickhouse_query "select 1"
-rc=$?
-if [ $rc -ne 0 ]; then
-        printf 'clickhouse failed to start, exit code %d\n' $rc
-        error_exit 100
+prepare_cmd=(env "CLICKHOUSE_CLIENT=$CLICKHOUSE_CLIENT")
+prepare_cmd+=("${srcdir}/../devtools/prepare_clickhouse.sh")
+if [ -n "$SUDO" ]; then
+        if ! $SUDO "${prepare_cmd[@]}"; then
+                printf 'clickhouse preparation failed\n'
+                error_exit 100
+        fi
+else
+        if ! "${prepare_cmd[@]}"; then
+                printf 'clickhouse preparation failed\n'
+                error_exit 100
+        fi
 fi
+
 printf 'done, clickhouse ready for testbench\n'
 exit_test

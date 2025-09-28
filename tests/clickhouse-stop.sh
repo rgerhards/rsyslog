@@ -6,7 +6,12 @@
 # Released under ASL 2.0
 . ${srcdir:=.}/diag.sh init
 
-clickhouse_query "DROP DATABASE rsyslog"
+if ! clickhouse_query "SELECT 1" >/dev/null 2>&1; then
+        printf 'ClickHouse not reachable, nothing to stop.\n'
+        exit_test
+fi
+
+clickhouse_query "DROP DATABASE IF EXISTS rsyslog" >/dev/null 2>&1
 sleep 1
 if [ -n "$CLICKHOUSE_STOP_CMD" ]; then
         printf 'stopping clickhouse...\n'
