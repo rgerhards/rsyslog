@@ -90,11 +90,88 @@ jobs:
 
       - name: configure
         run: |
-          # Disable libuuid so the workflow can configure without pulling
-          # additional dependencies that the omclickhouse tests do not need.
-          ./configure --enable-testbench --enable-omclickhouse \
-            --disable-kafka-tests --disable-elasticsearch-tests \
-            --disable-omamqp1 --disable-omazureeventhubs \
+          ./configure \
+            --enable-compile-warning=error \
+            --enable-clickhouse \
+            --enable-clickhouse-tests=no \
+            --disable-elasticsearch \
+            --disable-elasticsearch-tests \
+            --disable-ffaup \
+            --enable-gnutls \
+            --enable-gssapi-krb5 \
+            --enable-imbatchreport \
+            --enable-imczmq \
+            --enable-imdiag \
+            --enable-imdocker \
+            --disable-imdocker-tests \
+            --enable-imfile \
+            --enable-imhttp \
+            --enable-imjournal \
+            --disable-imkafka \
+            --disable-omkafka \
+            --enable-impstats \
+            --enable-impcap \
+            --enable-imptcp \
+            --disable-kafka-tests \
+            --disable-ksi-ls12 \
+            --enable-libdbi \
+            --enable-libfaketime \
+            --enable-libgcrypt \
+            --enable-libzstd \
+            --enable-mail \
+            --enable-mmanon \
+            --enable-mmaudit \
+            --enable-mmcapture \
+            --enable-mmcount \
+            --enable-mmdarwin \
+            --enable-mmdblookup \
+            --enable-mmfields \
+            --enable-mmjsonparse \
+            --enable-mmkubernetes \
+            --enable-mmnormalize \
+            --enable-mmpstrucdata \
+            --enable-mmrm1stspace \
+            --enable-mmsequence \
+            --enable-mmsnmptrapd \
+            --enable-mmutf8fix \
+            --disable-mysql \
+            --disable-mysql-tests \
+            --disable-omamqp1 \
+            --enable-omczmq \
+            --enable-omhiredis \
+            --enable-omhiredis \
+            --enable-omhttpfs \
+            --enable-omhttp \
+            --enable-omjournal \
+            --disable-omkafka \
+            --enable-ommongodb \
+            --enable-omprog \
+            --enable-omrabbitmq \
+            --enable-omrelp-default-port=13515 \
+            --enable-omruleset \
+            --enable-omsendertrack \
+            --enable-omstdout \
+            --enable-omtcl \
+            --enable-omudpspoof \
+            --enable-omuxsock \
+            --enable-openssl \
+            --enable-pgsql \
+            --enable-pmaixforwardedfrom \
+            --enable-pmciscoios \
+            --enable-pmcisconames \
+            --enable-pmlastmsg \
+            --enable-pmnormalize \
+            --enable-pmnull \
+            --enable-pmsnare \
+            --enable-relp \
+            --disable-snmp \
+            --disable-snmp-tests \
+            --enable-usertools \
+            --enable-imdtls \
+            --enable-omdtls \
+            --enable-mmaitag \
+            --enable-valgrind \
+            --enable-testbench \
             --disable-uuid
 
       - name: build
