@@ -1,8 +1,10 @@
 #!/bin/bash
 # this script prepares a clickhouse instance for use by the rsyslog testbench
 
-
-clickhouse-client --query="CREATE DATABASE rsyslog"
+CLICKHOUSE_CLIENT=${CLICKHOUSE_CLIENT:-clickhouse-client}
+# shellcheck disable=SC2206 # intentional splitting of command string
+CLICKHOUSE_CLIENT_CMD=($CLICKHOUSE_CLIENT)
+"${CLICKHOUSE_CLIENT_CMD[@]}" --query="CREATE DATABASE rsyslog"
 echo clickouse create database RETURN STATE: $?
 
 # At the moment only the database is created for preperation.

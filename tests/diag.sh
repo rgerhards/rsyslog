@@ -66,6 +66,63 @@ export TB_ERR_TIMEOUT=101
 # CONFIG
 export ZOOPIDFILE="$(pwd)/zookeeper.pid"
 
+# ---------------------------------------------------------------------------
+# ClickHouse helpers
+# ---------------------------------------------------------------------------
+
+# CLICKHOUSE_CLIENT
+#   Command that invokes the ClickHouse client.
+#   Defaults to "clickhouse-client" but may include additional arguments
+#   (e.g. "docker exec clickhouse clickhouse-client").
+# CLICKHOUSE_SERVER
+#   Hostname that omclickhouse should connect to. Defaults to "localhost".
+# CLICKHOUSE_HTTP_PORT / CLICKHOUSE_HTTPS_PORT
+#   Ports for HTTP and HTTPS connections. Defaults match upstream defaults.
+# CLICKHOUSE_USE_HTTPS_DEFAULT
+#   Default for omclickhouse's usehttps parameter when tests do not override it.
+CLICKHOUSE_CLIENT=${CLICKHOUSE_CLIENT:-clickhouse-client}
+CLICKHOUSE_SERVER=${CLICKHOUSE_SERVER:-localhost}
+CLICKHOUSE_HTTP_PORT=${CLICKHOUSE_HTTP_PORT:-8123}
+CLICKHOUSE_HTTPS_PORT=${CLICKHOUSE_HTTPS_PORT:-8443}
+CLICKHOUSE_USE_HTTPS_DEFAULT=${CLICKHOUSE_USE_HTTPS_DEFAULT:-on}
+
+_clickhouse_exec() {
+    if [ -z "$CLICKHOUSE_CLIENT" ]; then
+        printf 'TESTBENCH_ERROR: CLICKHOUSE_CLIENT must not be empty\n'
+        error_exit 100
+    fi
+    local -a cmd
+    # shellcheck disable=SC2206 # intentional splitting of command string
+    cmd=($CLICKHOUSE_CLIENT)
+    "${cmd[@]}" "$@"
+}
+
+clickhouse_query() {
+    if [ "$1" == "" ]; then
+        printf 'TESTBENCH_ERROR: clickhouse_query requires a SQL statement\n'
+        error_exit 100
+    fi
+    local query="$1"
+    shift
+    _clickhouse_exec --query="$query" "$@"
+}
+
+clickhouse_action_params() {
+    local use_https="${1:-$CLICKHOUSE_USE_HTTPS_DEFAULT}"
+    local port_override="$2"
+    local port
+    if [ -n "$port_override" ]; then
+        port="$port_override"
+    elif [ "$use_https" == "on" ]; then
+        port="$CLICKHOUSE_HTTPS_PORT"
+    else
+        port="$CLICKHOUSE_HTTP_PORT"
+    fi
+
+    printf 'server="%s" port="%s" usehttps="%s"' \
+        "$CLICKHOUSE_SERVER" "$port" "$use_https"
+}
+
 #valgrind="valgrind --malloc-fill=ff --free-fill=fe --log-fd=1"
 #valgrind="valgrind --tool=callgrind" # for kcachegrind profiling
 

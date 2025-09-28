@@ -3,26 +3,28 @@
 . ${srcdir:=.}/diag.sh init
 export NUMMESSAGES=1
 generate_conf
-add_conf '
+cat <<'RSYSLOG_CONF' >> ${TESTCONF_NM}.conf
 module(load="../plugins/omclickhouse/.libs/omclickhouse")
 
 template(name="outfmt" option.stdsql="on" type="string" string="SELECT * FROM rsyslog.select")
+RSYSLOG_CONF
 
-:syslogtag, contains, "tag" action(type="omclickhouse" server="localhost" port="8443"
-					bulkmode="off" user="default" pwd=""
-					template="outfmt")
+add_conf "
+:syslogtag, contains, \"tag\" action(type=\"omclickhouse\" $(clickhouse_action_params)
+                                        bulkmode=\"off\" user=\"default\" pwd=\"\"
+                                        template=\"outfmt\")
 
-action(type="omfile" file="'$RSYSLOG_OUT_LOG'")
-'
+action(type=\"omfile\" file=\"$RSYSLOG_OUT_LOG\")
+"
 
-clickhouse-client --query="CREATE TABLE IF NOT EXISTS rsyslog.select ( id Int32, severity Int8, facility Int8, timestamp DateTime, ipaddress String, tag String, message String ) ENGINE = MergeTree() PARTITION BY severity Order By id"
+clickhouse_query "CREATE TABLE IF NOT EXISTS rsyslog.select ( id Int32, severity Int8, facility Int8, timestamp DateTime, ipaddress String, tag String, message String ) ENGINE = MergeTree() PARTITION BY severity Order By id"
 
 startup
 injectmsg
 shutdown_when_empty
 wait_shutdown
 
-clickhouse-client --query="DROP TABLE rsyslog.select"
+clickhouse_query "DROP TABLE rsyslog.select"
 content_check "omclickhouse: Message is no Insert query: Message suspended: SELECT * FROM rsyslog.select"
 
 exit_test
