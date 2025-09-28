@@ -92,7 +92,8 @@ jobs:
         run: |
           ./configure --enable-testbench --enable-omclickhouse \
             --disable-kafka-tests --disable-elasticsearch-tests \
-            --disable-omamqp1 --disable-omazureeventhubs
+            --disable-omamqp1 --disable-omazureeventhubs \
+            --disable-uuid
 
       - name: build
         run: make -j"$(nproc)"
