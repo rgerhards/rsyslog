@@ -66,6 +66,7 @@ docker run $ti $optrm $DOCKER_RUN_EXTRA_OPTS \
 	-e CODECOV_commit_sha \
 	-e CODECOV_repo_slug \
 	-e VCS_SLUG \
+	-e RSYSLOG_TEST_ES_MOCK \
 	-e VERBOSE \
 	--cap-add SYS_ADMIN \
 	--cap-add SYS_PTRACE \
