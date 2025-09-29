@@ -6,6 +6,8 @@
 # Released under ASL 2.0
 . ${srcdir:=.}/diag.sh init
 
+clickhouse_clear_marker
+
 if ! clickhouse_query "SELECT 1" >/dev/null 2>&1; then
         printf 'ClickHouse not reachable, nothing to stop.\n'
         exit_test

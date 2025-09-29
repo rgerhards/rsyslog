@@ -1,6 +1,7 @@
 #!/bin/bash
 # add 2018-12-19 by Pascal Withopf, released under ASL 2.0
 . ${srcdir:=.}/diag.sh init
+clickhouse_require_server
 generate_conf
 add_conf "module(load=\"../plugins/imtcp/.libs/imtcp\")
 module(load=\"../plugins/omclickhouse/.libs/omclickhouse\")

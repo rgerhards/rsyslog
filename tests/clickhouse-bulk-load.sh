@@ -1,6 +1,7 @@
 #!/bin/bash
 # add 2018-12-07 by Pascal Withopf, released under ASL 2.0
 . ${srcdir:=.}/diag.sh init
+clickhouse_require_server
 export NUMMESSAGES=100000
 
 generate_conf

@@ -7,6 +7,8 @@
 . ${srcdir:=.}/diag.sh init
 set -x
 
+clickhouse_clear_marker
+
 test_error_exit_handler() {
         printf 'clickhouse startup failed, log is:\n'
         $SUDO cat /var/log/clickhouse-server/clickhouse-server.err.log
@@ -25,8 +27,9 @@ if ! clickhouse_wait_ready 30 2; then
                 printf 'clickhouse failed to start within timeout\n'
                 error_exit 100
         fi
-        printf 'no reachable clickhouse instance, skipping tests\n'
-        exit 77
+        printf 'no reachable clickhouse instance, skipping server-backed tests\n'
+        clickhouse_mark_unavailable
+        exit_test
 fi
 
 printf 'preparing clickhouse for testbench use...\n'
@@ -44,5 +47,6 @@ else
         fi
 fi
 
+clickhouse_mark_available
 printf 'done, clickhouse ready for testbench\n'
 exit_test

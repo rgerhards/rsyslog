@@ -85,6 +85,7 @@ CLICKHOUSE_SERVER=${CLICKHOUSE_SERVER:-localhost}
 CLICKHOUSE_HTTP_PORT=${CLICKHOUSE_HTTP_PORT:-8123}
 CLICKHOUSE_HTTPS_PORT=${CLICKHOUSE_HTTPS_PORT:-8443}
 CLICKHOUSE_USE_HTTPS_DEFAULT=${CLICKHOUSE_USE_HTTPS_DEFAULT:-off}
+CLICKHOUSE_READY_MARKER=${CLICKHOUSE_READY_MARKER:-"$(pwd)/.clickhouse-ready"}
 
 _clickhouse_exec() {
     if [ -z "$CLICKHOUSE_CLIENT" ]; then
@@ -136,6 +137,60 @@ clickhouse_wait_ready() {
     done
 
     return 1
+}
+
+_clickhouse_marker_write() {
+    local state="$1"
+    if [ -z "$CLICKHOUSE_READY_MARKER" ]; then
+        return 0
+    fi
+    printf '%s\n' "$state" >"$CLICKHOUSE_READY_MARKER"
+}
+
+clickhouse_mark_available() {
+    _clickhouse_marker_write "available"
+}
+
+clickhouse_mark_unavailable() {
+    _clickhouse_marker_write "unavailable"
+}
+
+clickhouse_clear_marker() {
+    if [ -n "$CLICKHOUSE_READY_MARKER" ]; then
+        rm -f "$CLICKHOUSE_READY_MARKER"
+    fi
+}
+
+clickhouse_marker_status() {
+    if [ -n "$CLICKHOUSE_READY_MARKER" ] && [ -f "$CLICKHOUSE_READY_MARKER" ]; then
+        cat "$CLICKHOUSE_READY_MARKER"
+        return 0
+    fi
+    return 1
+}
+
+clickhouse_require_server() {
+    local status
+    if status=$(clickhouse_marker_status 2>/dev/null); then
+        case "$status" in
+            available)
+                return 0
+                ;;
+            unavailable)
+                printf 'ClickHouse unavailable - skipping test.\n'
+                exit 77
+                ;;
+        esac
+    fi
+
+    if clickhouse_wait_ready 10 2; then
+        clickhouse_mark_available
+        return 0
+    fi
+
+    clickhouse_mark_unavailable
+    printf 'ClickHouse not reachable - skipping test.\n'
+    exit 77
 }
 
 #valgrind="valgrind --malloc-fill=ff --free-fill=fe --log-fd=1"
