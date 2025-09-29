@@ -20,6 +20,7 @@ wait_shutdown
 clickhouse_query "SELECT id, severity, facility, ipaddress, tag, message FROM rsyslog.basic" > $RSYSLOG_OUT_LOG
 
 clickhouse_query "DROP TABLE rsyslog.basic"
+## Verified against ClickHouse 25.9 TabSeparated output (clickhouse local 25.9.2.1).
 export EXPECTED='0	7	20	127.0.0.1	tag	 msgnum:00000000:'
 cmp_exact $RSYSLOG_OUT_LOG
 

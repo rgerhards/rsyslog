@@ -19,16 +19,17 @@ shutdown_when_empty
 wait_shutdown
 clickhouse_query "SELECT id, severity, facility, ipaddress, tag, message FROM rsyslog.bulk ORDER BY id" > $RSYSLOG_OUT_LOG
 
-export EXPECTED='0      7       20      127.0.0.1       tag      msgnum:00000000:
-1       7       20      127.0.0.1       tag      msgnum:00000001:
-2       7       20      127.0.0.1       tag      msgnum:00000002:
-3       7       20      127.0.0.1       tag      msgnum:00000003:
-4       7       20      127.0.0.1       tag      msgnum:00000004:
-5       7       20      127.0.0.1       tag      msgnum:00000005:
-6       7       20      127.0.0.1       tag      msgnum:00000006:
-7       7       20      127.0.0.1       tag      msgnum:00000007:
-8       7       20      127.0.0.1       tag      msgnum:00000008:
-9       7       20      127.0.0.1       tag      msgnum:00000009:'
+## Verified against ClickHouse 25.9 TabSeparated output (clickhouse local 25.9.2.1).
+export EXPECTED='0	7	20	127.0.0.1	tag	 msgnum:00000000:
+1	7	20	127.0.0.1	tag	 msgnum:00000001:
+2	7	20	127.0.0.1	tag	 msgnum:00000002:
+3	7	20	127.0.0.1	tag	 msgnum:00000003:
+4	7	20	127.0.0.1	tag	 msgnum:00000004:
+5	7	20	127.0.0.1	tag	 msgnum:00000005:
+6	7	20	127.0.0.1	tag	 msgnum:00000006:
+7	7	20	127.0.0.1	tag	 msgnum:00000007:
+8	7	20	127.0.0.1	tag	 msgnum:00000008:
+9	7	20	127.0.0.1	tag	 msgnum:00000009:'
 cmp_exact $RSYSLOG_OUT_LOG
 
 clickhouse_query "DROP TABLE rsyslog.bulk"

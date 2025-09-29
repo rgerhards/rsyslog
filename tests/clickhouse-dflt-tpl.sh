@@ -18,6 +18,7 @@ wait_shutdown
 clickhouse_query "SELECT * FROM rsyslog.SystemEvents FORMAT CSV" > $RSYSLOG_OUT_LOG
 
 clickhouse_query "DROP TABLE rsyslog.SystemEvents"
+## Regex verified with ClickHouse 25.9 CSV output (clickhouse local 25.9.2.1).
 content_check --regex '7,20,"20..-03-01 01:00:00","192.0.2.8","tag"," msgnum:00000000:"'
 
 exit_test

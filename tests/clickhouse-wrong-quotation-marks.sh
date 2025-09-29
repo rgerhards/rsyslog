@@ -21,7 +21,8 @@ shutdown_when_empty
 wait_shutdown
 clickhouse_query "SELECT id, severity, message FROM rsyslog.quotation" > $RSYSLOG_OUT_LOG
 
-export EXPECTED="1      2       it\\'s a test"
+## Verified against ClickHouse 25.9 TabSeparated output (clickhouse local 25.9.2.1).
+export EXPECTED="1	2	it\\'s a test"
 cmp_exact $RSYSLOG_OUT_LOG
 
 clickhouse_query "DROP TABLE rsyslog.quotation"
