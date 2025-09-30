@@ -26,11 +26,10 @@ jobs:
           - 8088:8088
           - 8089:8089
         options: >-
-          --health-cmd "/opt/splunk/bin/splunk status || exit 1"
-          --health-interval 30s
-          --health-retries 20
-          --health-timeout 30s
-          --health-start-period 120s
+          # The bundled Ansible bootstrap can exceed the service health timeout,
+          # so neutralise the container health check and rely on the explicit
+          # readiness probe below instead.
+          --health-cmd "/bin/true"
     env:
       SPLUNK_PASSWORD: Changeme123!
       SPLUNK_HEC_TOKEN: 01234567-89ab-cdef-0123-456789abcdef
@@ -47,20 +46,44 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Waiting for Splunk service to report ready..."
+          SPLUNK_IMAGE="splunk/splunk:9.2.1"
+          echo "Locating Splunk service container (image ${SPLUNK_IMAGE})"
           for attempt in {1..30}; do
-            if docker exec splunk /opt/splunk/bin/splunk status 2>/dev/null | grep -q "splunkd is running"; then
+            if SPLUNK_CONTAINER_ID=$(docker ps --filter "ancestor=${SPLUNK_IMAGE}" --format '{{.ID}}' | head -n1); then
+              if [ -n "${SPLUNK_CONTAINER_ID}" ]; then
+                break
+              fi
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Unable to find Splunk container" >&2
+              docker ps -a
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "SPLUNK_CONTAINER_ID=${SPLUNK_CONTAINER_ID}" >>"$GITHUB_ENV"
+
+          echo "Waiting for Splunk service to report ready..."
+          for attempt in {1..45}; do
+            if docker exec "${SPLUNK_CONTAINER_ID}" /opt/splunk/bin/splunk status 2>/dev/null | grep -q "splunkd is running"; then
               echo "Splunk is ready"
               break
             fi
-            if [ "$attempt" -eq 30 ]; then
+            if [ "$attempt" -eq 45 ]; then
               echo "Splunk did not report ready" >&2
+              docker logs "${SPLUNK_CONTAINER_ID}" | tail -n 200 || true
+              exit 1
+            fi
+            if ! docker ps --format '{{.ID}}' | grep -q "${SPLUNK_CONTAINER_ID}"; then
+              echo "Splunk container stopped unexpectedly" >&2
+              docker logs "${SPLUNK_CONTAINER_ID}" | tail -n 200 || true
               exit 1
             fi
             sleep 10
           done
 
-          docker exec splunk /opt/splunk/bin/splunk http-event-collector enable -auth "admin:${SPLUNK_PASSWORD}" >/dev/null
+          docker exec "${SPLUNK_CONTAINER_ID}" /opt/splunk/bin/splunk http-event-collector enable -auth "admin:${SPLUNK_PASSWORD}" >/dev/null
           curl -sk -u "admin:${SPLUNK_PASSWORD}" https://localhost:8089/services/data/inputs/http -d name=rsyslog-gha -d token=${SPLUNK_HEC_TOKEN} -d index=main -d sourcetype=_json -d output_mode=json >/dev/null || true
           curl -sk -u "admin:${SPLUNK_PASSWORD}" https://localhost:8089/services/data/inputs/http/rsyslog-gha -d disabled=0 >/dev/null
 
@@ -78,10 +101,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          : "${SPLUNK_CONTAINER_ID:?SPLUNK_CONTAINER_ID must be exported by the readiness step}"
           SEARCH="search index=main \"${OMHTTP_HEC_TEST_MESSAGE}\" | head 1"
           echo "Verifying Splunk search: $SEARCH"
           for attempt in {1..30}; do
-            OUTPUT=$(docker exec splunk /opt/splunk/bin/splunk search "$SEARCH" -auth "admin:${SPLUNK_PASSWORD}" -output rawdata || true)
+            OUTPUT=$(docker exec "${SPLUNK_CONTAINER_ID}" /opt/splunk/bin/splunk search "$SEARCH" -auth "admin:${SPLUNK_PASSWORD}" -output rawdata || true)
             if grep -q "${OMHTTP_HEC_TEST_MESSAGE}" <<<"$OUTPUT"; then
               echo "Found event: $OUTPUT"
               exit 0
