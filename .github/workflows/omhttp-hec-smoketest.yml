@@ -25,10 +25,10 @@ jobs:
         ports:
           - 8088:8088
           - 8089:8089
+        # The bundled Ansible bootstrap can exceed the service health timeout,
+        # so neutralise the container health check and rely on the explicit
+        # readiness probe below instead.
         options: >-
-          # The bundled Ansible bootstrap can exceed the service health timeout,
-          # so neutralise the container health check and rely on the explicit
-          # readiness probe below instead.
           --health-cmd "/bin/true"
     env:
       SPLUNK_PASSWORD: Changeme123!
