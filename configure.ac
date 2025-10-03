@@ -3061,31 +3061,35 @@ fi
 
 
 dnl ---- gather doc files for EXTRA_DIST ----
-# .rst files
-rst_files=`cd "$srcdir" && find doc/source -type f -name '*.rst' -print 2>/dev/null | LC_ALL=C sort`
+doc_tree_files=`cd "$srcdir" && find doc -type f \
+        ! -path 'doc/build/*' \
+        ! -name 'Makefile.in' \
+        ! -name 'Makefile' \
+        -print 2>/dev/null | LC_ALL=C sort`
 
-# assemble; keep paths relative to top (we cd into $srcdir above)
-DOC_FILES="$rst_files
-doc/source/conf.py
-doc/source/conf_helpers.py
-doc/source/_ext/edit_on_github.py
-doc/source/_ext/rsyslog_lexer.py
-doc/source/_static/rsyslog.css
-doc/requirements.txt
-doc/README.md
-doc/STRATEGY.md
-doc/CONTRIBUTING.md
-doc/LICENSE
-$ai_files"
+doc_rst_files=`printf "%s\n" "$doc_tree_files" | grep '\.rst$' || true`
+if test -z "$doc_rst_files"; then
+        AC_MSG_ERROR([no reStructuredText sources discovered under doc/. Check EXTRA_DIST filtering.])
+fi
 
-# collapse newlines and extra whitespace to single spaces
-DOC_FILES=`printf "%s\n" "$DOC_FILES" | awk 'NF' | tr '\n' ' '`
+# collapse newlines, drop duplicates, and keep paths relative to the top
+DOC_FILES=`printf "%s\n%s\n" "$doc_tree_files" "$ai_files" | awk 'NF' | LC_ALL=C sort -u | tr '\n' ' '`
 
 AC_SUBST([DOC_FILES])
 
+AC_ARG_VAR([SPHINXBUILD], [Sphinx documentation builder command])
+if test -z "$SPHINXBUILD"; then
+        AC_PATH_TOOL([SPHINXBUILD], [sphinx-build], [sphinx-build])
+fi
+AC_SUBST([SPHINXBUILD])
+
+AC_ARG_VAR([SPHINXOPTS], [Additional options passed to sphinx-build])
+AC_SUBST([SPHINXOPTS])
+
 
 AC_CONFIG_FILES([Makefile \
-		runtime/Makefile \
+                doc/Makefile \
+                runtime/Makefile \
 		compat/Makefile \
 		grammar/Makefile \
 		tools/Makefile \

@@ -17,7 +17,7 @@ This guide applies to everything under `doc/`.
 
 ## Build & validation
 - After content changes, run `./doc/tools/build-doc-linux.sh --clean --format html` locally when possible to catch Sphinx errors.
-- For quick linting without rebuilding everything, run `make -C doc html` (uses the repo's virtualenv if already set up).
+- For quick linting without rebuilding everything, run `make doc-html` (or `make -C doc html`) after configuring the tree. This uses the repo's virtualenv if already set up.
 - Document-only changes generally do not require running the full C test suite.
 
 ## Commit messaging

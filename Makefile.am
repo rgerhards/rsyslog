@@ -655,3 +655,15 @@ dist-hook:
 	$(AM_V_GEN)echo $(VERSION) > $(distdir)/.tarball-version
 
 ACLOCAL_AMFLAGS = -I m4
+
+.PHONY: doc-html doc-singlehtml doc-json doc-alljson doc-clean doc-help html
+
+doc-clean:
+	$(AM_V_at)$(MAKE) -C doc doc-clean
+
+doc-html doc-singlehtml doc-json doc-alljson doc-help:
+	$(AM_V_at)$(MAKE) -C doc $@
+
+html: doc-html
+
+clean-local: doc-clean
