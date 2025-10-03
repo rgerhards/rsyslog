@@ -3061,11 +3061,21 @@ fi
 
 
 dnl ---- gather doc files for EXTRA_DIST ----
-doc_tree_files=`cd "$srcdir" && find doc -type f \
-        ! -path 'doc/build/*' \
-        ! -name 'Makefile.in' \
-        ! -name 'Makefile' \
-        -print 2>/dev/null | LC_ALL=C sort`
+doc_tree_files=""
+if test "x$in_git_src" = "xyes"; then
+        doc_tree_files=`cd "$srcdir" && git ls-files doc 2>/dev/null`
+fi
+if test -z "$doc_tree_files"; then
+        doc_tree_files=`cd "$srcdir" && find doc -type f \
+                ! -path 'doc/build/*' \
+                ! -path 'doc/_build/*' \
+                ! -path 'doc/.venv-docs/*' \
+                ! -path 'doc/*/__pycache__/*' \
+                ! -path 'doc/.tox/*' \
+                ! -name 'Makefile.in' \
+                ! -name 'Makefile' \
+                -print 2>/dev/null | LC_ALL=C sort`
+fi
 
 doc_rst_files=`printf "%s\n" "$doc_tree_files" | grep '\.rst$' || true`
 if test -z "$doc_rst_files"; then
