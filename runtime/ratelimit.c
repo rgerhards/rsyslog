@@ -225,7 +225,6 @@ void ratelimitStoreDestruct(rsconf_t *const cnf) {
     cnf->ratelimits.head = NULL;
     cnf->ratelimits.tail = NULL;
     cnf->ratelimits.next_auto_id = 1;
-    ratelimitRegistryRemoveOwner(cnf);
 }
 
 static ratelimit_config_t *ratelimitConfigAlloc(const ratelimit_config_spec_t *const spec) {
