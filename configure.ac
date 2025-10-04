@@ -93,6 +93,16 @@ PKG_CHECK_MODULES(LIBESTR, libestr >= 0.1.9)
 
 PKG_CHECK_MODULES([LIBFASTJSON], [libfastjson >= 0.99.8],,)
 
+PKG_CHECK_MODULES([LIBYAML], [yaml-0.1], [have_libyaml=yes], [have_libyaml=no])
+AS_IF([test "x$have_libyaml" = "xyes"], [
+        AC_DEFINE([HAVE_LIBYAML], [1], [Define to 1 if libyaml is available])
+    ], [
+        LIBYAML_CFLAGS=
+        LIBYAML_LIBS=
+    ])
+AC_SUBST([LIBYAML_CFLAGS])
+AC_SUBST([LIBYAML_LIBS])
+
 AC_DEFINE_UNQUOTED([PLATFORM_ID], ["${host}"], [platform id for display purposes])
 # we don't mind if we don't have the lsb_release utility. But if we have, it's
 # nice to have the extra information.

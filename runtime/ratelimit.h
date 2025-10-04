@@ -45,6 +45,7 @@ typedef struct ratelimit_config_spec_s {
     unsigned int interval; /**< Rate limiting interval in seconds (0 disables). */
     unsigned int burst; /**< Maximum messages allowed inside @ref interval. */
     int severity; /**< Optional severity threshold, use @ref RATELIMIT_SEVERITY_UNSET for default. */
+    char *policy_path; /**< Absolute path of the YAML policy that populated the spec (if any). */
 } ratelimit_config_spec_t;
 
 struct cnfobj;
@@ -171,6 +172,11 @@ unsigned int ratelimitConfigGetBurst(const ratelimit_config_t *cfg);
  * Return the severity threshold associated with a configuration entry.
  */
 int ratelimitConfigGetSeverity(const ratelimit_config_t *cfg);
+
+/**
+ * Return the source policy path associated with a configuration entry, if set.
+ */
+const char *ratelimitConfigGetPolicyPath(const ratelimit_config_t *cfg);
 
 /**
  * Resolve a configuration reference by name.

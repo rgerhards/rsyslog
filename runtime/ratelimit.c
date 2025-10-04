@@ -26,6 +26,9 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <errno.h>
+#include <limits.h>
 
 #include "rsyslog.h"
 #include "errmsg.h"
@@ -37,6 +40,10 @@
 #include "msg.h"
 #include "rsconf.h"
 #include "dirty.h"
+
+#ifdef HAVE_LIBYAML
+#    include <yaml.h>
+#endif
 
 /**
  * @brief Overview of the ratelimit architecture.
@@ -85,6 +92,7 @@ struct ratelimit_config_s {
     unsigned int interval;
     unsigned int burst;
     intTiny severity;
+    char *policy_path;
     ratelimit_config_t *next;
     sbool isAdHoc;
 };
@@ -107,12 +115,14 @@ static ratelimit_registry_entry_t *ratelimitRegistryFindEntry(const rsconf_t *ow
 static rsRetVal ratelimitRegistryAppend(rsconf_t *owner, ratelimit_config_t *cfg);
 static void ratelimitRegistryRemove(const rsconf_t *owner, const ratelimit_config_t *cfg);
 static void ratelimitRegistryRemoveOwner(const rsconf_t *owner);
+static rsRetVal ratelimitPolicyLoadFromYaml(const char *path, ratelimit_config_spec_t *spec);
 
 static struct cnfparamdescr ratelimitpdescr[] = {
     {"name", eCmdHdlrString, CNFPARAM_REQUIRED},
-    {"interval", eCmdHdlrInt, CNFPARAM_REQUIRED},
-    {"burst", eCmdHdlrInt, CNFPARAM_REQUIRED},
+    {"interval", eCmdHdlrInt, 0},
+    {"burst", eCmdHdlrInt, 0},
     {"severity", eCmdHdlrInt, 0},
+    {"policy", eCmdHdlrString, 0},
 };
 static struct cnfparamblk ratelimitpblk = {CNFPARAMBLK_VERSION, sizeof(ratelimitpdescr) / sizeof(struct cnfparamdescr),
                                            ratelimitpdescr};
@@ -128,9 +138,11 @@ static struct cnfparamblk ratelimitpblk = {CNFPARAMBLK_VERSION, sizeof(ratelimit
  */
 void ratelimitConfigSpecInit(ratelimit_config_spec_t *const spec) {
     if (spec == NULL) return;
+    free(spec->policy_path);
     spec->interval = 0;
     spec->burst = 0;
     spec->severity = RATELIMIT_SEVERITY_UNSET;
+    spec->policy_path = NULL;
 }
 
 static ratelimit_config_t *ratelimitFindConfig(const rsconf_t *const cnf, const char *const name) {
@@ -152,6 +164,11 @@ static rsRetVal ratelimitConfigValidateSpec(const ratelimit_config_spec_t *const
 
     if (spec == NULL) {
         ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
+    }
+
+    if (spec->policy_path != NULL && spec->interval == 0 && spec->burst == 0) {
+        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' did not define interval/burst values", spec->policy_path);
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
     }
 
     if (spec->interval == 0) {
@@ -200,6 +217,7 @@ void ratelimitStoreDestruct(rsconf_t *const cnf) {
         nxt = cfg->next;
         ratelimitRegistryRemove(cnf, cfg);
         free(cfg->name);
+        free(cfg->policy_path);
         free(cfg);
         cfg = nxt;
     }
@@ -217,6 +235,13 @@ static ratelimit_config_t *ratelimitConfigAlloc(const ratelimit_config_spec_t *c
     cfg->interval = spec->interval;
     cfg->burst = spec->burst;
     cfg->severity = (spec->severity == RATELIMIT_SEVERITY_UNSET) ? 0 : (intTiny)spec->severity;
+    if (spec->policy_path != NULL) {
+        cfg->policy_path = strdup(spec->policy_path);
+        if (cfg->policy_path == NULL) {
+            free(cfg);
+            return NULL;
+        }
+    }
     cfg->isAdHoc = 0;
     return cfg;
 }
@@ -275,6 +300,7 @@ rsRetVal ratelimitConfigCreateNamed(rsconf_t *const cnf,
 finalize_it:
     if (cfg != NULL) {
         free(cfg->name);
+        free(cfg->policy_path);
         free(cfg);
     }
     RETiRet;
@@ -443,6 +469,183 @@ static void ratelimitRegistryRemoveOwner(const rsconf_t *const owner) {
     }
 }
 
+static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_config_spec_t *const spec) {
+#ifndef HAVE_LIBYAML
+    (void)spec;
+    if (path == NULL) {
+        LogError(0, RS_RET_NOT_IMPLEMENTED,
+                 "ratelimit: YAML policy requested but rsyslogd was built without libyaml support; use inline ratelimit.* parameters instead");
+    } else {
+        LogError(0, RS_RET_NOT_IMPLEMENTED,
+                 "ratelimit: policy='%s' requested but rsyslogd was built without libyaml support; use inline ratelimit.* parameters instead",
+                 path);
+    }
+    return RS_RET_NOT_IMPLEMENTED;
+#else
+    FILE *fp = NULL;
+    yaml_parser_t parser;
+    yaml_document_t document;
+    sbool parser_initialised = 0;
+    sbool document_loaded = 0;
+    sbool interval_seen = 0;
+    sbool burst_seen = 0;
+    sbool severity_seen = 0;
+    DEFiRet;
+
+    if (spec == NULL || path == NULL || *path == '\0') {
+        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: policy path must be specified");
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+
+    free(spec->policy_path);
+    spec->policy_path = NULL;
+    spec->interval = 0;
+    spec->burst = 0;
+    spec->severity = RATELIMIT_SEVERITY_UNSET;
+
+    fp = fopen(path, "rb");
+    if (fp == NULL) {
+        LogError(errno, RS_RET_NO_FILE_ACCESS, "ratelimit: could not open policy file '%s': %s", path, strerror(errno));
+        ABORT_FINALIZE(RS_RET_NO_FILE_ACCESS);
+    }
+
+    if (!yaml_parser_initialize(&parser)) {
+        LogError(0, RS_RET_INTERNAL_ERROR, "ratelimit: failed to initialise YAML parser for '%s'", path);
+        ABORT_FINALIZE(RS_RET_INTERNAL_ERROR);
+    }
+    parser_initialised = 1;
+    yaml_parser_set_input_file(&parser, fp);
+
+    if (!yaml_parser_load(&parser, &document)) {
+        const char *problem = (parser.problem != NULL && *parser.problem != '\0') ? parser.problem : "unknown error";
+        LogError(0, RS_RET_INVALID_VALUE,
+                 "ratelimit: failed to parse YAML policy '%s': %s at line %zu column %zu", path, problem,
+                 (size_t)(parser.problem_mark.line + 1), (size_t)(parser.problem_mark.column + 1));
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+    document_loaded = 1;
+
+    yaml_node_t *const root = yaml_document_get_root_node(&document);
+    if (root == NULL) {
+        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' is empty", path);
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+    if (root->type != YAML_MAPPING_NODE) {
+        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' must contain a mapping at the top level", path);
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+
+    for (yaml_node_pair_t *pair = root->data.mapping.pairs.start; pair < root->data.mapping.pairs.top; ++pair) {
+        yaml_node_t *const key_node = yaml_document_get_node(&document, pair->key);
+        yaml_node_t *const value_node = yaml_document_get_node(&document, pair->value);
+        if (key_node == NULL || value_node == NULL || key_node->type != YAML_SCALAR_NODE || value_node->type != YAML_SCALAR_NODE) {
+            LogError(0, RS_RET_INVALID_VALUE,
+                     "ratelimit: YAML policy '%s' must use scalar keys and values", path);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+
+        const char *const key = (const char *)key_node->data.scalar.value;
+        const char *const value = (const char *)value_node->data.scalar.value;
+        if (key == NULL) {
+            LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' contains an empty key", path);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+
+        if (!strcmp(key, "interval")) {
+            if (interval_seen) {
+                LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' defines 'interval' more than once", path);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            char *endptr = NULL;
+            errno = 0;
+            const long long parsed = strtoll(value, &endptr, 10);
+            if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0')) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: YAML policy '%s' has invalid interval value '%s'", path, value);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            if (parsed < 0 || (unsigned long long)parsed > UINT_MAX) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: YAML policy '%s' interval '%s' is out of range", path, value);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            spec->interval = (unsigned int)parsed;
+            interval_seen = 1;
+        } else if (!strcmp(key, "burst")) {
+            if (burst_seen) {
+                LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' defines 'burst' more than once", path);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            char *endptr = NULL;
+            errno = 0;
+            const long long parsed = strtoll(value, &endptr, 10);
+            if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0')) {
+                LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' has invalid burst value '%s'", path, value);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            if (parsed < 0 || (unsigned long long)parsed > UINT_MAX) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: YAML policy '%s' burst '%s' is out of range", path, value);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            spec->burst = (unsigned int)parsed;
+            burst_seen = 1;
+        } else if (!strcmp(key, "severity")) {
+            if (severity_seen) {
+                LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' defines 'severity' more than once", path);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            char *endptr = NULL;
+            errno = 0;
+            const long long parsed = strtoll(value, &endptr, 10);
+            if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0') || parsed < 0 || parsed > 7) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: YAML policy '%s' has invalid severity '%s' (expected 0-7)", path, value);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            spec->severity = (int)parsed;
+            severity_seen = 1;
+        } else {
+            LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' contains unsupported key '%s'", path, key);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+    }
+
+    if (!interval_seen) {
+        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' must define an interval", path);
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+    if (!burst_seen) {
+        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' must define a burst", path);
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+
+    char *resolved = realpath(path, NULL);
+    if (resolved != NULL) {
+        spec->policy_path = resolved;
+    } else {
+        spec->policy_path = strdup(path);
+        if (spec->policy_path == NULL) {
+            LogError(0, RS_RET_OUT_OF_MEMORY, "ratelimit: failed to duplicate policy path '%s'", path);
+            ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+        }
+    }
+
+finalize_it:
+    if (document_loaded) yaml_document_delete(&document);
+    if (parser_initialised) yaml_parser_delete(&parser);
+    if (fp != NULL) fclose(fp);
+    if (iRet != RS_RET_OK) {
+        free(spec->policy_path);
+        spec->policy_path = NULL;
+        spec->interval = 0;
+        spec->burst = 0;
+        spec->severity = RATELIMIT_SEVERITY_UNSET;
+    }
+    RETiRet;
+#endif
+}
+
 rsRetVal ratelimitRegistryLookup(const rsconf_t *const cnf, const char *const name, ratelimit_config_t **const cfg_out) {
     ratelimit_registry_entry_t *entry;
     DEFiRet;
@@ -505,6 +708,10 @@ unsigned int ratelimitConfigGetBurst(const ratelimit_config_t *const cfg) {
  */
 int ratelimitConfigGetSeverity(const ratelimit_config_t *const cfg) {
     return (cfg == NULL) ? 0 : cfg->severity;
+}
+
+const char *ratelimitConfigGetPolicyPath(const ratelimit_config_t *const cfg) {
+    return (cfg == NULL) ? NULL : cfg->policy_path;
 }
 
 /**
@@ -628,6 +835,10 @@ rsRetVal ratelimitProcessCnf(struct cnfobj *const o) {
     ratelimit_config_spec_t spec;
     ratelimit_config_t *cfg = NULL;
     char *name = NULL;
+    char *policy_param = NULL;
+    sbool interval_seen = 0;
+    sbool burst_seen = 0;
+    sbool severity_seen = 0;
     DEFiRet;
 
     if (o == NULL) {
@@ -654,6 +865,7 @@ rsRetVal ratelimitProcessCnf(struct cnfobj *const o) {
                 ABORT_FINALIZE(RS_RET_INVALID_VALUE);
             }
             spec.interval = (unsigned int)val;
+            interval_seen = 1;
         } else if (!strcmp(pname, "burst")) {
             const long long val = pvals[i].val.d.n;
             if (val < 0) {
@@ -661,6 +873,7 @@ rsRetVal ratelimitProcessCnf(struct cnfobj *const o) {
                 ABORT_FINALIZE(RS_RET_INVALID_VALUE);
             }
             spec.burst = (unsigned int)val;
+            burst_seen = 1;
         } else if (!strcmp(pname, "severity")) {
             const long long val = pvals[i].val.d.n;
             if (val < 0 || val > 7) {
@@ -668,6 +881,10 @@ rsRetVal ratelimitProcessCnf(struct cnfobj *const o) {
                 ABORT_FINALIZE(RS_RET_INVALID_VALUE);
             }
             spec.severity = (int)val;
+            severity_seen = 1;
+        } else if (!strcmp(pname, "policy")) {
+            free(policy_param);
+            policy_param = es_str2cstr(pvals[i].val.d.estr, NULL);
         }
     }
 
@@ -676,11 +893,28 @@ rsRetVal ratelimitProcessCnf(struct cnfobj *const o) {
         ABORT_FINALIZE(RS_RET_INVALID_VALUE);
     }
 
+    if (policy_param != NULL) {
+        if (interval_seen || burst_seen || severity_seen) {
+            LogError(0, RS_RET_INVALID_VALUE,
+                     "ratelimit '%s': policy= cannot be combined with inline interval/burst/severity values", name);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+        CHKiRet(ratelimitPolicyLoadFromYaml(policy_param, &spec));
+    } else {
+        if (!interval_seen || !burst_seen) {
+            LogError(0, RS_RET_INVALID_VALUE,
+                     "ratelimit '%s': interval and burst must be provided when policy= is not used", name);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+    }
+
     CHKiRet(ratelimitConfigCreateNamed(loadConf, name, &spec, &cfg));
     cfg = NULL;
 
 finalize_it:
+    free(spec.policy_path);
     free(name);
+    free(policy_param);
     cnfparamvalsDestruct(pvals, &ratelimitpblk);
     RETiRet;
 }
