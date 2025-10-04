@@ -169,6 +169,7 @@ static struct cnfparamdescr cnfparamdescr[] = {
     {"abortonuncleanconfig", eCmdHdlrBinary, 0},
     {"abortonfailedqueuestartup", eCmdHdlrBinary, 0},
     {"variables.casesensitive", eCmdHdlrBinary, 0},
+    {"config.defaults.version", eCmdHdlrGetWord, 0},
     {"environment", eCmdHdlrArray, 0},
     {"processinternalmessages", eCmdHdlrBinary, 0},
     {"umask", eCmdHdlrFileCreateMode, 0},
@@ -407,6 +408,37 @@ static rsRetVal setWorkDir(void __attribute__((unused)) * pVal, uchar *pNewVal) 
 
 finalize_it:
     RETiRet;
+}
+
+
+static void configDefaultsVersionApply(const char *const value) {
+    if (value == NULL) return;
+
+    const unsigned int prevYear = loadConf->defaults.configDefaultsYear;
+    const unsigned int prevMonth = loadConf->defaults.configDefaultsMonth;
+
+    char *endptr = NULL;
+    const long ver = strtol(value, &endptr, 10);
+    if (endptr != value + 4 || endptr == value || *endptr != '\0') {
+        parser_errmsg(
+            "config.defaults.version must be a 4-digit YYMM value; invalid value '%s' ignored (keeping %02u%02u)",
+            value, prevYear, prevMonth);
+        return;
+    }
+
+    const int yy = (int)(ver / 100);
+    const int mm = (int)(ver % 100);
+    if (mm < 1 || mm > 12) {
+        parser_errmsg(
+            "config.defaults.version requires a month between 01 and 12; invalid value '%s' ignored (keeping %02u%02u)",
+            value, prevYear, prevMonth);
+        return;
+    }
+
+    loadConf->defaults.configDefaultsVersion = (unsigned int)((yy * 100) + mm);
+    loadConf->defaults.configDefaultsYear = (unsigned int)yy;
+    loadConf->defaults.configDefaultsMonth = (unsigned int)mm;
+    loadConf->defaults.configDefaultsVersionExplicit = 1;
 }
 
 
@@ -1006,6 +1038,10 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) * pp, void __
     loadConf->globals.parser.bEscape8BitChars = 0; /* default is not to escape control characters */
     loadConf->globals.parser.bEscapeTab = 1; /* default is to escape tab characters */
     loadConf->globals.parser.bParserEscapeCCCStyle = 0;
+    loadConf->defaults.configDefaultsVersion = RSYSLOG_CONFIG_DEFAULTS_VERSION;
+    loadConf->defaults.configDefaultsYear = RSYSLOG_CONFIG_DEFAULTS_VERSION_YEAR;
+    loadConf->defaults.configDefaultsMonth = RSYSLOG_CONFIG_DEFAULTS_VERSION_MONTH;
+    loadConf->defaults.configDefaultsVersionExplicit = 0;
 #ifdef USE_UNLIMITED_SELECT
     iFdSetSize = howmany(FD_SETSIZE, __NFDBITS) * sizeof(fd_mask);
 #endif
@@ -1210,6 +1246,10 @@ rsRetVal glblDoneLoadCnf(void) {
             const int val = (int)cnfparamvals[i].val.d.n;
             fjson_global_do_case_sensitive_comparison(val);
             DBGPRINTF("global/config: set case sensitive variables to %d\n", val);
+        } else if (!strcmp(paramblk.descr[i].name, "config.defaults.version")) {
+            char *const version = es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
+            configDefaultsVersionApply(version);
+            free(version);
         } else if (!strcmp(paramblk.descr[i].name, "localhostname")) {
             free(LocalHostNameOverride);
             LocalHostNameOverride = (uchar *)es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
