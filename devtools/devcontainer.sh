@@ -56,19 +56,25 @@ docker run $ti $optrm $DOCKER_RUN_EXTRA_OPTS \
 	-e CI_MAKE_OPT \
 	-e CI_MAKE_CHECK_OPT \
 	-e CI_CHECK_CMD \
-	-e CI_BUILD_URL \
-	-e CI_CODECOV_TOKEN \
-	-e CI_VALGRIND_SUPPRESSIONS \
-	-e CI_SANITIZE_BLACKLIST \
-	-e ABORT_ALL_ON_TEST_FAIL \
-	-e USE_AUTO_DEBUG \
-	-e RSYSLOG_STATSURL \
-	-e CODECOV_commit_sha \
-	-e CODECOV_repo_slug \
-	-e VCS_SLUG \
-	-e VERBOSE \
-	--cap-add SYS_ADMIN \
-	--cap-add SYS_PTRACE \
+        -e CI_BUILD_URL \
+        -e CI_CODECOV_TOKEN \
+        -e CI_VALGRIND_SUPPRESSIONS \
+        -e CI_SANITIZE_BLACKLIST \
+        -e ABORT_ALL_ON_TEST_FAIL \
+        -e USE_AUTO_DEBUG \
+        -e RSYSLOG_STATSURL \
+        -e CODECOV_commit_sha \
+        -e CODECOV_repo_slug \
+        -e VCS_SLUG \
+        -e VERBOSE \
+        -e SPLUNK_HEC_TOKEN \
+        -e SPLUNK_HEC_HOST \
+        -e SPLUNK_HEC_PORT \
+        -e SPLUNK_HEC_SCHEME \
+        -e SPLUNK_HEC_ALLOW_UNSIGNED \
+        -e OMHTTP_HEC_TEST_MESSAGE \
+        --cap-add SYS_ADMIN \
+        --cap-add SYS_PTRACE \
 	${RSYSLOG_CONTAINER_UID--u $(id -u):$(id -g)} \
 	$DOCKER_RUN_EXTRA_FLAGS \
 	-v "$RSYSLOG_HOME":/rsyslog $RSYSLOG_DEV_CONTAINER "$@"

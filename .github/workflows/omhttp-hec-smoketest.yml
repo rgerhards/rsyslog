@@ -1,0 +1,116 @@
+name: omhttp Splunk HEC smoke test
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/omhttp-hec-smoketest.yml'
+      - 'devtools/run-omhttp-hec-smoketest.sh'
+      - 'devtools/devcontainer.sh'
+      - 'contrib/omhttp/**'
+
+permissions:
+  contents: read
+
+jobs:
+  hec-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      splunk:
+        image: splunk/splunk:9.2.1
+        env:
+          SPLUNK_START_ARGS: --accept-license --answer-yes --no-prompt
+          SPLUNK_PASSWORD: Changeme123!
+        ports:
+          - 8088:8088
+          - 8089:8089
+        # The bundled Ansible bootstrap can exceed the service health timeout,
+        # so neutralise the container health check and rely on the explicit
+        # readiness probe below instead.
+        options: >-
+          --health-cmd "/bin/true"
+    env:
+      SPLUNK_PASSWORD: Changeme123!
+      SPLUNK_HEC_TOKEN: 01234567-89ab-cdef-0123-456789abcdef
+      SPLUNK_HEC_HOST: 127.0.0.1
+      SPLUNK_HEC_PORT: 8088
+      SPLUNK_HEC_SCHEME: https
+      SPLUNK_HEC_ALLOW_UNSIGNED: on
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Wait for Splunk and enable HEC
+        shell: bash
+        run: |
+          set -euo pipefail
+          SPLUNK_IMAGE="splunk/splunk:9.2.1"
+          echo "Locating Splunk service container (image ${SPLUNK_IMAGE})"
+          for attempt in {1..30}; do
+            if SPLUNK_CONTAINER_ID=$(docker ps --filter "ancestor=${SPLUNK_IMAGE}" --format '{{.ID}}' | head -n1); then
+              if [ -n "${SPLUNK_CONTAINER_ID}" ]; then
+                break
+              fi
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "Unable to find Splunk container" >&2
+              docker ps -a
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "SPLUNK_CONTAINER_ID=${SPLUNK_CONTAINER_ID}" >>"$GITHUB_ENV"
+
+          echo "Waiting for Splunk service to report ready..."
+          for attempt in {1..45}; do
+            if docker exec "${SPLUNK_CONTAINER_ID}" /opt/splunk/bin/splunk status 2>/dev/null | grep -q "splunkd is running"; then
+              echo "Splunk is ready"
+              break
+            fi
+            if [ "$attempt" -eq 45 ]; then
+              echo "Splunk did not report ready" >&2
+              docker logs "${SPLUNK_CONTAINER_ID}" | tail -n 200 || true
+              exit 1
+            fi
+            if ! docker ps --format '{{.ID}}' | grep -q "${SPLUNK_CONTAINER_ID}"; then
+              echo "Splunk container stopped unexpectedly" >&2
+              docker logs "${SPLUNK_CONTAINER_ID}" | tail -n 200 || true
+              exit 1
+            fi
+            sleep 10
+          done
+
+          docker exec "${SPLUNK_CONTAINER_ID}" /opt/splunk/bin/splunk http-event-collector enable -auth "admin:${SPLUNK_PASSWORD}" >/dev/null
+          curl -sk -u "admin:${SPLUNK_PASSWORD}" https://localhost:8089/services/data/inputs/http -d name=rsyslog-gha -d token=${SPLUNK_HEC_TOKEN} -d index=main -d sourcetype=_json -d output_mode=json >/dev/null || true
+          curl -sk -u "admin:${SPLUNK_PASSWORD}" https://localhost:8089/services/data/inputs/http/rsyslog-gha -d disabled=0 >/dev/null
+
+      - name: Build rsyslog and forward sample via omhttp
+        shell: bash
+        run: |
+          set -euo pipefail
+          MESSAGE="omhttp-hec-github-action-$(date +%s)"
+          echo "OMHTTP_HEC_TEST_MESSAGE=$MESSAGE" >> "$GITHUB_ENV"
+          export OMHTTP_HEC_TEST_MESSAGE="$MESSAGE"
+          export DOCKER_RUN_EXTRA_OPTS="--network host"
+          ./devtools/devcontainer.sh --rm bash -lc "./devtools/run-omhttp-hec-smoketest.sh"
+
+      - name: Query Splunk for forwarded event
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${SPLUNK_CONTAINER_ID:?SPLUNK_CONTAINER_ID must be exported by the readiness step}"
+          SEARCH="search index=main \"${OMHTTP_HEC_TEST_MESSAGE}\" | head 1"
+          echo "Verifying Splunk search: $SEARCH"
+          for attempt in {1..30}; do
+            OUTPUT=$(docker exec "${SPLUNK_CONTAINER_ID}" /opt/splunk/bin/splunk search "$SEARCH" -auth "admin:${SPLUNK_PASSWORD}" -output rawdata || true)
+            if grep -q "${OMHTTP_HEC_TEST_MESSAGE}" <<<"$OUTPUT"; then
+              echo "Found event: $OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Event not found in Splunk" >&2
+          exit 1
