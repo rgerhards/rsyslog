@@ -103,6 +103,8 @@ Documentation is located in the `doc/` directory of this repository. Contributio
 Visit the latest version online:
 - [rsyslog.com/doc](https://www.rsyslog.com/doc/)
 
+To build the documentation locally after running the autotools bootstrap (`./autogen.sh && ./configure`), use the integrated targets such as `make doc-html`, `make doc-singlehtml`, or `make doc-json`. The top-level `make html` alias is also available for the common multi-page HTML output.
+
 ---
 
 ## Project Philosophy
