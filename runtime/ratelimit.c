@@ -24,7 +24,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <ctype.h>
 #include <stdint.h>
 
 #include "rsyslog.h"
@@ -47,23 +46,22 @@
  * - During configuration loading the ratelimit() object handler stores each
  *   named policy in the per-configuration registry (a linked list of
  *   ::ratelimit_config_s entries owned by ::rsconf_s). Inline `ratelimit.*`
- *   parameters are promoted to ad-hoc entries in the same registry so they can
- *   be referenced later.
+ *   parameters remain local to the caller and are validated on demand.
  * - Modules call ::ratelimitResolveFromValues (or ::ratelimitResolveConfig)
  *   whenever they need ratelimit settings. The helper enforces the "shared OR
- *   inline" contract, returning a pointer to the immutable configuration node.
- *   Whenever an ::rsconf_t is available, callers should prefer this path so
- *   the shared registry is populated for future reuse.
+ *   inline" contract, returning a pointer to the immutable configuration node
+ *   when `ratelimit.name` is used and otherwise leaving callers with their
+ *   inline values.
  * - At activation time workers create runtime instances via
- *   ::ratelimitNewFromConfig (shared/ad-hoc) when a configuration entry is
+ *   ::ratelimitNewFromConfig (shared) when a configuration entry is
  *   available, or via ::ratelimitNew when no registry context exists (for
  *   example during bootstrap or in tooling). The runtime structure keeps the
  *   mutable counters, mutex state, and repeat suppression data while
  *   referencing the registry entry for the immutable parameters whenever
  *   possible.
  *
- * This file implements all three layers: registry maintenance, object parsing
- * and promotion, plus the actual rate-checking and repeat-suppression logic.
+ * This file implements all three layers: registry maintenance, object parsing,
+ * and the actual rate-checking and repeat-suppression logic.
  */
 
 /* Implementation note: the public API is documented in ratelimit.h. */
@@ -86,7 +84,6 @@ struct ratelimit_config_s {
     unsigned int burst;
     intTiny severity;
     ratelimit_config_t *next;
-    sbool isAdHoc;
 };
 
 static ratelimit_config_t *ratelimitFindConfig(const rsconf_t *cnf, const char *name);
@@ -166,7 +163,6 @@ void ratelimitStoreInit(rsconf_t *const cnf) {
     if (cnf == NULL) return;
     cnf->ratelimits.head = NULL;
     cnf->ratelimits.tail = NULL;
-    cnf->ratelimits.next_auto_id = 1;
 }
 
 /**
@@ -191,7 +187,6 @@ void ratelimitStoreDestruct(rsconf_t *const cnf) {
 
     cnf->ratelimits.head = NULL;
     cnf->ratelimits.tail = NULL;
-    cnf->ratelimits.next_auto_id = 1;
 }
 
 static ratelimit_config_t *ratelimitConfigAlloc(const ratelimit_config_spec_t *const spec) {
@@ -201,7 +196,6 @@ static ratelimit_config_t *ratelimitConfigAlloc(const ratelimit_config_spec_t *c
     cfg->interval = spec->interval;
     cfg->burst = spec->burst;
     cfg->severity = (spec->severity == RATELIMIT_SEVERITY_UNSET) ? 0 : (intTiny)spec->severity;
-    cfg->isAdHoc = 0;
     return cfg;
 }
 
@@ -252,70 +246,6 @@ finalize_it:
         free(cfg->name);
         free(cfg);
     }
-    RETiRet;
-}
-
-static void ratelimitSanitizeHint(const char *const hint, char *buf, const size_t buflen) {
-    size_t len = 0;
-    const char *src = hint;
-
-    if (buflen == 0) return;
-
-    if (src == NULL || *src == '\0') {
-        if (buflen > 1) {
-            buf[0] = 'r';
-            buf[1] = '\0';
-        } else {
-            buf[0] = '\0';
-        }
-        return;
-    }
-
-    while (*src != '\0' && len + 1 < buflen) {
-        unsigned char ch = (unsigned char)*src;
-        if (isalnum(ch) || ch == '-' || ch == '_') {
-            buf[len++] = (char)tolower(ch);
-        } else {
-            buf[len++] = '_';
-        }
-        ++src;
-    }
-    buf[len] = '\0';
-    if (len == 0 && buflen > 1) {
-        buf[0] = 'r';
-        buf[1] = '\0';
-    }
-}
-
-/**
- * @brief Implementation of ::ratelimitConfigCreateAdHoc().
- *
- * Synthesises a unique name while reusing the same allocation path as
- * explicitly named objects.
- */
-rsRetVal ratelimitConfigCreateAdHoc(rsconf_t *const cnf,
-                                    const char *const hint,
-                                    const ratelimit_config_spec_t *const spec,
-                                    ratelimit_config_t **const cfg_out) {
-    char namebuf[256];
-    char sanitized[128];
-    ratelimit_config_t *cfg = NULL;
-    DEFiRet;
-
-    if (cnf == NULL || spec == NULL || cfg_out == NULL) {
-        ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
-    }
-
-    CHKiRet(ratelimitConfigValidateSpec(spec));
-
-    ratelimitSanitizeHint(hint, sanitized, sizeof(sanitized));
-    snprintf(namebuf, sizeof(namebuf), "adhoc.%s.%llu", sanitized, (unsigned long long)cnf->ratelimits.next_auto_id++);
-
-    CHKiRet(ratelimitConfigCreateNamed(cnf, namebuf, spec, &cfg));
-    cfg->isAdHoc = 1;
-    *cfg_out = cfg;
-
-finalize_it:
     RETiRet;
 }
 
@@ -403,11 +333,18 @@ rsRetVal ratelimitResolveConfig(rsconf_t *const cnf,
                                 ratelimit_config_t **const cfg_out) {
     DEFiRet;
 
-    if (cfg_out == NULL || cnf == NULL || spec == NULL) {
+    (void)hint;
+
+    if (cfg_out == NULL || spec == NULL) {
         ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
     }
 
+    *cfg_out = NULL;
+
     if (name != NULL && *name != '\0') {
+        if (cnf == NULL) {
+            ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
+        }
         if (legacyParamsSpecified) {
             LogError(0, RS_RET_INVALID_VALUE,
                      "ratelimit '%s': ratelimit.name cannot be combined with inline ratelimit.* parameters", name);
@@ -415,7 +352,7 @@ rsRetVal ratelimitResolveConfig(rsconf_t *const cnf,
         }
         CHKiRet(ratelimitConfigLookup(cnf, name, cfg_out));
     } else {
-        CHKiRet(ratelimitConfigCreateAdHoc(cnf, hint, spec, cfg_out));
+        CHKiRet(ratelimitConfigValidateSpec(spec));
     }
 
 finalize_it:
@@ -425,8 +362,8 @@ finalize_it:
 /**
  * @brief Implementation of ::ratelimitResolveFromValues().
  *
- * Promotes inline parameters to shared configurations so dynamically
- * created instances can reuse the same immutable spec.
+ * Resolves configuration references for modules and validates inline settings
+ * so dynamically created instances can reuse named policies when requested.
  */
 rsRetVal ratelimitResolveFromValues(rsconf_t *const cnf,
                                     const char *const hint,
@@ -450,9 +387,17 @@ rsRetVal ratelimitResolveFromValues(rsconf_t *const cnf,
 
     CHKiRet(ratelimitResolveConfig(cnf, hint, name, legacyParamsSpecified, &spec, cfg_out));
 
-    *interval = ratelimitConfigGetInterval(*cfg_out);
-    *burst = ratelimitConfigGetBurst(*cfg_out);
-    if (severity != NULL) *severity = ratelimitConfigGetSeverity(*cfg_out);
+    if (cfg_out != NULL && *cfg_out != NULL) {
+        *interval = ratelimitConfigGetInterval(*cfg_out);
+        *burst = ratelimitConfigGetBurst(*cfg_out);
+        if (severity != NULL) *severity = ratelimitConfigGetSeverity(*cfg_out);
+    } else {
+        *interval = spec.interval;
+        *burst = spec.burst;
+        if (severity != NULL) {
+            *severity = (spec.severity == RATELIMIT_SEVERITY_UNSET) ? 0 : spec.severity;
+        }
+    }
 
 finalize_it:
     RETiRet;
@@ -479,24 +424,15 @@ static void ratelimitDropSuppressedIfAny(ratelimit_t *const ratelimit) {
 }
 
 static inline unsigned int ratelimitEffectiveInterval(const ratelimit_t *const ratelimit) {
-    if (ratelimit->has_override) {
-        return ratelimit->interval_override;
-    }
-    return (ratelimit->cfg != NULL) ? ratelimit->cfg->interval : 0;
+    return ratelimit->interval;
 }
 
 static inline unsigned int ratelimitEffectiveBurst(const ratelimit_t *const ratelimit) {
-    if (ratelimit->has_override) {
-        return ratelimit->burst_override;
-    }
-    return (ratelimit->cfg != NULL) ? ratelimit->cfg->burst : 0;
+    return ratelimit->burst;
 }
 
 static inline intTiny ratelimitEffectiveSeverity(const ratelimit_t *const ratelimit) {
-    if (ratelimit->has_override) {
-        return ratelimit->severity_override;
-    }
-    return (ratelimit->cfg != NULL) ? ratelimit->cfg->severity : 0;
+    return ratelimit->severity;
 }
 
 /**
@@ -862,10 +798,9 @@ rsRetVal ratelimitNew(ratelimit_t **ppThis, const char *modname, const char *dyn
 
     CHKmalloc(pThis = calloc(1, sizeof(*pThis)));
     pThis->cfg = NULL;
-    pThis->interval_override = 0;
-    pThis->burst_override = 0;
-    pThis->severity_override = 0;
-    pThis->has_override = 0;
+    pThis->interval = 0;
+    pThis->burst = 0;
+    pThis->severity = 0;
 
     if (modname == NULL) modname = "*ERROR:MODULE NAME MISSING*";
 
@@ -907,10 +842,9 @@ rsRetVal ratelimitNewFromConfig(ratelimit_t **ppThis,
 
     CHKmalloc(pThis = calloc(1, sizeof(*pThis)));
     pThis->cfg = cfg;
-    pThis->interval_override = 0;
-    pThis->burst_override = 0;
-    pThis->severity_override = 0;
-    pThis->has_override = 0;
+    pThis->interval = cfg->interval;
+    pThis->burst = cfg->burst;
+    pThis->severity = cfg->severity;
 
     name = ratelimitBuildInstanceName(cfg, instance_name);
     if (name == NULL) {
@@ -958,12 +892,11 @@ void ratelimitSetThreadSafe(ratelimit_t *ratelimit) {
 void ratelimitSetLinuxLike(ratelimit_t *ratelimit, unsigned int interval, unsigned int burst) {
     if (ratelimit == NULL) return;
     ratelimit->cfg = NULL;
-    ratelimit->interval_override = interval;
-    ratelimit->burst_override = burst;
+    ratelimit->interval = interval;
+    ratelimit->burst = burst;
     ratelimit->done = 0;
     ratelimit->missed = 0;
     ratelimit->begin = 0;
-    ratelimit->has_override = 1;
 }
 /**
  * @brief Implementation of ::ratelimitSetNoTimeCache().
@@ -984,8 +917,7 @@ void ratelimitSetNoTimeCache(ratelimit_t *ratelimit) {
 void ratelimitSetSeverity(ratelimit_t *ratelimit, intTiny severity) {
     if (ratelimit == NULL) return;
     ratelimit->cfg = NULL;
-    ratelimit->severity_override = severity;
-    ratelimit->has_override = 1;
+    ratelimit->severity = severity;
 }
 
 /**

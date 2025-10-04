@@ -214,7 +214,6 @@ struct outchannels_s {
 struct ratelimit_store_s {
     ratelimit_config_t *head;
     ratelimit_config_t *tail;
-    uint64_t next_auto_id;
 };
 typedef struct ratelimit_store_s ratelimit_store_t;
 

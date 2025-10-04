@@ -37,9 +37,9 @@ typedef struct ratelimit_config_s ratelimit_config_t;
 /**
  * Immutable configuration parameters for a rate limit policy.
  *
- * Instances of this structure are populated either from a
- * :rainerscript:`ratelimit()` object or from inline configuration values
- * that are promoted to a shared configuration entry.
+ * Instances of this structure are populated from a :rainerscript:`ratelimit()`
+ * object or constructed on the stack while validating inline configuration
+ * values.
  */
 typedef struct ratelimit_config_spec_s {
     unsigned int interval; /**< Rate limiting interval in seconds (0 disables). */
@@ -57,11 +57,10 @@ struct cnfobj;
  * runtime.
  */
 struct ratelimit_s {
-    const ratelimit_config_t *cfg; /**< Backing configuration. */
-    unsigned int interval_override; /**< Legacy inline interval value. */
-    unsigned int burst_override; /**< Legacy inline burst value. */
-    intTiny severity_override; /**< Legacy inline severity threshold. */
-    sbool has_override; /**< Indicates inline configuration is active. */
+    const ratelimit_config_t *cfg; /**< Backing configuration (may be NULL for inline specs). */
+    unsigned int interval; /**< Effective interval in seconds. */
+    unsigned int burst; /**< Effective burst size. */
+    intTiny severity; /**< Effective severity threshold. */
     char *name; /**< Instance name used for diagnostics. */
     unsigned done; /**< Messages processed inside the current interval. */
     unsigned missed; /**< Messages suppressed inside the current interval. */
@@ -114,25 +113,6 @@ rsRetVal ratelimitConfigCreateNamed(rsconf_t *cnf,
                                     ratelimit_config_t **cfg);
 
 /**
- * Create an anonymous configuration entry that is still stored inside the
- * configuration store.
- *
- * Ad-hoc entries are useful for backward compatibility when inline
- * ``ratelimit.*`` parameters are used. They are assigned a unique synthetic
- * name so that the object can later be referenced again (for example by
- * dynamically created worker contexts).
- *
- * @param cnf      Configuration that owns the store.
- * @param hint     Optional hint used to derive the synthetic name.
- * @param spec     Values that shall be stored for the entry.
- * @param cfg      Receives the created configuration on success.
- */
-rsRetVal ratelimitConfigCreateAdHoc(rsconf_t *cnf,
-                                    const char *hint,
-                                    const ratelimit_config_spec_t *spec,
-                                    ratelimit_config_t **cfg);
-
-/**
  * Look up a configuration by name.
  *
  * @param cnf  Configuration that owns the store.
@@ -178,12 +158,10 @@ rsRetVal ratelimitResolveConfig(rsconf_t *cnf,
  * Resolve inline rate limit parameters against the configuration store.
  *
  * When a ``ratelimit.name`` reference is present the referenced configuration
- * is returned. Otherwise the inline values are promoted to an ad-hoc
- * configuration and stored inside the configuration object so that worker code
- * can re-use them.
+ * is returned. Otherwise the caller keeps using the provided inline values.
  *
  * @param cnf      Configuration that owns the store.
- * @param hint     Human readable hint used when synthesising the ad-hoc name.
+ * @param hint     Human readable hint used for diagnostics.
  * @param name     Optional name that should be resolved.
  * @param legacyParamsSpecified Indicates whether inline values were provided.
  * @param interval In/out interval value.
