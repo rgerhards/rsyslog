@@ -1,6 +1,8 @@
 Licensing
 =========
 
+REMOVE ME - DO NOTE MERGE ME!
+
 If you intend to use rsyslog inside a GPLv3 compatible project, you are free to
 do so. You don't even need to continue reading. If you intend to use rsyslog
 inside a non-GPLv3 compatible project, rsyslog offers you some liberties to do
