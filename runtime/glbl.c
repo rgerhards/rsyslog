@@ -417,25 +417,17 @@ static void configDefaultsVersionApply(const char *const value) {
     const unsigned int prevYear = loadConf->defaults.configDefaultsYear;
     const unsigned int prevMonth = loadConf->defaults.configDefaultsMonth;
 
-    const size_t len = strlen(value);
-    if (len != 4U) {
+    char *endptr = NULL;
+    const long ver = strtol(value, &endptr, 10);
+    if (endptr != value + 4 || endptr == value || *endptr != '\0') {
         parser_errmsg(
             "config.defaults.version must be a 4-digit YYMM value; invalid value '%s' ignored (keeping %02u%02u)",
             value, prevYear, prevMonth);
         return;
     }
 
-    for (size_t i = 0; i < len; ++i) {
-        if (!isdigit((unsigned char)value[i])) {
-            parser_errmsg(
-                "config.defaults.version must contain only digits; invalid value '%s' ignored (keeping %02u%02u)",
-                value, prevYear, prevMonth);
-            return;
-        }
-    }
-
-    const int yy = (value[0] - '0') * 10 + (value[1] - '0');
-    const int mm = (value[2] - '0') * 10 + (value[3] - '0');
+    const int yy = (int)(ver / 100);
+    const int mm = (int)(ver % 100);
     if (mm < 1 || mm > 12) {
         parser_errmsg(
             "config.defaults.version requires a month between 01 and 12; invalid value '%s' ignored (keeping %02u%02u)",
