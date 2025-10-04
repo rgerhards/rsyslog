@@ -43,6 +43,19 @@
     #define DFLT_INT_MSGS_SEV_FILTER 6 /* Warning level and more important */
 #endif
 
+/*
+ * Global configuration default compatibility window.  The value represents
+ * the "minor" part of the rsyslog version string (YYMM).  Update the
+ * constants whenever the defaults shipped with rsyslog are adjusted for a
+ * new release series.  The default remains pinned to February 2003 so that
+ * fresh installs emulate the oldest available behaviour unless the user
+ * explicitly opts into a newer baseline.
+ */
+#define RSYSLOG_CONFIG_DEFAULTS_VERSION_YEAR 3
+#define RSYSLOG_CONFIG_DEFAULTS_VERSION_MONTH 2
+#define RSYSLOG_CONFIG_DEFAULTS_VERSION \
+    ((RSYSLOG_CONFIG_DEFAULTS_VERSION_YEAR * 100) + RSYSLOG_CONFIG_DEFAULTS_VERSION_MONTH)
+
 struct queuecnf_s {
     int iMainMsgQueueSize; /* size of the main message queue above */
     int iMainMsgQHighWtrMark; /* high water mark for disk-assisted queues */
@@ -187,7 +200,10 @@ struct globals_s {
  * At a later stage, we may think about dropping them. -- rgerhards, 2011-04-19
  */
 struct defaults_s {
-    int remove_me_when_first_real_member_is_added;
+    unsigned int configDefaultsVersion; /* Combined YYMM representation. */
+    unsigned int configDefaultsYear; /* Two-digit year component. */
+    unsigned int configDefaultsMonth; /* Month component (1-12). */
+    int configDefaultsVersionExplicit; /* Was the value provided by config? */
 };
 
 
