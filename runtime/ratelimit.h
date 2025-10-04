@@ -142,6 +142,17 @@ rsRetVal ratelimitConfigCreateAdHoc(rsconf_t *cnf,
 rsRetVal ratelimitConfigLookup(const rsconf_t *cnf, const char *name, ratelimit_config_t **cfg);
 
 /**
+ * Look up a configuration by name inside the central registry.
+ *
+ * The registry keeps track of all ratelimit definitions associated with the
+ * currently loaded configuration objects. When @p cnf is provided only entries
+ * belonging to that configuration are considered. Passing ``NULL`` for @p cnf
+ * will scan the registry globally which is primarily intended for diagnostic
+ * helpers.
+ */
+rsRetVal ratelimitRegistryLookup(const rsconf_t *cnf, const char *name, ratelimit_config_t **cfg);
+
+/**
  * Retrieve the name associated with a configuration entry.
  */
 const char *ratelimitConfigName(const ratelimit_config_t *cfg);

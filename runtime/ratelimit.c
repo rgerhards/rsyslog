@@ -89,11 +89,24 @@ struct ratelimit_config_s {
     sbool isAdHoc;
 };
 
+struct ratelimit_registry_entry_s {
+    ratelimit_config_t *cfg;
+    const rsconf_t *owner;
+    struct ratelimit_registry_entry_s *next;
+};
+typedef struct ratelimit_registry_entry_s ratelimit_registry_entry_t;
+
+static ratelimit_registry_entry_t *ratelimit_registry_head;
+
 static ratelimit_config_t *ratelimitFindConfig(const rsconf_t *cnf, const char *name);
 static rsRetVal ratelimitConfigValidateSpec(const ratelimit_config_spec_t *spec);
 static char *ratelimitBuildInstanceName(const ratelimit_config_t *cfg, const char *instance_name);
 static void ratelimitDropSuppressedIfAny(ratelimit_t *ratelimit);
 static smsg_t *ratelimitGenRepMsg(ratelimit_t *ratelimit);
+static ratelimit_registry_entry_t *ratelimitRegistryFindEntry(const rsconf_t *owner, const char *name);
+static rsRetVal ratelimitRegistryAppend(rsconf_t *owner, ratelimit_config_t *cfg);
+static void ratelimitRegistryRemove(const rsconf_t *owner, const ratelimit_config_t *cfg);
+static void ratelimitRegistryRemoveOwner(const rsconf_t *owner);
 
 static struct cnfparamdescr ratelimitpdescr[] = {
     {"name", eCmdHdlrString, CNFPARAM_REQUIRED},
@@ -164,6 +177,7 @@ finalize_it:
  */
 void ratelimitStoreInit(rsconf_t *const cnf) {
     if (cnf == NULL) return;
+    ratelimitRegistryRemoveOwner(cnf);
     cnf->ratelimits.head = NULL;
     cnf->ratelimits.tail = NULL;
     cnf->ratelimits.next_auto_id = 1;
@@ -184,6 +198,7 @@ void ratelimitStoreDestruct(rsconf_t *const cnf) {
     cfg = cnf->ratelimits.head;
     while (cfg != NULL) {
         nxt = cfg->next;
+        ratelimitRegistryRemove(cnf, cfg);
         free(cfg->name);
         free(cfg);
         cfg = nxt;
@@ -192,6 +207,7 @@ void ratelimitStoreDestruct(rsconf_t *const cnf) {
     cnf->ratelimits.head = NULL;
     cnf->ratelimits.tail = NULL;
     cnf->ratelimits.next_auto_id = 1;
+    ratelimitRegistryRemoveOwner(cnf);
 }
 
 static ratelimit_config_t *ratelimitConfigAlloc(const ratelimit_config_spec_t *const spec) {
@@ -206,13 +222,22 @@ static ratelimit_config_t *ratelimitConfigAlloc(const ratelimit_config_spec_t *c
 }
 
 static rsRetVal ratelimitConfigRegister(rsconf_t *const cnf, ratelimit_config_t *const cfg) {
+    DEFiRet;
+
+    CHKiRet(ratelimitRegistryAppend(cnf, cfg));
+
     if (cnf->ratelimits.tail == NULL) {
         cnf->ratelimits.head = cfg;
     } else {
         cnf->ratelimits.tail->next = cfg;
     }
     cnf->ratelimits.tail = cfg;
-    return RS_RET_OK;
+
+finalize_it:
+    if (iRet != RS_RET_OK) {
+        ratelimitRegistryRemove(cnf, cfg);
+    }
+    RETiRet;
 }
 
 /**
@@ -345,6 +370,99 @@ rsRetVal ratelimitConfigLookup(const rsconf_t *const cnf, const char *const name
     }
 
     *cfg = found;
+
+finalize_it:
+    RETiRet;
+}
+
+static ratelimit_registry_entry_t *ratelimitRegistryFindEntry(const rsconf_t *const owner, const char *const name) {
+    ratelimit_registry_entry_t *entry;
+
+    if (name == NULL || *name == '\0') return NULL;
+
+    for (entry = ratelimit_registry_head; entry != NULL; entry = entry->next) {
+        if (entry->cfg == NULL || entry->cfg->name == NULL) continue;
+        if (owner != NULL && entry->owner != owner) continue;
+        if (!strcmp(entry->cfg->name, name)) {
+            return entry;
+        }
+    }
+
+    return NULL;
+}
+
+static rsRetVal ratelimitRegistryAppend(rsconf_t *const owner, ratelimit_config_t *const cfg) {
+    ratelimit_registry_entry_t *entry = NULL;
+    DEFiRet;
+
+    if (cfg == NULL || cfg->name == NULL) {
+        ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
+    }
+
+    if (ratelimitRegistryFindEntry(owner, cfg->name) != NULL) {
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+
+    CHKmalloc(entry = calloc(1, sizeof(*entry)));
+    entry->cfg = cfg;
+    entry->owner = owner;
+    entry->next = ratelimit_registry_head;
+    ratelimit_registry_head = entry;
+    entry = NULL;
+
+finalize_it:
+    free(entry);
+    RETiRet;
+}
+
+static void ratelimitRegistryRemove(const rsconf_t *const owner, const ratelimit_config_t *const cfg) {
+    ratelimit_registry_entry_t **link = &ratelimit_registry_head;
+
+    while (*link != NULL) {
+        ratelimit_registry_entry_t *const entry = *link;
+        if (entry->cfg == cfg && entry->owner == owner) {
+            *link = entry->next;
+            free(entry);
+            return;
+        }
+        link = &entry->next;
+    }
+}
+
+static void ratelimitRegistryRemoveOwner(const rsconf_t *const owner) {
+    ratelimit_registry_entry_t **link = &ratelimit_registry_head;
+
+    while (*link != NULL) {
+        ratelimit_registry_entry_t *const entry = *link;
+        if (entry->owner == owner) {
+            *link = entry->next;
+            free(entry);
+            continue;
+        }
+        link = &entry->next;
+    }
+}
+
+rsRetVal ratelimitRegistryLookup(const rsconf_t *const cnf, const char *const name, ratelimit_config_t **const cfg_out) {
+    ratelimit_registry_entry_t *entry;
+    DEFiRet;
+
+    if (cfg_out == NULL) {
+        ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
+    }
+
+    *cfg_out = NULL;
+
+    if (name == NULL || *name == '\0') {
+        ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
+    }
+
+    entry = ratelimitRegistryFindEntry(cnf, name);
+    if (entry == NULL) {
+        ABORT_FINALIZE(RS_RET_NOT_FOUND);
+    }
+
+    *cfg_out = entry->cfg;
 
 finalize_it:
     RETiRet;
