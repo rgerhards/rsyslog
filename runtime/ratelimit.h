@@ -45,6 +45,7 @@ typedef struct ratelimit_config_spec_s {
     unsigned int interval; /**< Rate limiting interval in seconds (0 disables). */
     unsigned int burst; /**< Maximum messages allowed inside @ref interval. */
     int severity; /**< Optional severity threshold, use @ref RATELIMIT_SEVERITY_UNSET for default. */
+    char *policy_path; /**< Absolute path of the YAML policy that populated the spec (if any). */
 } ratelimit_config_spec_t;
 
 struct cnfobj;
@@ -142,6 +143,17 @@ rsRetVal ratelimitConfigCreateAdHoc(rsconf_t *cnf,
 rsRetVal ratelimitConfigLookup(const rsconf_t *cnf, const char *name, ratelimit_config_t **cfg);
 
 /**
+ * Look up a configuration by name inside the central registry.
+ *
+ * The registry keeps track of all ratelimit definitions associated with the
+ * currently loaded configuration objects. When @p cnf is provided only entries
+ * belonging to that configuration are considered. Passing ``NULL`` for @p cnf
+ * will scan the registry globally which is primarily intended for diagnostic
+ * helpers.
+ */
+rsRetVal ratelimitRegistryLookup(const rsconf_t *cnf, const char *name, ratelimit_config_t **cfg);
+
+/**
  * Retrieve the name associated with a configuration entry.
  */
 const char *ratelimitConfigName(const ratelimit_config_t *cfg);
@@ -160,6 +172,11 @@ unsigned int ratelimitConfigGetBurst(const ratelimit_config_t *cfg);
  * Return the severity threshold associated with a configuration entry.
  */
 int ratelimitConfigGetSeverity(const ratelimit_config_t *cfg);
+
+/**
+ * Return the source policy path associated with a configuration entry, if set.
+ */
+const char *ratelimitConfigGetPolicyPath(const ratelimit_config_t *cfg);
 
 /**
  * Resolve a configuration reference by name.
