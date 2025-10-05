@@ -523,6 +523,22 @@ The following parameters can be set:
   need to switch it back to "on", except for the case to be mentioned.
   This is also the reason why we switched the default.
 
+- **config.defaults.version** [YYMM] available 8.2508.0+
+
+  **Default:** ``0302`` (rsyslog February 2003 compatibility baseline)
+
+  Sets the release vintage whose built-in defaults rsyslog should emulate.
+  The value must be a four-digit ``YYMM`` string matching the "minor" portion
+  of an rsyslog version (for example ``2304`` for v8.2304.x).  Months must be
+  between ``01`` and ``12``; any other value triggers a configuration error and
+  leaves the previous compatibility level in place.  By default rsyslog keeps
+  the oldest available behaviour (February 2003) until the administrator opts
+  into a newer baseline.  This knob prepares rsyslog to offer modernized
+  defaults for new installations while letting existing deployments lock
+  themselves to an older baseline.  As of v8.2508.0 the value
+  is parsed and stored for future use; later releases will consume it to adjust
+  default behavior.
+
 - **internal.developeronly.options**
 
   This is NOT to be used by end users. It provides rsyslog developers the

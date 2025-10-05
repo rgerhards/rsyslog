@@ -211,6 +211,10 @@ static void cnfSetDefaults(rsconf_t *pThis) {
     pThis->globals.internalMsgRatelimitCfg = NULL;
     pThis->globals.intMsgsSeverityFilter = DFLT_INT_MSGS_SEV_FILTER;
     pThis->globals.permitCtlC = glblPermitCtlC;
+    pThis->defaults.configDefaultsVersion = RSYSLOG_CONFIG_DEFAULTS_VERSION;
+    pThis->defaults.configDefaultsYear = RSYSLOG_CONFIG_DEFAULTS_VERSION_YEAR;
+    pThis->defaults.configDefaultsMonth = RSYSLOG_CONFIG_DEFAULTS_VERSION_MONTH;
+    pThis->defaults.configDefaultsVersionExplicit = 0;
     ratelimitStoreInit(pThis);
 
     pThis->globals.actq_dflt_toQShutdown = 10;
