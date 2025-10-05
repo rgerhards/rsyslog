@@ -13,6 +13,7 @@ EOF_POLICY
 cfg_valid="$RSYSLOG_DYNNAME.valid.conf"
 cat >"$cfg_valid" <<EOF_CFG
 ratelimit(name="valid" policy="${policy_valid}")
+action(type="omfile" file="/dev/null")
 EOF_CFG
 
 verify_log="$RSYSLOG_DYNNAME.policy.verify.log"
@@ -31,6 +32,7 @@ rm -f "$verify_log"
 missing_cfg="$RSYSLOG_DYNNAME.missing.conf"
 cat >"$missing_cfg" <<EOF_MISSING
 ratelimit(name="missing" policy="${RSYSLOG_DYNNAME}.doesnotexist.yml")
+action(type="omfile" file="/dev/null")
 EOF_MISSING
 if ../tools/rsyslogd -N1 -f"$missing_cfg" -M../runtime/.libs:../.libs >"$verify_log" 2>&1; then
     cat "$verify_log"
@@ -48,6 +50,7 @@ rm -f "$verify_log"
 mixed_cfg="$RSYSLOG_DYNNAME.mixed.conf"
 cat >"$mixed_cfg" <<EOF_MIXED
 ratelimit(name="mixed" policy="${policy_valid}" interval="1" burst="1")
+action(type="omfile" file="/dev/null")
 EOF_MIXED
 if ../tools/rsyslogd -N1 -f"$mixed_cfg" -M../runtime/.libs:../.libs >"$verify_log" 2>&1; then
     cat "$verify_log"
@@ -69,6 +72,7 @@ EOF_INVALID
 invalid_cfg="$RSYSLOG_DYNNAME.invalid.conf"
 cat >"$invalid_cfg" <<EOF_INVALID_CFG
 ratelimit(name="invalid" policy="${invalid_yaml}")
+action(type="omfile" file="/dev/null")
 EOF_INVALID_CFG
 if ../tools/rsyslogd -N1 -f"$invalid_cfg" -M../runtime/.libs:../.libs >"$verify_log" 2>&1; then
     cat "$verify_log"

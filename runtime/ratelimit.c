@@ -116,6 +116,9 @@ static rsRetVal ratelimitRegistryAppend(rsconf_t *owner, ratelimit_config_t *cfg
 static void ratelimitRegistryRemove(const rsconf_t *owner, const ratelimit_config_t *cfg);
 static void ratelimitRegistryRemoveOwner(const rsconf_t *owner);
 static rsRetVal ratelimitPolicyLoadFromYaml(const char *path, ratelimit_config_spec_t *spec);
+#ifdef HAVE_LIBYAML
+static rsRetVal ratelimitYamlScalarDup(const yaml_node_t *node, char **str_out);
+#endif
 
 static struct cnfparamdescr ratelimitpdescr[] = {
     {"name", eCmdHdlrString, CNFPARAM_REQUIRED},
@@ -467,9 +470,37 @@ static void ratelimitRegistryRemoveOwner(const rsconf_t *const owner) {
     }
 }
 
+#ifdef HAVE_LIBYAML
+static rsRetVal ratelimitYamlScalarDup(const yaml_node_t *const node, char **const str_out) {
+    if (str_out == NULL) return RS_RET_INVALID_PARAMS;
+    *str_out = NULL;
+    if (node == NULL || node->type != YAML_SCALAR_NODE) {
+        return RS_RET_INVALID_VALUE;
+    }
+
+    const size_t len = node->data.scalar.length;
+    char *copy = malloc(len + 1);
+    if (copy == NULL) {
+        return RS_RET_OUT_OF_MEMORY;
+    }
+    if (len > 0) {
+        memcpy(copy, node->data.scalar.value, len);
+    }
+    copy[len] = '\0';
+    *str_out = copy;
+    return RS_RET_OK;
+}
+#endif
+
 static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_config_spec_t *const spec) {
 #ifndef HAVE_LIBYAML
-    (void)spec;
+    if (spec != NULL) {
+        free(spec->policy_path);
+        spec->policy_path = NULL;
+        spec->interval = 0;
+        spec->burst = 0;
+        spec->severity = RATELIMIT_SEVERITY_UNSET;
+    }
     if (path == NULL) {
         LogError(0, RS_RET_NOT_IMPLEMENTED,
                  "ratelimit: YAML policy requested but rsyslogd was built without libyaml support; use inline ratelimit.* parameters instead");
@@ -543,70 +574,94 @@ static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_co
             ABORT_FINALIZE(RS_RET_INVALID_VALUE);
         }
 
-        const char *const key = (const char *)key_node->data.scalar.value;
-        const char *const value = (const char *)value_node->data.scalar.value;
-        if (key == NULL) {
-            LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' contains an empty key", path);
-            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        char *key = NULL;
+        char *value = NULL;
+        rsRetVal pairRet = ratelimitYamlScalarDup(key_node, &key);
+        if (pairRet != RS_RET_OK) {
+            LogError(0, pairRet, "ratelimit: failed to copy YAML key while parsing policy '%s'", path);
+            free(value);
+            free(key);
+            iRet = pairRet;
+            ABORT_FINALIZE(iRet);
+        }
+        pairRet = ratelimitYamlScalarDup(value_node, &value);
+        if (pairRet != RS_RET_OK) {
+            LogError(0, pairRet, "ratelimit: failed to copy YAML value for key '%s' in policy '%s'",
+                     (key != NULL) ? key : "(unknown)", path);
+            free(value);
+            free(key);
+            iRet = pairRet;
+            ABORT_FINALIZE(iRet);
         }
 
         if (!strcmp(key, "interval")) {
             if (interval_seen) {
                 LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' defines 'interval' more than once", path);
-                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+                pairRet = RS_RET_INVALID_VALUE;
+            } else {
+                char *endptr = NULL;
+                errno = 0;
+                const long long parsed = strtoll(value, &endptr, 10);
+                if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0')) {
+                    LogError(0, RS_RET_INVALID_VALUE,
+                             "ratelimit: YAML policy '%s' has invalid interval value '%s'", path, value);
+                    pairRet = RS_RET_INVALID_VALUE;
+                } else if (parsed < 0 || (unsigned long long)parsed > UINT_MAX) {
+                    LogError(0, RS_RET_INVALID_VALUE,
+                             "ratelimit: YAML policy '%s' interval '%s' is out of range", path, value);
+                    pairRet = RS_RET_INVALID_VALUE;
+                } else {
+                    spec->interval = (unsigned int)parsed;
+                    interval_seen = 1;
+                }
             }
-            char *endptr = NULL;
-            errno = 0;
-            const long long parsed = strtoll(value, &endptr, 10);
-            if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0')) {
-                LogError(0, RS_RET_INVALID_VALUE,
-                         "ratelimit: YAML policy '%s' has invalid interval value '%s'", path, value);
-                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
-            }
-            if (parsed < 0 || (unsigned long long)parsed > UINT_MAX) {
-                LogError(0, RS_RET_INVALID_VALUE,
-                         "ratelimit: YAML policy '%s' interval '%s' is out of range", path, value);
-                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
-            }
-            spec->interval = (unsigned int)parsed;
-            interval_seen = 1;
         } else if (!strcmp(key, "burst")) {
             if (burst_seen) {
                 LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' defines 'burst' more than once", path);
-                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+                pairRet = RS_RET_INVALID_VALUE;
+            } else {
+                char *endptr = NULL;
+                errno = 0;
+                const long long parsed = strtoll(value, &endptr, 10);
+                if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0')) {
+                    LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' has invalid burst value '%s'", path, value);
+                    pairRet = RS_RET_INVALID_VALUE;
+                } else if (parsed < 0 || (unsigned long long)parsed > UINT_MAX) {
+                    LogError(0, RS_RET_INVALID_VALUE,
+                             "ratelimit: YAML policy '%s' burst '%s' is out of range", path, value);
+                    pairRet = RS_RET_INVALID_VALUE;
+                } else {
+                    spec->burst = (unsigned int)parsed;
+                    burst_seen = 1;
+                }
             }
-            char *endptr = NULL;
-            errno = 0;
-            const long long parsed = strtoll(value, &endptr, 10);
-            if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0')) {
-                LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' has invalid burst value '%s'", path, value);
-                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
-            }
-            if (parsed < 0 || (unsigned long long)parsed > UINT_MAX) {
-                LogError(0, RS_RET_INVALID_VALUE,
-                         "ratelimit: YAML policy '%s' burst '%s' is out of range", path, value);
-                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
-            }
-            spec->burst = (unsigned int)parsed;
-            burst_seen = 1;
         } else if (!strcmp(key, "severity")) {
             if (severity_seen) {
                 LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' defines 'severity' more than once", path);
-                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+                pairRet = RS_RET_INVALID_VALUE;
+            } else {
+                char *endptr = NULL;
+                errno = 0;
+                const long long parsed = strtoll(value, &endptr, 10);
+                if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0') || parsed < 0 || parsed > 7) {
+                    LogError(0, RS_RET_INVALID_VALUE,
+                             "ratelimit: YAML policy '%s' has invalid severity '%s' (expected 0-7)", path, value);
+                    pairRet = RS_RET_INVALID_VALUE;
+                } else {
+                    spec->severity = (int)parsed;
+                    severity_seen = 1;
+                }
             }
-            char *endptr = NULL;
-            errno = 0;
-            const long long parsed = strtoll(value, &endptr, 10);
-            if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0') || parsed < 0 || parsed > 7) {
-                LogError(0, RS_RET_INVALID_VALUE,
-                         "ratelimit: YAML policy '%s' has invalid severity '%s' (expected 0-7)", path, value);
-                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
-            }
-            spec->severity = (int)parsed;
-            severity_seen = 1;
         } else {
             LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' contains unsupported key '%s'", path, key);
-            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            pairRet = RS_RET_INVALID_VALUE;
+        }
+
+        free(value);
+        free(key);
+        if (pairRet != RS_RET_OK) {
+            iRet = pairRet;
+            ABORT_FINALIZE(iRet);
         }
     }
 
@@ -632,7 +687,7 @@ static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_co
 
 finalize_it:
     if (document_loaded) yaml_document_delete(&document);
-    if (parser_initialised) yaml_parser_delete(&parser);
+    if (parser_initialised) yaml_parser_delete(&yaml_parser);
     if (fp != NULL) fclose(fp);
     if (iRet != RS_RET_OK) {
         free(spec->policy_path);
