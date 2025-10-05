@@ -138,7 +138,6 @@ static struct cnfparamblk ratelimitpblk = {CNFPARAMBLK_VERSION, sizeof(ratelimit
  */
 void ratelimitConfigSpecInit(ratelimit_config_spec_t *const spec) {
     if (spec == NULL) return;
-    free(spec->policy_path);
     spec->interval = 0;
     spec->burst = 0;
     spec->severity = RATELIMIT_SEVERITY_UNSET;
@@ -482,7 +481,7 @@ static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_co
     return RS_RET_NOT_IMPLEMENTED;
 #else
     FILE *fp = NULL;
-    yaml_parser_t parser;
+    yaml_parser_t yaml_parser;
     yaml_document_t document;
     sbool parser_initialised = 0;
     sbool document_loaded = 0;
@@ -508,18 +507,19 @@ static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_co
         ABORT_FINALIZE(RS_RET_NO_FILE_ACCESS);
     }
 
-    if (!yaml_parser_initialize(&parser)) {
+    if (!yaml_parser_initialize(&yaml_parser)) {
         LogError(0, RS_RET_INTERNAL_ERROR, "ratelimit: failed to initialise YAML parser for '%s'", path);
         ABORT_FINALIZE(RS_RET_INTERNAL_ERROR);
     }
     parser_initialised = 1;
-    yaml_parser_set_input_file(&parser, fp);
+    yaml_parser_set_input_file(&yaml_parser, fp);
 
-    if (!yaml_parser_load(&parser, &document)) {
-        const char *problem = (parser.problem != NULL && *parser.problem != '\0') ? parser.problem : "unknown error";
+    if (!yaml_parser_load(&yaml_parser, &document)) {
+        const char *problem =
+            (yaml_parser.problem != NULL && *yaml_parser.problem != '\0') ? yaml_parser.problem : "unknown error";
         LogError(0, RS_RET_INVALID_VALUE,
                  "ratelimit: failed to parse YAML policy '%s': %s at line %zu column %zu", path, problem,
-                 (size_t)(parser.problem_mark.line + 1), (size_t)(parser.problem_mark.column + 1));
+                 (size_t)(yaml_parser.problem_mark.line + 1), (size_t)(yaml_parser.problem_mark.column + 1));
         ABORT_FINALIZE(RS_RET_INVALID_VALUE);
     }
     document_loaded = 1;
