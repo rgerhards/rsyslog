@@ -760,7 +760,7 @@ rsRetVal ratelimitResolveFromValues(rsconf_t *const cnf,
                                     unsigned int *const burst,
                                     int *const severity,
                                     ratelimit_config_t **const cfg_out) {
-    ratelimit_config_spec_t spec;
+    ratelimit_config_spec_t spec = {0};
     DEFiRet;
 
     if (interval == NULL || burst == NULL) {
@@ -831,7 +831,7 @@ static inline intTiny ratelimitEffectiveSeverity(const ratelimit_t *const rateli
  */
 rsRetVal ratelimitProcessCnf(struct cnfobj *const o) {
     struct cnfparamvals *pvals = NULL;
-    ratelimit_config_spec_t spec;
+    ratelimit_config_spec_t spec = {0};
     ratelimit_config_t *cfg = NULL;
     char *name = NULL;
     char *policy_param = NULL;
