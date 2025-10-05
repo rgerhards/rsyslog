@@ -22,23 +22,24 @@ severity: 5
 EOF_POLICY
 
 generate_conf
-add_conf "
-ratelimit(name=\"tcp_yaml\" policy=\"${policy_file}\")
+add_conf '
+ratelimit(name="tcp_yaml" policy="'${policy_file}'")
 
-module(load=\"../plugins/imtcp/.libs/imtcp\")
+module(load="../plugins/imtcp/.libs/imtcp")
 
-input(type=\"imtcp\" name=\"tcp-yaml\" port=\"0\"
-        listenPortFileName=\"'${RSYSLOG_DYNNAME}'.tcpflood_port\"
-        ratelimit.name=\"tcp_yaml\")
+input(type="imtcp" name="tcp-yaml" port="0"
+        listenPortFileName="'${RSYSLOG_DYNNAME}'.tcpflood_port"
+        ratelimit.name="tcp_yaml")
 
-template(name=\"outfmt\" type=\"string\" string=\"%msg:F,58:2%\\n\")
+template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 
-:msg, contains, \"msgnum:\" action(type=\"omfile\" template=\"outfmt\"
-                                 file=\"'${RSYSLOG_OUT_LOG}'\")
 
-:msg, contains, \"begin to drop messages due to rate-limiting\" action(type=\"omfile\"
-                                 file=\"'${RATELIMIT_LOG}'\")
-"
+:msg, contains, "msgnum:" action(type="omfile" template="outfmt"
+                                 file="'${RSYSLOG_OUT_LOG}'")
+
+:msg, contains, "begin to drop messages due to rate-limiting" action(type="omfile"
+                                 file="'${RATELIMIT_LOG}'")
+'
 
 # Validate configuration before running so we can skip gracefully if libyaml is missing.
 verify_log="$RSYSLOG_DYNNAME.verify.log"
