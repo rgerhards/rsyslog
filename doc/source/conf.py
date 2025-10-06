@@ -242,8 +242,8 @@ html_baseurl = f'{RSYSLOG_BASE_URL}/doc/'
 # ``-D html_theme=<theme>`` still works because Sphinx applies command
 # line overrides after loading this file. If no override is provided we
 # fall back to the RTD theme for a consistent default experience.
-_env_html_theme = os.environ.get('RSYSLOG_SPHINX_HTML_THEME') \
-    or os.environ.get('SPHINX_HTML_THEME')
+_env_html_theme = (os.environ.get('RSYSLOG_SPHINX_HTML_THEME')
+    or os.environ.get('SPHINX_HTML_THEME'))
 html_theme = _env_html_theme or 'sphinx_rtd_theme'
 #html_theme = 'default'
 #html_theme = 'basic'
