@@ -238,7 +238,13 @@ html_baseurl = f'{RSYSLOG_BASE_URL}/doc/'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'furo'
+# Allow overriding the default theme via the environment. Passing
+# ``-D html_theme=<theme>`` still works because Sphinx applies command
+# line overrides after loading this file. If no override is provided we
+# fall back to the RTD theme for a consistent default experience.
+_env_html_theme = os.environ.get('RSYSLOG_SPHINX_HTML_THEME') \
+    or os.environ.get('SPHINX_HTML_THEME')
+html_theme = _env_html_theme or 'sphinx_rtd_theme'
 #html_theme = 'default'
 #html_theme = 'basic'
 #html_style = 'rsyslog.css'

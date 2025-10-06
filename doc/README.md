@@ -103,6 +103,14 @@ We provide simple scripts that create a virtual environment (if missing), instal
     -   `powershell -ExecutionPolicy Bypass -File .\doc\tools\build-doc-windows.ps1 -Clean -Format html`
     -   Options: `-Strict`, `-Format html|epub`, `-Extra "<opts>"`.
 
+The default HTML theme is [`sphinx_rtd_theme`](https://sphinx-rtd-theme.readthedocs.io/). You can override it for any build by
+setting the `RSYSLOG_SPHINX_HTML_THEME` environment variable or by passing a Sphinx override, for example:
+
+-   `RSYSLOG_SPHINX_HTML_THEME=furo make -C doc html`
+-   `make -C doc html SPHINXOPTS="-D html_theme=furo"`
+
+Command-line `-D` overrides take precedence, allowing per-build theme selection without editing `conf.py`.
+
 ### Assumptions
 
 -   You want to install the `pip` Python package as a standard user, which places
