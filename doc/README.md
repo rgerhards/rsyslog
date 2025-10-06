@@ -108,6 +108,8 @@ setting the `RSYSLOG_SPHINX_HTML_THEME` environment variable or by passing a Sph
 
 -   `RSYSLOG_SPHINX_HTML_THEME=furo make -C doc html`
 -   `make -C doc html SPHINXOPTS="-D html_theme=furo"`
+-   `./doc/tools/build-doc-linux.sh --extra "-D html_theme=furo"`
+-   `powershell -ExecutionPolicy Bypass -File .\doc\tools\build-doc-windows.ps1 -Extra "-D html_theme=furo"`
 
 Command-line `-D` overrides take precedence, allowing per-build theme selection without editing `conf.py`.
 
