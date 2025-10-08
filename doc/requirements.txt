@@ -1,5 +1,6 @@
 
 # Align with conf.py needs_sphinx requirement
 sphinx>=4.5.0
+sphinx-rtd-theme
 furo
 sphinxcontrib.mermaid
