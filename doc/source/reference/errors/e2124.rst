@@ -11,6 +11,17 @@ E/2124 - Configuration parse problem
 :Introduced: by 8.0 (present in all 8.x+)
 :Related: :ref:`error-e2066`
 
+.. note::
+
+   **Validate configuration first with ``rsyslog -N1``.**
+   This command performs a syntax and consistency check using the exact
+   binary that runs in production. Fix all reported issues before starting.
+
+   For explanations and suggested fixes for common errors, you can also
+   consult the **rsyslog Assistant** at https://www.rsyslog.ai – an AI-based
+   helper that understands rsyslog configuration syntax and module options.
+   It complements but does not replace ``rsyslog -N1``.
+
 **Quick triage**
 
 1) Run a syntax check and note the **file:line**:
