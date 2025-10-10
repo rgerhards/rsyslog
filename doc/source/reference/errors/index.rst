@@ -15,3 +15,7 @@ TLS failure, etc.). Start with the code page, then inspect the line before it.
    e2007
    e2027
    e2359
+   e2013
+   e2066
+   e2078
+   e2124

@@ -1,0 +1,54 @@
+.. generated-by: Codex content pass (2025-10-10)
+
+.. _error-e2013:
+
+E/2013 - File open failed
+=========================
+
+:Category: Filesystem / permissions
+:Primary impact: Messages not written; action may suspend
+:Typical environments: ``omfile`` outputs; rotated/missing paths; SELinux/AppArmor
+:Introduced: by 8.0 (present in all 8.x+)
+:Related: :ref:`error-e2007`
+
+**Quick triage**
+
+1) Read the **preceding line** for errno/path (ENOENT, EACCES, ENOSPC).  
+2) Confirm the directory exists and rsyslog user can write:
+   ::
+
+      ls -ld /target/dir && touch /target/dir/.w
+3) If using SELinux, inspect context:
+   ::
+
+      ls -Z /target/dir
+
+**Most common root causes**
+
+- Directory missing, wrong owner/mode, or parent not present.  
+- Disk full or inode exhaustion.  
+- SELinux/AppArmor denies write on the target path.  
+- Path constructed via template resolves to a non-existent directory.
+
+**Fixes**
+
+- Create and own the directory or let rsyslog create it:
+  ::
+
+    mkdir -p /target/dir && chown syslog:adm /target/dir && chmod 0755 /target/dir
+- In action, enable safe creation and modes:
+  ::
+
+    action(type="omfile" file="/target/dir/app.log" dirCreateMode="0755" FileCreateMode="0644" CreateDirs="on")
+- Free disk/inodes.  
+- On SELinux, adjust context or policy for the directory.
+
+**Why it happens**
+
+``E/2013`` is raised when the output file cannot be opened. Resolve the filesystem
+cause (path, perms, space, MAC policy). If the action suspended (``E/2007``), it will
+resume automatically once the error clears.
+
+**See also**
+
+- :ref:`error-e2007` - Action suspended (flow control)
