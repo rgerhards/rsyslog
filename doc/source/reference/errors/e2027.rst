@@ -1,0 +1,9 @@
+.. generated-by: Codex seed (2025-10-10)
+
+.. _error-e2027:
+
+E/2027 - Timeout / connection issue (stub)
+==========================================
+
+This page will be completed next. Typical context: network timeouts, firewalls,
+or SELinux port types on non-standard ports leading to retries and suspends.

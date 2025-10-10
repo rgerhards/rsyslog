@@ -1,0 +1,9 @@
+.. generated-by: Codex seed (2025-10-10)
+
+.. _error-e2359:
+
+E/2359 - Action resumed (stub)
+==============================
+
+Indicates an action left suspend state. Review the **preceding** failure (often
+E/2007) to confirm the underlying issue is resolved.
