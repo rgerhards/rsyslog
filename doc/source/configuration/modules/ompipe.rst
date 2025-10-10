@@ -49,7 +49,7 @@ The following command sends all syslog messages to a pipe named /var/log/pipe.
 
 
 Common errors
--------------
+=============
 
 - :ref:`error-e2007` - Action suspended (flow control)
 - :ref:`error-e2027` - Timeout / connection issue
