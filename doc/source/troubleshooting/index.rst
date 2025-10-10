@@ -1,6 +1,8 @@
 Troubleshooting
 ===============
 
+- See also: :ref:`errors-index` for code-by-code triage.
+
 Typical Problems
 ----------------
 .. toctree::
