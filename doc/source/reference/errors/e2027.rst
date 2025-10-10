@@ -1,9 +1,60 @@
-.. generated-by: Codex seed (2025-10-10)
+.. generated-by: Codex content pass (2025-10-10)
 
 .. _error-e2027:
 
-E/2027 - Timeout / connection issue (stub)
-==========================================
+E/2027 - Timeout / connection issue
+===================================
 
-This page will be completed next. Typical context: network timeouts, firewalls,
-or SELinux port types on non-standard ports leading to retries and suspends.
+:Category: Network / connectivity
+:Primary impact: Retries; potential action suspend; queue growth
+:Typical environments: ``omfwd`` to TCP/TLS/syslog receivers; NAT/firewall; SELinux
+:Introduced: by 8.0 (present in all 8.x+)
+:Related: :ref:`error-e2007`, :ref:`error-e2359`
+
+**Quick triage**
+
+1) Check the **preceding line** for the failing action and concrete errno (e.g. connection refused, timeout, reset).  
+2) Verify the target host/port is reachable from the rsyslog host:
+
+   ::
+
+      nc -vz <host> <port>   # or:  telnet <host> <port>
+3) If SELinux is enforcing and you use a **non-standard port**, set the port type:
+
+   ::
+
+      sudo semanage port -a -t syslogd_port_t -p tcp <port>   # add
+      sudo semanage port -m -t syslogd_port_t -p tcp <port>   # modify if exists
+4) Check firewalls/NAT: allow outbound on the chosen TCP/UDP port, and inbound on the receiver.
+
+**Most common root causes**
+
+- **Receiver down or listening on a different port** (misconfig, service not started).  
+- **Firewall or security group blocks** between sender and receiver.  
+- **SELinux port type mismatch** when using non-default ports (e.g. 10514).  
+- **DNS resolution issues** or wrong address family (v4 vs v6).  
+- **Path MTU / network flaps** causing periodic resets or timeouts.  
+- **TLS handshake stalls** (chain incomplete, name mismatch) presenting as timeouts.
+
+**Fixes**
+
+- Start/verify the receiver (e.g., rsyslog, syslog-ng, Loki/Promtail gateway) and confirm the **exact port/protocol**.  
+- Open the firewall path (sender egress + receiver ingress) for the protocol/port in use.  
+- On SELinux systems using non-default ports, set port type:
+
+  ::
+
+      sudo semanage port -a -t syslogd_port_t -p tcp 10514
+- Prefer stable names and v4/v6 consistency; if needed, force address family in receiver or DNS.  
+- If TLS is used, validate CN/SAN vs permitted peers and include full CA chain on both ends.
+
+**Why it happens**
+
+``E/2027`` signals a **network operation did not complete** in time or was rejected.
+It often precedes or triggers ``E/2007`` (action suspended) as backpressure builds.
+Fix the underlying connectivity or policy issue; the action resumes automatically once the path is healthy (``E/2359``).
+
+**See also**
+
+- :ref:`error-e2007` - Action suspended (flow control)  
+- :ref:`error-e2359` - Action resumed
