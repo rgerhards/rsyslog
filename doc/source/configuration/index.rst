@@ -30,7 +30,6 @@ configuration.
    modules/idx_parser
    modules/idx_messagemod
    modules/idx_stringgen
-   modules/idx_function
    modules/idx_library
    templates
    properties

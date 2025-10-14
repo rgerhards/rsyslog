@@ -68,5 +68,5 @@ Error Handling and Performance Notes
 See Also
 --------
 
-- :doc:`../../rainerscript/functions/idx_module_functions`
+- :doc:`idx_module_functions`
 - PCRE project documentation: https://www.pcre.org

@@ -25,4 +25,3 @@ There exist different classes of loadable modules:
    :maxdepth: 1
 
    workflow
-   idx_function
