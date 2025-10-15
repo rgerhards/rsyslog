@@ -53,6 +53,27 @@ iteration, though Automake will not capture transcripts.
   Valgrind. Some legacy wrappers predate this pattern; follow the newer style
   when adding or refactoring coverage.
 
+## omhttp test server helpers
+
+The lightweight HTTP listener in `tests/omhttp_server.py` powers many output
+module scenarios. `diag.sh` exposes `omhttp_start_server`,
+`omhttp_get_data`, and `omhttp_stop_server` to manage it from tests.
+
+- `omhttp_get_data <port> <path> <format>` now returns the stored batches along
+  with parsed summaries. The optional `<format>` argument accepts the previous
+  values (`jsonarray`, `newline`, `kafkarest`, `lokirest`) and adds `hec` for
+  Splunk HEC payloads.
+- Starting the server with `--validate-hec` enables strict HEC validation. The
+  helper accepts additional knobs to simulate client retries:
+  - `--hec-validation-error-code` and `--hec-validation-error-message` control
+    the 4xx response for malformed payloads.
+  - `--hec-fail-after <n>` and `--hec-fail-every <n>` produce deterministic 4xx
+    responses even for valid payloads.
+  - `--hec-fail-message` customises the simulated validation failure body.
+- When HEC validation is active, the server records both the raw POST body and a
+  parsed summary (including extracted `msgnum` values) so callers can inspect
+  either representation.
+
 ## Environment setup snippets
 
 ### MariaDB/MySQL
