@@ -1031,12 +1031,14 @@ TESTS +=  \
 	omhttp-batch-lokirest.sh \
 	omhttp-profile-loki.sh \
 	omhttp-batch-newline.sh \
-	omhttp-retry.sh \
-	omhttp-retry-timeout.sh \
-	omhttp-httpheaderkey.sh \
-	omhttp-multiplehttpheaders.sh \
-	omhttp-dynrestpath.sh \
-	omhttp-batch-dynrestpath.sh
+        omhttp-retry.sh \
+        omhttp-retry-timeout.sh \
+        omhttp-httpheaderkey.sh \
+        omhttp-multiplehttpheaders.sh \
+        omhttp-httpversion-1.1.sh \
+        omhttp-httpversion-2.sh \
+        omhttp-dynrestpath.sh \
+        omhttp-batch-dynrestpath.sh
 if HAVE_VALGRIND
 TESTS +=  \
 	omhttp-auth-vg.sh \
@@ -2869,16 +2871,18 @@ EXTRA_DIST= \
 	omhttp-batch-newline.sh \
 	omhttp-batch-retry-metadata.sh \
 	omhttp-retry-timeout.sh \
-	omhttp-basic-ignorecodes-vg.sh \
-	omhttp-batch-retry-metadata-vg.sh \
-	omhttp-retry-timeout-vg.sh \
-	omhttp-retry.sh \
-	omhttp-httpheaderkey.sh \
-	omhttp-multiplehttpheaders.sh \
-	omhttp-dynrestpath.sh \
-	omhttp-batch-dynrestpath.sh \
-	omhttp-auth-vg.sh \
-	omhttp-basic-vg.sh \
+        omhttp-basic-ignorecodes-vg.sh \
+        omhttp-batch-retry-metadata-vg.sh \
+        omhttp-retry-timeout-vg.sh \
+        omhttp-retry.sh \
+        omhttp-httpheaderkey.sh \
+        omhttp-multiplehttpheaders.sh \
+        omhttp-httpversion-1.1.sh \
+        omhttp-httpversion-2.sh \
+        omhttp-dynrestpath.sh \
+        omhttp-batch-dynrestpath.sh \
+        omhttp-auth-vg.sh \
+        omhttp-basic-vg.sh \
 	omhttp-batch-jsonarray-compress-vg.sh \
 	omhttp-batch-jsonarray-retry-vg.sh \
 	omhttp-batch-jsonarray-vg.sh \
