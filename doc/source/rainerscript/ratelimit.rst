@@ -55,6 +55,32 @@ Reference the file from the :rainerscript:`ratelimit()` object:
           server="https://api.example"
           ratelimit.name="api_ingest")
 
+Per-source YAML policy
+~~~~~~~~~~~~~~~~~~~~~~
+
+External policies can also describe per-source limits that future inputs may
+use to throttle senders individually. The document must provide a ``default``
+block containing ``max`` (messages) and ``window`` (seconds) plus an optional
+``overrides`` sequence that tweaks specific sender keys:
+
+.. code-block:: yaml
+
+   default:
+     max: 1000
+     window: 10s      # optional "s" suffix
+   overrides:
+     - key: "db01.corp.local"
+       max: 5000
+       window: 10s
+     - key: "backup-01"
+       max: 20000
+       window: 30
+
+The ``window`` value accepts an optional ``s`` suffix for readability (for
+example ``5s``). Every override entry must provide ``key``, ``max``, and
+``window``. Duplicate keys or missing fields cause configuration validation to
+fail with an explanatory error.
+
 Parameters
 ----------
 
@@ -88,10 +114,15 @@ Notes
 * Inline ``ratelimit.interval``/``ratelimit.burst`` settings remain
   supported for backward compatibility. When :literal:`ratelimit.name`
   is present, the inline parameters must be omitted.
-* ``policy=`` cannot be combined with inline numeric values. The YAML file
-  must provide at least ``interval`` and ``burst`` keys. Duplicate keys or
-  unsupported properties cause configuration loading to fail with a
-  descriptive error message.
+* ``policy=`` cannot be combined with inline numeric values. For the flat
+  schema the YAML file must provide at least ``interval`` and ``burst`` keys.
+  Policies that define a ``default`` block (with optional ``overrides``) may
+  omit the top-level values. Duplicate keys or unsupported properties cause
+  configuration loading to fail with a descriptive error message.
+* Policies defining ``default``/``overrides`` may omit the top-level
+  ``interval``/``burst`` values. Future per-source features will consume the
+  nested configuration while legacy ratelimit consumers continue to use the
+  top-level values when present.
 * When rsyslog is built without libyaml support the ``policy=`` parameter
   is rejected and the log instructs operators to switch back to the
   traditional inline settings.

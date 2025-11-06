@@ -93,6 +93,7 @@ struct ratelimit_config_s {
     unsigned int burst;
     intTiny severity;
     char *policy_path;
+    ratelimit_per_source_policy_t *per_source;
     ratelimit_config_t *next;
     sbool isAdHoc;
 };
@@ -116,6 +117,12 @@ static rsRetVal ratelimitRegistryAppend(rsconf_t *owner, ratelimit_config_t *cfg
 static void ratelimitRegistryRemove(const rsconf_t *owner, const ratelimit_config_t *cfg);
 static void ratelimitRegistryRemoveOwner(const rsconf_t *owner);
 static rsRetVal ratelimitPolicyLoadFromYaml(const char *path, ratelimit_config_spec_t *spec);
+static void ratelimitPerSourceOverridesFree(ratelimit_per_source_override_t *head);
+static void ratelimitPerSourcePolicyFree(ratelimit_per_source_policy_t *policy);
+static rsRetVal ratelimitPerSourcePolicyClone(const ratelimit_per_source_policy_t *src,
+                                              ratelimit_per_source_policy_t **dst);
+static rsRetVal ratelimitParseUnsigned(const char *path, const char *key, const char *value, unsigned int *out);
+static rsRetVal ratelimitParseWindow(const char *path, const char *key, const char *value, unsigned int *out);
 #ifdef HAVE_LIBYAML
 static rsRetVal ratelimitYamlScalarDup(const yaml_node_t *node, char **str_out);
 #endif
@@ -145,6 +152,7 @@ void ratelimitConfigSpecInit(ratelimit_config_spec_t *const spec) {
     spec->burst = 0;
     spec->severity = RATELIMIT_SEVERITY_UNSET;
     spec->policy_path = NULL;
+    spec->per_source = NULL;
 }
 
 static ratelimit_config_t *ratelimitFindConfig(const rsconf_t *const cnf, const char *const name) {
@@ -168,8 +176,11 @@ static rsRetVal ratelimitConfigValidateSpec(const ratelimit_config_spec_t *const
         ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
     }
 
-    if (spec->policy_path != NULL && spec->interval == 0 && spec->burst == 0) {
-        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' did not define interval/burst values", spec->policy_path);
+    const sbool has_per_source = (spec->per_source != NULL);
+
+    if (spec->policy_path != NULL && spec->interval == 0 && spec->burst == 0 && !has_per_source) {
+        LogError(0, RS_RET_INVALID_VALUE,
+                 "ratelimit: YAML policy '%s' did not define interval/burst values", spec->policy_path);
         ABORT_FINALIZE(RS_RET_INVALID_VALUE);
     }
 
@@ -181,6 +192,26 @@ static rsRetVal ratelimitConfigValidateSpec(const ratelimit_config_spec_t *const
     if (spec->burst == 0) {
         LogError(0, RS_RET_INVALID_VALUE, "ratelimit: burst must be > 0 when interval is enabled");
         ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+
+    if (has_per_source) {
+        if (spec->per_source->def_window == 0 || spec->per_source->def_max == 0) {
+            LogError(0, RS_RET_INVALID_VALUE,
+                     "ratelimit: per-source policy requires non-zero default max/window values");
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+        for (ratelimit_per_source_override_t *ovr = spec->per_source->overrides; ovr != NULL; ovr = ovr->next) {
+            if (ovr->key == NULL || *ovr->key == '\0') {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: per-source policy override must define a non-empty key");
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            if (ovr->window == 0 || ovr->max == 0) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: per-source policy override for '%s' requires non-zero max/window", ovr->key);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+        }
     }
 
 finalize_it:
@@ -220,6 +251,7 @@ void ratelimitStoreDestruct(rsconf_t *const cnf) {
         ratelimitRegistryRemove(cnf, cfg);
         free(cfg->name);
         free(cfg->policy_path);
+        ratelimitPerSourcePolicyFree(cfg->per_source);
         free(cfg);
         cfg = nxt;
     }
@@ -239,12 +271,22 @@ static ratelimit_config_t *ratelimitConfigAlloc(const ratelimit_config_spec_t *c
     if (spec->policy_path != NULL) {
         cfg->policy_path = strdup(spec->policy_path);
         if (cfg->policy_path == NULL) {
-            free(cfg);
-            return NULL;
+            goto fail;
         }
     }
     cfg->isAdHoc = 0;
+    if (spec->per_source != NULL) {
+        if (ratelimitPerSourcePolicyClone(spec->per_source, &cfg->per_source) != RS_RET_OK) {
+            goto fail;
+        }
+    }
     return cfg;
+
+fail:
+    free(cfg->policy_path);
+    ratelimitPerSourcePolicyFree(cfg->per_source);
+    free(cfg);
+    return NULL;
 }
 
 static rsRetVal ratelimitConfigRegister(rsconf_t *const cnf, ratelimit_config_t *const cfg) {
@@ -302,6 +344,7 @@ finalize_it:
     if (cfg != NULL) {
         free(cfg->name);
         free(cfg->policy_path);
+        ratelimitPerSourcePolicyFree(cfg->per_source);
         free(cfg);
     }
     RETiRet;
@@ -470,6 +513,121 @@ static void ratelimitRegistryRemoveOwner(const rsconf_t *const owner) {
     }
 }
 
+static void ratelimitPerSourceOverridesFree(ratelimit_per_source_override_t *head) {
+    while (head != NULL) {
+        ratelimit_per_source_override_t *next = head->next;
+        free(head->key);
+        free(head);
+        head = next;
+    }
+}
+
+static void ratelimitPerSourcePolicyFree(ratelimit_per_source_policy_t *const policy) {
+    if (policy == NULL) return;
+    ratelimitPerSourceOverridesFree(policy->overrides);
+    free(policy);
+}
+
+static rsRetVal ratelimitPerSourcePolicyClone(const ratelimit_per_source_policy_t *const src,
+                                              ratelimit_per_source_policy_t **const dst) {
+    ratelimit_per_source_policy_t *copy = NULL;
+    ratelimit_per_source_override_t **tail = NULL;
+
+    if (dst == NULL) return RS_RET_INVALID_PARAMS;
+    *dst = NULL;
+    if (src == NULL) return RS_RET_OK;
+
+    copy = calloc(1, sizeof(*copy));
+    if (copy == NULL) return RS_RET_OUT_OF_MEMORY;
+    copy->def_max = src->def_max;
+    copy->def_window = src->def_window;
+    copy->override_count = src->override_count;
+    tail = &copy->overrides;
+
+    for (const ratelimit_per_source_override_t *node = src->overrides; node != NULL; node = node->next) {
+        ratelimit_per_source_override_t *ovr = calloc(1, sizeof(*ovr));
+        if (ovr == NULL) goto fail;
+        if (node->key != NULL) {
+            ovr->key = strdup(node->key);
+            if (ovr->key == NULL) {
+                free(ovr);
+                goto fail;
+            }
+        }
+        ovr->max = node->max;
+        ovr->window = node->window;
+        *tail = ovr;
+        tail = &ovr->next;
+    }
+
+    *dst = copy;
+    return RS_RET_OK;
+
+fail:
+    ratelimitPerSourcePolicyFree(copy);
+    return RS_RET_OUT_OF_MEMORY;
+}
+
+static inline void ratelimitSkipTrailingWhitespace(char **cursor) {
+    if (cursor == NULL || *cursor == NULL) return;
+    while (**cursor != '\0' && isspace((unsigned char)**cursor)) {
+        (*cursor)++;
+    }
+}
+
+static rsRetVal ratelimitParseUnsigned(const char *const path,
+                                       const char *const key,
+                                       const char *const value,
+                                       unsigned int *const out) {
+    char *endptr = NULL;
+    long long parsed;
+
+    if (value == NULL || out == NULL || key == NULL) return RS_RET_INVALID_PARAMS;
+
+    errno = 0;
+    parsed = strtoll(value, &endptr, 10);
+    if (errno != 0 || endptr == value) goto invalid;
+    ratelimitSkipTrailingWhitespace(&endptr);
+    if (endptr != NULL && *endptr != '\0') goto invalid;
+    if (parsed < 0 || (unsigned long long)parsed > UINT_MAX) goto invalid;
+    *out = (unsigned int)parsed;
+    return RS_RET_OK;
+
+invalid:
+    LogError(0, RS_RET_INVALID_VALUE,
+             "ratelimit: YAML policy '%s' has invalid numeric value '%s' for key '%s'", path, value, key);
+    return RS_RET_INVALID_VALUE;
+}
+
+static rsRetVal ratelimitParseWindow(const char *const path,
+                                     const char *const key,
+                                     const char *const value,
+                                     unsigned int *const out) {
+    char *endptr = NULL;
+    long long parsed;
+
+    if (value == NULL || out == NULL || key == NULL) return RS_RET_INVALID_PARAMS;
+
+    errno = 0;
+    parsed = strtoll(value, &endptr, 10);
+    if (errno != 0 || endptr == value) goto invalid;
+
+    ratelimitSkipTrailingWhitespace(&endptr);
+    if (endptr != NULL && (*endptr == 's' || *endptr == 'S')) {
+        ++endptr;
+        ratelimitSkipTrailingWhitespace(&endptr);
+    }
+    if (endptr != NULL && *endptr != '\0') goto invalid;
+    if (parsed <= 0 || (unsigned long long)parsed > UINT_MAX) goto invalid;
+    *out = (unsigned int)parsed;
+    return RS_RET_OK;
+
+invalid:
+    LogError(0, RS_RET_INVALID_VALUE,
+             "ratelimit: YAML policy '%s' has invalid window value '%s' for key '%s'", path, value, key);
+    return RS_RET_INVALID_VALUE;
+}
+
 #ifdef HAVE_LIBYAML
 static rsRetVal ratelimitYamlScalarDup(const yaml_node_t *const node, char **const str_out) {
     if (str_out == NULL) return RS_RET_INVALID_PARAMS;
@@ -500,6 +658,8 @@ static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_co
         spec->interval = 0;
         spec->burst = 0;
         spec->severity = RATELIMIT_SEVERITY_UNSET;
+        ratelimitPerSourcePolicyFree(spec->per_source);
+        spec->per_source = NULL;
     }
     if (path == NULL) {
         LogError(0, RS_RET_NOT_IMPLEMENTED,
@@ -515,11 +675,13 @@ static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_co
     yaml_parser_t yaml_parser;
     yaml_document_t document;
     sbool parser_initialised = 0;
-    sbool document_loaded = 0;
+   sbool document_loaded = 0;
     sbool interval_seen = 0;
     sbool burst_seen = 0;
     sbool severity_seen = 0;
+    sbool default_seen = 0;
     DEFiRet;
+    ratelimit_per_source_policy_t *parsed_policy = NULL;
 
     if (spec == NULL || path == NULL || *path == '\0') {
         LogError(0, RS_RET_INVALID_VALUE, "ratelimit: policy path must be specified");
@@ -531,6 +693,8 @@ static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_co
     spec->interval = 0;
     spec->burst = 0;
     spec->severity = RATELIMIT_SEVERITY_UNSET;
+    ratelimitPerSourcePolicyFree(spec->per_source);
+    spec->per_source = NULL;
 
     fp = fopen(path, "rb");
     if (fp == NULL) {
@@ -568,110 +732,344 @@ static rsRetVal ratelimitPolicyLoadFromYaml(const char *const path, ratelimit_co
     for (yaml_node_pair_t *pair = root->data.mapping.pairs.start; pair < root->data.mapping.pairs.top; ++pair) {
         yaml_node_t *const key_node = yaml_document_get_node(&document, pair->key);
         yaml_node_t *const value_node = yaml_document_get_node(&document, pair->value);
-        if (key_node == NULL || value_node == NULL || key_node->type != YAML_SCALAR_NODE || value_node->type != YAML_SCALAR_NODE) {
+        if (key_node == NULL || key_node->type != YAML_SCALAR_NODE || value_node == NULL) {
             LogError(0, RS_RET_INVALID_VALUE,
-                     "ratelimit: YAML policy '%s' must use scalar keys and values", path);
+                     "ratelimit: YAML policy '%s' must use scalar keys", path);
             ABORT_FINALIZE(RS_RET_INVALID_VALUE);
         }
 
         char *key = NULL;
-        char *value = NULL;
         rsRetVal pairRet = ratelimitYamlScalarDup(key_node, &key);
         if (pairRet != RS_RET_OK) {
             LogError(0, pairRet, "ratelimit: failed to copy YAML key while parsing policy '%s'", path);
-            free(value);
-            free(key);
-            iRet = pairRet;
-            ABORT_FINALIZE(iRet);
-        }
-        pairRet = ratelimitYamlScalarDup(value_node, &value);
-        if (pairRet != RS_RET_OK) {
-            LogError(0, pairRet, "ratelimit: failed to copy YAML value for key '%s' in policy '%s'",
-                     (key != NULL) ? key : "(unknown)", path);
-            free(value);
             free(key);
             iRet = pairRet;
             ABORT_FINALIZE(iRet);
         }
 
-        if (!strcmp(key, "interval")) {
-            if (interval_seen) {
-                LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' defines 'interval' more than once", path);
-                pairRet = RS_RET_INVALID_VALUE;
-            } else {
-                char *endptr = NULL;
-                errno = 0;
-                const long long parsed = strtoll(value, &endptr, 10);
-                if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0')) {
+        if (!strcmp(key, "interval") || !strcmp(key, "burst") || !strcmp(key, "severity")) {
+            if (value_node->type != YAML_SCALAR_NODE) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: YAML policy '%s' expects scalar for key '%s'", path, key);
+                free(key);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            char *value = NULL;
+            pairRet = ratelimitYamlScalarDup(value_node, &value);
+            if (pairRet != RS_RET_OK) {
+                LogError(0, pairRet, "ratelimit: failed to copy YAML value for key '%s' in policy '%s'", key, path);
+                free(value);
+                free(key);
+                iRet = pairRet;
+                ABORT_FINALIZE(iRet);
+            }
+
+            if (!strcmp(key, "interval")) {
+                if (interval_seen) {
                     LogError(0, RS_RET_INVALID_VALUE,
-                             "ratelimit: YAML policy '%s' has invalid interval value '%s'", path, value);
-                    pairRet = RS_RET_INVALID_VALUE;
-                } else if (parsed < 0 || (unsigned long long)parsed > UINT_MAX) {
-                    LogError(0, RS_RET_INVALID_VALUE,
-                             "ratelimit: YAML policy '%s' interval '%s' is out of range", path, value);
+                             "ratelimit: YAML policy '%s' defines 'interval' more than once", path);
                     pairRet = RS_RET_INVALID_VALUE;
                 } else {
-                    spec->interval = (unsigned int)parsed;
-                    interval_seen = 1;
+                    pairRet = ratelimitParseUnsigned(path, "interval", value, &spec->interval);
+                    if (pairRet == RS_RET_OK) interval_seen = 1;
                 }
-            }
-        } else if (!strcmp(key, "burst")) {
-            if (burst_seen) {
-                LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' defines 'burst' more than once", path);
-                pairRet = RS_RET_INVALID_VALUE;
-            } else {
-                char *endptr = NULL;
-                errno = 0;
-                const long long parsed = strtoll(value, &endptr, 10);
-                if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0')) {
-                    LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' has invalid burst value '%s'", path, value);
-                    pairRet = RS_RET_INVALID_VALUE;
-                } else if (parsed < 0 || (unsigned long long)parsed > UINT_MAX) {
+            } else if (!strcmp(key, "burst")) {
+                if (burst_seen) {
                     LogError(0, RS_RET_INVALID_VALUE,
-                             "ratelimit: YAML policy '%s' burst '%s' is out of range", path, value);
+                             "ratelimit: YAML policy '%s' defines 'burst' more than once", path);
                     pairRet = RS_RET_INVALID_VALUE;
                 } else {
-                    spec->burst = (unsigned int)parsed;
-                    burst_seen = 1;
+                    pairRet = ratelimitParseUnsigned(path, "burst", value, &spec->burst);
+                    if (pairRet == RS_RET_OK) burst_seen = 1;
                 }
-            }
-        } else if (!strcmp(key, "severity")) {
-            if (severity_seen) {
-                LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' defines 'severity' more than once", path);
-                pairRet = RS_RET_INVALID_VALUE;
-            } else {
-                char *endptr = NULL;
-                errno = 0;
-                const long long parsed = strtoll(value, &endptr, 10);
-                if (errno != 0 || endptr == value || (endptr != NULL && *endptr != '\0') || parsed < 0 || parsed > 7) {
+            } else { /* severity */
+                if (severity_seen) {
                     LogError(0, RS_RET_INVALID_VALUE,
-                             "ratelimit: YAML policy '%s' has invalid severity '%s' (expected 0-7)", path, value);
+                             "ratelimit: YAML policy '%s' defines 'severity' more than once", path);
                     pairRet = RS_RET_INVALID_VALUE;
                 } else {
-                    spec->severity = (int)parsed;
-                    severity_seen = 1;
+                    unsigned int sev = 0;
+                    pairRet = ratelimitParseUnsigned(path, "severity", value, &sev);
+                    if (pairRet == RS_RET_OK) {
+                        if (sev > 7) {
+                            LogError(0, RS_RET_INVALID_VALUE,
+                                     "ratelimit: YAML policy '%s' has invalid severity '%s' (expected 0-7)", path, value);
+                            pairRet = RS_RET_INVALID_VALUE;
+                        } else {
+                            spec->severity = (int)sev;
+                            severity_seen = 1;
+                        }
+                    }
                 }
             }
-        } else {
-            LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' contains unsupported key '%s'", path, key);
-            pairRet = RS_RET_INVALID_VALUE;
+
+            free(value);
+            free(key);
+            if (pairRet != RS_RET_OK) {
+                iRet = pairRet;
+                ABORT_FINALIZE(iRet);
+            }
+            continue;
         }
 
-        free(value);
+        if (!strcmp(key, "default")) {
+            if (value_node->type != YAML_MAPPING_NODE) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: YAML policy '%s' expects mapping for 'default'", path);
+                free(key);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            if (default_seen) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: YAML policy '%s' defines 'default' more than once", path);
+                free(key);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            if (parsed_policy == NULL) {
+                parsed_policy = calloc(1, sizeof(*parsed_policy));
+                if (parsed_policy == NULL) {
+                    free(key);
+                    ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+                }
+            }
+
+            sbool max_seen = 0;
+            sbool window_seen = 0;
+            for (yaml_node_pair_t *def_pair = value_node->data.mapping.pairs.start;
+                 def_pair < value_node->data.mapping.pairs.top; ++def_pair) {
+                yaml_node_t *def_key_node = yaml_document_get_node(&document, def_pair->key);
+                yaml_node_t *def_value_node = yaml_document_get_node(&document, def_pair->value);
+                if (def_key_node == NULL || def_value_node == NULL || def_key_node->type != YAML_SCALAR_NODE ||
+                    def_value_node->type != YAML_SCALAR_NODE) {
+                    LogError(0, RS_RET_INVALID_VALUE,
+                             "ratelimit: YAML policy '%s' default block must use scalar keys/values", path);
+                    free(key);
+                    ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+                }
+                char *def_key = NULL;
+                char *def_value = NULL;
+                pairRet = ratelimitYamlScalarDup(def_key_node, &def_key);
+                if (pairRet != RS_RET_OK) {
+                    free(def_key);
+                    free(def_value);
+                    free(key);
+                    iRet = pairRet;
+                    ABORT_FINALIZE(iRet);
+                }
+                pairRet = ratelimitYamlScalarDup(def_value_node, &def_value);
+                if (pairRet != RS_RET_OK) {
+                    LogError(0, pairRet,
+                             "ratelimit: failed to copy YAML value for default '%s' in policy '%s'",
+                             (def_key != NULL) ? def_key : "(unknown)", path);
+                    free(def_key);
+                    free(def_value);
+                    free(key);
+                    iRet = pairRet;
+                    ABORT_FINALIZE(iRet);
+                }
+
+                if (!strcmp(def_key, "max")) {
+                    pairRet = ratelimitParseUnsigned(path, "default.max", def_value, &parsed_policy->def_max);
+                    if (pairRet == RS_RET_OK) max_seen = 1;
+                } else if (!strcmp(def_key, "window")) {
+                    pairRet = ratelimitParseWindow(path, "default.window", def_value, &parsed_policy->def_window);
+                    if (pairRet == RS_RET_OK) window_seen = 1;
+                } else {
+                    LogError(0, RS_RET_INVALID_VALUE,
+                             "ratelimit: YAML policy '%s' default block contains unsupported key '%s'", path, def_key);
+                    pairRet = RS_RET_INVALID_VALUE;
+                }
+
+                free(def_key);
+                free(def_value);
+                if (pairRet != RS_RET_OK) {
+                    free(key);
+                    iRet = pairRet;
+                    ABORT_FINALIZE(iRet);
+                }
+            }
+
+            if (!max_seen || !window_seen) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: YAML policy '%s' default block must define both max and window", path);
+                free(key);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+
+            default_seen = 1;
+            free(key);
+            continue;
+        }
+
+        if (!strcmp(key, "overrides")) {
+            if (value_node->type != YAML_SEQUENCE_NODE) {
+                LogError(0, RS_RET_INVALID_VALUE,
+                         "ratelimit: YAML policy '%s' expects a sequence for 'overrides'", path);
+                free(key);
+                ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+            }
+            if (parsed_policy == NULL) {
+                parsed_policy = calloc(1, sizeof(*parsed_policy));
+                if (parsed_policy == NULL) {
+                    free(key);
+                    ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+                }
+            }
+
+            for (yaml_node_item_t *item = value_node->data.sequence.items.start;
+                 item < value_node->data.sequence.items.top; ++item) {
+                yaml_node_t *ovr_node = yaml_document_get_node(&document, *item);
+                if (ovr_node == NULL || ovr_node->type != YAML_MAPPING_NODE) {
+                    LogError(0, RS_RET_INVALID_VALUE,
+                             "ratelimit: YAML policy '%s' overrides entries must be mappings", path);
+                    free(key);
+                    ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+                }
+
+                char *override_key = NULL;
+                unsigned int override_max = 0;
+                unsigned int override_window = 0;
+                sbool override_key_seen = 0;
+                sbool override_max_seen = 0;
+                sbool override_window_seen = 0;
+
+                for (yaml_node_pair_t *ovr_pair = ovr_node->data.mapping.pairs.start;
+                     ovr_pair < ovr_node->data.mapping.pairs.top; ++ovr_pair) {
+                    yaml_node_t *ovr_key_node = yaml_document_get_node(&document, ovr_pair->key);
+                    yaml_node_t *ovr_value_node = yaml_document_get_node(&document, ovr_pair->value);
+                    if (ovr_key_node == NULL || ovr_value_node == NULL || ovr_key_node->type != YAML_SCALAR_NODE ||
+                        ovr_value_node->type != YAML_SCALAR_NODE) {
+                        LogError(0, RS_RET_INVALID_VALUE,
+                                 "ratelimit: YAML policy '%s' overrides must use scalar keys/values", path);
+                        free(override_key);
+                        free(key);
+                        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+                    }
+                    char *ovr_key = NULL;
+                    char *ovr_value = NULL;
+                    pairRet = ratelimitYamlScalarDup(ovr_key_node, &ovr_key);
+                    if (pairRet != RS_RET_OK) {
+                        free(ovr_key);
+                        free(ovr_value);
+                        free(override_key);
+                        free(key);
+                        iRet = pairRet;
+                        ABORT_FINALIZE(iRet);
+                    }
+                    pairRet = ratelimitYamlScalarDup(ovr_value_node, &ovr_value);
+                    if (pairRet != RS_RET_OK) {
+                        LogError(0, pairRet,
+                                 "ratelimit: failed to copy YAML override value for key '%s' in policy '%s'",
+                                 (ovr_key != NULL) ? ovr_key : "(unknown)", path);
+                        free(ovr_key);
+                        free(ovr_value);
+                        free(override_key);
+                        free(key);
+                        iRet = pairRet;
+                        ABORT_FINALIZE(iRet);
+                    }
+
+                    if (!strcmp(ovr_key, "key")) {
+                        free(override_key);
+                        override_key = strdup(ovr_value);
+                        if (override_key == NULL) {
+                            free(ovr_key);
+                            free(ovr_value);
+                            free(key);
+                            ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+                        }
+                        override_key_seen = 1;
+                    } else if (!strcmp(ovr_key, "max")) {
+                        pairRet = ratelimitParseUnsigned(path, "overrides[].max", ovr_value, &override_max);
+                        if (pairRet == RS_RET_OK) override_max_seen = 1;
+                    } else if (!strcmp(ovr_key, "window")) {
+                        pairRet = ratelimitParseWindow(path, "overrides[].window", ovr_value, &override_window);
+                        if (pairRet == RS_RET_OK) override_window_seen = 1;
+                    } else {
+                        LogError(0, RS_RET_INVALID_VALUE,
+                                 "ratelimit: YAML policy '%s' override contains unsupported key '%s'", path, ovr_key);
+                        pairRet = RS_RET_INVALID_VALUE;
+                    }
+
+                    free(ovr_key);
+                    free(ovr_value);
+                    if (pairRet != RS_RET_OK) {
+                        free(override_key);
+                        free(key);
+                        iRet = pairRet;
+                        ABORT_FINALIZE(iRet);
+                    }
+                }
+
+                if (!override_key_seen || !override_max_seen || !override_window_seen) {
+                    LogError(0, RS_RET_INVALID_VALUE,
+                             "ratelimit: YAML policy '%s' overrides must define key/max/window", path);
+                    free(override_key);
+                    free(key);
+                    ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+                }
+
+                for (ratelimit_per_source_override_t *existing = parsed_policy->overrides; existing != NULL;
+                     existing = existing->next) {
+                    if (existing->key != NULL && override_key != NULL && !strcmp(existing->key, override_key)) {
+                        LogError(0, RS_RET_INVALID_VALUE,
+                                 "ratelimit: YAML policy '%s' defines override for key '%s' more than once", path,
+                                 override_key);
+                        free(override_key);
+                        free(key);
+                        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+                    }
+                }
+
+                ratelimit_per_source_override_t *ovr = calloc(1, sizeof(*ovr));
+                if (ovr == NULL) {
+                    free(override_key);
+                    free(key);
+                    ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+                }
+                ovr->key = override_key;
+                ovr->max = override_max;
+                ovr->window = override_window;
+                ovr->next = NULL;
+
+                if (parsed_policy->overrides == NULL) {
+                    parsed_policy->overrides = ovr;
+                } else {
+                    ratelimit_per_source_override_t *tail = parsed_policy->overrides;
+                    while (tail->next != NULL) tail = tail->next;
+                    tail->next = ovr;
+                }
+                parsed_policy->override_count++;
+            }
+
+            free(key);
+            continue;
+        }
+
+        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' contains unsupported key '%s'", path, key);
         free(key);
-        if (pairRet != RS_RET_OK) {
-            iRet = pairRet;
-            ABORT_FINALIZE(iRet);
-        }
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
     }
 
-    if (!interval_seen) {
-        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' must define an interval", path);
-        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    if (parsed_policy != NULL) {
+        if (!default_seen) {
+            LogError(0, RS_RET_INVALID_VALUE,
+                     "ratelimit: YAML policy '%s' overrides require a default block", path);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+        spec->per_source = parsed_policy;
+        parsed_policy = NULL;
     }
-    if (!burst_seen) {
-        LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' must define a burst", path);
-        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+
+    if (spec->per_source == NULL) {
+        if (!interval_seen) {
+            LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' must define an interval", path);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+        if (!burst_seen) {
+            LogError(0, RS_RET_INVALID_VALUE, "ratelimit: YAML policy '%s' must define a burst", path);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
     }
 
     char *resolved = realpath(path, NULL);
@@ -689,12 +1087,15 @@ finalize_it:
     if (document_loaded) yaml_document_delete(&document);
     if (parser_initialised) yaml_parser_delete(&yaml_parser);
     if (fp != NULL) fclose(fp);
+    if (parsed_policy != NULL) ratelimitPerSourcePolicyFree(parsed_policy);
     if (iRet != RS_RET_OK) {
         free(spec->policy_path);
         spec->policy_path = NULL;
         spec->interval = 0;
         spec->burst = 0;
         spec->severity = RATELIMIT_SEVERITY_UNSET;
+        ratelimitPerSourcePolicyFree(spec->per_source);
+        spec->per_source = NULL;
     }
     RETiRet;
 #endif
@@ -766,6 +1167,39 @@ int ratelimitConfigGetSeverity(const ratelimit_config_t *const cfg) {
 
 const char *ratelimitConfigGetPolicyPath(const ratelimit_config_t *const cfg) {
     return (cfg == NULL) ? NULL : cfg->policy_path;
+}
+
+const ratelimit_per_source_policy_t *ratelimitConfigGetPerSourcePolicy(const ratelimit_config_t *const cfg) {
+    return (cfg == NULL) ? NULL : cfg->per_source;
+}
+
+unsigned int ratelimitPerSourcePolicyGetDefaultMax(const ratelimit_per_source_policy_t *const policy) {
+    return (policy == NULL) ? 0 : policy->def_max;
+}
+
+unsigned int ratelimitPerSourcePolicyGetDefaultWindow(const ratelimit_per_source_policy_t *const policy) {
+    return (policy == NULL) ? 0 : policy->def_window;
+}
+
+size_t ratelimitPerSourcePolicyGetOverrideCount(const ratelimit_per_source_policy_t *const policy) {
+    return (policy == NULL) ? 0 : policy->override_count;
+}
+
+const ratelimit_per_source_override_t *
+ratelimitPerSourcePolicyGetOverrides(const ratelimit_per_source_policy_t *const policy) {
+    return (policy == NULL) ? NULL : policy->overrides;
+}
+
+const char *ratelimitPerSourceOverrideGetKey(const ratelimit_per_source_override_t *const override) {
+    return (override == NULL) ? NULL : override->key;
+}
+
+unsigned int ratelimitPerSourceOverrideGetMax(const ratelimit_per_source_override_t *const override) {
+    return (override == NULL) ? 0 : override->max;
+}
+
+unsigned int ratelimitPerSourceOverrideGetWindow(const ratelimit_per_source_override_t *const override) {
+    return (override == NULL) ? 0 : override->window;
 }
 
 /**
@@ -967,6 +1401,7 @@ rsRetVal ratelimitProcessCnf(struct cnfobj *const o) {
 
 finalize_it:
     free(spec.policy_path);
+    ratelimitPerSourcePolicyFree(spec.per_source);
     free(name);
     free(policy_param);
     cnfparamvalsDestruct(pvals, &ratelimitpblk);

@@ -41,11 +41,29 @@ typedef struct ratelimit_config_s ratelimit_config_t;
  * :rainerscript:`ratelimit()` object or from inline configuration values
  * that are promoted to a shared configuration entry.
  */
+struct ratelimit_per_source_override_s;
+struct ratelimit_per_source_policy_s;
+
+typedef struct ratelimit_per_source_override_s {
+    char *key; /**< Sender key subject to the override. */
+    unsigned int max; /**< Maximum messages allowed within @ref window. */
+    unsigned int window; /**< Time window in seconds. */
+    struct ratelimit_per_source_override_s *next; /**< Linked-list pointer. */
+} ratelimit_per_source_override_t;
+
+typedef struct ratelimit_per_source_policy_s {
+    unsigned int def_max; /**< Default maximum messages for senders without overrides. */
+    unsigned int def_window; /**< Default window size in seconds. */
+    ratelimit_per_source_override_t *overrides; /**< Linked list of specific overrides. */
+    size_t override_count; /**< Number of overrides recorded. */
+} ratelimit_per_source_policy_t;
+
 typedef struct ratelimit_config_spec_s {
     unsigned int interval; /**< Rate limiting interval in seconds (0 disables). */
     unsigned int burst; /**< Maximum messages allowed inside @ref interval. */
     int severity; /**< Optional severity threshold, use @ref RATELIMIT_SEVERITY_UNSET for default. */
     char *policy_path; /**< Absolute path of the YAML policy that populated the spec (if any). */
+    ratelimit_per_source_policy_t *per_source; /**< Optional per-source policy parsed from YAML. */
 } ratelimit_config_spec_t;
 
 struct cnfobj;
@@ -177,6 +195,23 @@ int ratelimitConfigGetSeverity(const ratelimit_config_t *cfg);
  * Return the source policy path associated with a configuration entry, if set.
  */
 const char *ratelimitConfigGetPolicyPath(const ratelimit_config_t *cfg);
+
+/**
+ * Return the optional per-source policy associated with a configuration entry.
+ */
+const ratelimit_per_source_policy_t *ratelimitConfigGetPerSourcePolicy(const ratelimit_config_t *cfg);
+
+/**
+ * Helpers exposing immutable per-source policy data.
+ */
+unsigned int ratelimitPerSourcePolicyGetDefaultMax(const ratelimit_per_source_policy_t *policy);
+unsigned int ratelimitPerSourcePolicyGetDefaultWindow(const ratelimit_per_source_policy_t *policy);
+size_t ratelimitPerSourcePolicyGetOverrideCount(const ratelimit_per_source_policy_t *policy);
+const ratelimit_per_source_override_t *
+ratelimitPerSourcePolicyGetOverrides(const ratelimit_per_source_policy_t *policy);
+const char *ratelimitPerSourceOverrideGetKey(const ratelimit_per_source_override_t *override);
+unsigned int ratelimitPerSourceOverrideGetMax(const ratelimit_per_source_override_t *override);
+unsigned int ratelimitPerSourceOverrideGetWindow(const ratelimit_per_source_override_t *override);
 
 /**
  * Resolve a configuration reference by name.
