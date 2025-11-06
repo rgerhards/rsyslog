@@ -79,13 +79,20 @@ PKG_PROG_PKG_CONFIG
 
 AC_ARG_VAR(CONF_FILE_PATH, Configuration file path (default : /etc/rsyslog.conf))
 if test "$ac_cv_env_CONF_FILE_PATH_set" = "set"; then
-	AC_DEFINE_UNQUOTED(PATH_CONFFILE,  "${ac_cv_env_CONF_FILE_PATH_value}", "Configuration file path (default : /etc/rsyslog.conf)")
+        AC_DEFINE_UNQUOTED(PATH_CONFFILE,  "${ac_cv_env_CONF_FILE_PATH_value}", "Configuration file path (default : /etc/rsyslog.conf)")
 fi
 
-AC_ARG_VAR(PID_FILE_PATH, Pid file path (default : /var/run/rsyslogd.pid))
-if test "$ac_cv_env_PID_FILE_PATH_set" = "set"; then
-	AC_DEFINE_UNQUOTED(PATH_PIDFILE,  "${ac_cv_env_PID_FILE_PATH_value}", "Pid file path (default : /var/run/rsyslogd.pid)")
-fi
+AC_ARG_VAR([runstatedir], [directory for runtime state files])
+AS_IF([test "x$runstatedir" = "x"], [runstatedir='${localstatedir}/run'])
+AC_SUBST([runstatedir])
+
+case "$host" in
+       *-*-aix*) dflt_pidfile="/etc/rsyslogd.pid" ;;
+       *)       dflt_pidfile="${runstatedir}/rsyslogd.pid" ;;
+esac
+AC_ARG_VAR([PID_FILE_PATH], [Pid file path (default : ${dflt_pidfile})])
+PID_FILE_PATH=${PID_FILE_PATH:-${dflt_pidfile}}
+AC_DEFINE_UNQUOTED([PATH_PIDFILE], ["$PID_FILE_PATH"], [Pid file path (default : ${dflt_pidfile})])
 
 
 # modules we require
