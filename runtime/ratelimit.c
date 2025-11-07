@@ -40,10 +40,14 @@
 #include "msg.h"
 #include "rsconf.h"
 #include "dirty.h"
+#include "hashtable.h"
+#include "hashtable_itr.h"
 
 #ifdef HAVE_LIBYAML
 #    include <yaml.h>
 #endif
+
+static const char RATELIMIT_PERSRC_FALLBACK_KEY[] = "__ratelimit_default__";
 
 /**
  * @brief Overview of the ratelimit architecture.
@@ -98,6 +102,26 @@ struct ratelimit_config_s {
     sbool isAdHoc;
 };
 
+typedef struct ratelimit_per_source_state_s {
+    char *key;
+    unsigned int max;
+    unsigned int window;
+    unsigned int used;
+    unsigned int dropped;
+    time_t window_begin;
+} ratelimit_per_source_state_t;
+
+struct ratelimit_per_source_runtime_s {
+    const ratelimit_per_source_policy_t *policy;
+    struct hashtable *states;
+    unsigned int default_max;
+    unsigned int default_window;
+    unsigned long long total_allowed;
+    unsigned long long total_dropped;
+    sbool thread_safe;
+    pthread_mutex_t mut;
+};
+
 struct ratelimit_registry_entry_s {
     ratelimit_config_t *cfg;
     const rsconf_t *owner;
@@ -123,6 +147,14 @@ static rsRetVal ratelimitPerSourcePolicyClone(const ratelimit_per_source_policy_
                                               ratelimit_per_source_policy_t **dst);
 static rsRetVal ratelimitParseUnsigned(const char *path, const char *key, const char *value, unsigned int *out);
 static rsRetVal ratelimitParseWindow(const char *path, const char *key, const char *value, unsigned int *out);
+static ratelimit_per_source_override_t *
+ratelimitPerSourcePolicyFindOverride(const ratelimit_per_source_policy_t *policy, const char *key);
+static void ratelimitPerSourceRuntimeDestroyEntry(void *value);
+static ratelimit_per_source_state_t *ratelimitPerSourceRuntimeStateLookup(struct hashtable *table, const char *key);
+static rsRetVal ratelimitPerSourceRuntimeStateInsert(struct hashtable *table,
+                                                     ratelimit_per_source_state_t *state);
+static void ratelimitPerSourceRuntimeStateReset(ratelimit_per_source_state_t *state, time_t now);
+static void ratelimitPerSourceRuntimeMaybeReset(ratelimit_per_source_state_t *state, time_t now);
 #ifdef HAVE_LIBYAML
 static rsRetVal ratelimitYamlScalarDup(const yaml_node_t *node, char **str_out);
 #endif
@@ -626,6 +658,82 @@ invalid:
     LogError(0, RS_RET_INVALID_VALUE,
              "ratelimit: YAML policy '%s' has invalid window value '%s' for key '%s'", path, value, key);
     return RS_RET_INVALID_VALUE;
+}
+
+static ratelimit_per_source_override_t *
+ratelimitPerSourcePolicyFindOverride(const ratelimit_per_source_policy_t *const policy, const char *const key) {
+    if (policy == NULL || key == NULL) return NULL;
+    for (ratelimit_per_source_override_t *ovr = policy->overrides; ovr != NULL; ovr = ovr->next) {
+        if (ovr->key != NULL && !strcmp(ovr->key, key)) {
+            return ovr;
+        }
+    }
+    return NULL;
+}
+
+static void ratelimitPerSourceRuntimeDestroyEntry(void *const value) {
+    ratelimit_per_source_state_t *const state = (ratelimit_per_source_state_t *)value;
+    if (state == NULL) return;
+    free(state);
+}
+
+static ratelimit_per_source_state_t *
+ratelimitPerSourceRuntimeStateLookup(struct hashtable *const table, const char *const key) {
+    if (table == NULL || key == NULL) return NULL;
+    return (ratelimit_per_source_state_t *)hashtable_search(table, (void *)key);
+}
+
+static rsRetVal ratelimitPerSourceRuntimeStateInsert(struct hashtable *const table,
+                                                     ratelimit_per_source_state_t *const state) {
+    DEFiRet;
+    char *key_copy = NULL;
+
+    if (table == NULL || state == NULL || state->key == NULL) {
+        ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
+    }
+
+    key_copy = strdup(state->key);
+    if (key_copy == NULL) {
+        ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+    }
+
+    state->key = key_copy;
+    if (!hashtable_insert(table, state->key, state)) {
+        state->key = NULL;
+        ABORT_FINALIZE(RS_RET_INTERNAL_ERROR);
+    }
+
+finalize_it:
+    if (iRet != RS_RET_OK && key_copy != NULL) {
+        free(key_copy);
+    }
+    RETiRet;
+}
+
+static void ratelimitPerSourceRuntimeStateReset(ratelimit_per_source_state_t *const state, const time_t now) {
+    if (state == NULL) return;
+    state->used = 0;
+    state->dropped = 0;
+    state->window_begin = now;
+}
+
+static void ratelimitPerSourceRuntimeMaybeReset(ratelimit_per_source_state_t *const state, const time_t now) {
+    if (state == NULL) return;
+    if (state->window == 0) return;
+    if (state->window_begin == 0) {
+        state->window_begin = now;
+        return;
+    }
+
+    if (now < state->window_begin) {
+        ratelimitPerSourceRuntimeStateReset(state, now);
+        return;
+    }
+
+    const unsigned long long elapsed = (unsigned long long)(now - state->window_begin);
+    if (elapsed >= state->window) {
+        ratelimitPerSourceRuntimeStateReset(state, now);
+    }
 }
 
 #ifdef HAVE_LIBYAML
@@ -1200,6 +1308,156 @@ unsigned int ratelimitPerSourceOverrideGetMax(const ratelimit_per_source_overrid
 
 unsigned int ratelimitPerSourceOverrideGetWindow(const ratelimit_per_source_override_t *const override) {
     return (override == NULL) ? 0 : override->window;
+}
+
+rsRetVal ratelimitPerSourceRuntimeNew(const ratelimit_per_source_policy_t *const policy,
+                                      ratelimit_per_source_runtime_t **const runtime) {
+    ratelimit_per_source_runtime_t *inst = NULL;
+    DEFiRet;
+
+    if (runtime == NULL || policy == NULL) {
+        ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
+    }
+
+    CHKmalloc(inst = calloc(1, sizeof(*inst)));
+    inst->policy = policy;
+    inst->default_max = policy->def_max;
+    inst->default_window = policy->def_window;
+    inst->states = create_hashtable(53, hash_from_string, key_equals_string, ratelimitPerSourceRuntimeDestroyEntry);
+    if (inst->states == NULL) {
+        ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+    }
+
+    *runtime = inst;
+    inst = NULL;
+
+finalize_it:
+    if (inst != NULL) {
+        if (inst->states != NULL) hashtable_destroy(inst->states, 1);
+        free(inst);
+    }
+    RETiRet;
+}
+
+void ratelimitPerSourceRuntimeFree(ratelimit_per_source_runtime_t *const runtime) {
+    if (runtime == NULL) return;
+    if (runtime->states != NULL) {
+        hashtable_destroy(runtime->states, 1); /* frees entries */
+    }
+    if (runtime->thread_safe) {
+        pthread_mutex_destroy(&runtime->mut);
+    }
+    free(runtime);
+}
+
+void ratelimitPerSourceRuntimeSetThreadSafe(ratelimit_per_source_runtime_t *const runtime) {
+    if (runtime == NULL || runtime->thread_safe) return;
+    runtime->thread_safe = 1;
+    pthread_mutex_init(&runtime->mut, NULL);
+}
+
+rsRetVal ratelimitPerSourceRuntimeCheck(ratelimit_per_source_runtime_t *const runtime,
+                                        const char *const key,
+                                        const time_t now,
+                                        ratelimit_per_source_result_t *const result) {
+    ratelimit_per_source_state_t *state = NULL;
+    ratelimit_per_source_override_t *override = NULL;
+    const char *effective_key;
+    sbool allowed = 1;
+    sbool state_new = 0;
+    sbool state_inserted = 0;
+    DEFiRet;
+
+    if (runtime == NULL) {
+        ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
+    }
+
+    effective_key = (key != NULL && *key != '\0') ? key : RATELIMIT_PERSRC_FALLBACK_KEY;
+
+    if (runtime->thread_safe) {
+        pthread_mutex_lock(&runtime->mut);
+    }
+
+    state = ratelimitPerSourceRuntimeStateLookup(runtime->states, effective_key);
+    if (state == NULL) {
+        CHKmalloc(state = calloc(1, sizeof(*state)));
+        state->key = (char *)effective_key;
+        state_new = 1;
+
+        if (runtime->policy != NULL) {
+            override = ratelimitPerSourcePolicyFindOverride(runtime->policy, effective_key);
+        }
+
+        if (override != NULL) {
+            state->max = override->max;
+            state->window = override->window;
+        } else {
+            state->max = runtime->default_max;
+            state->window = runtime->default_window;
+        }
+
+        state->window_begin = now;
+        CHKiRet(ratelimitPerSourceRuntimeStateInsert(runtime->states, state));
+        state_inserted = 1;
+    }
+
+    ratelimitPerSourceRuntimeMaybeReset(state, now);
+
+    if (state->max != 0 && state->used >= state->max) {
+        allowed = 0;
+        state->dropped++;
+        runtime->total_dropped++;
+    } else {
+        state->used++;
+        runtime->total_allowed++;
+    }
+
+    if (result != NULL) {
+        result->allowed = allowed;
+        result->max = state->max;
+        result->used = state->used;
+        result->dropped = state->dropped;
+        result->window = state->window;
+        result->window_begin = state->window_begin;
+    }
+
+finalize_it:
+    if (runtime != NULL && runtime->thread_safe) {
+        pthread_mutex_unlock(&runtime->mut);
+    }
+    if (iRet != RS_RET_OK && state_new && !state_inserted && state != NULL) {
+        free(state);
+    }
+    RETiRet;
+}
+
+void ratelimitPerSourceRuntimeResetCounters(ratelimit_per_source_runtime_t *const runtime) {
+    if (runtime == NULL) return;
+
+    if (runtime->thread_safe) {
+        pthread_mutex_lock(&runtime->mut);
+    }
+
+    if (runtime->states != NULL && hashtable_count(runtime->states) > 0) {
+        struct hashtable_itr *itr = hashtable_iterator(runtime->states);
+        if (itr != NULL) {
+            do {
+                ratelimit_per_source_state_t *state =
+                    (ratelimit_per_source_state_t *)hashtable_iterator_value(itr);
+                if (state != NULL) {
+                    state->dropped = 0;
+                }
+            } while (hashtable_iterator_advance(itr));
+            free(itr);
+        }
+    }
+
+    runtime->total_allowed = 0;
+    runtime->total_dropped = 0;
+
+    if (runtime->thread_safe) {
+        pthread_mutex_unlock(&runtime->mut);
+    }
 }
 
 /**

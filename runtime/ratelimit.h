@@ -58,6 +58,21 @@ typedef struct ratelimit_per_source_policy_s {
     size_t override_count; /**< Number of overrides recorded. */
 } ratelimit_per_source_policy_t;
 
+typedef struct ratelimit_per_source_runtime_s ratelimit_per_source_runtime_t;
+
+/**
+ * Outcome returned by the per-source runtime limiter after evaluating an
+ * event for a specific sender key.
+ */
+typedef struct ratelimit_per_source_result_s {
+    sbool allowed; /**< Message should pass through the limiter when true. */
+    unsigned int max; /**< Effective limit for the sender inside the window. */
+    unsigned int used; /**< Messages already processed within the current window. */
+    unsigned int dropped; /**< Messages dropped within the current window. */
+    unsigned int window; /**< Window length in seconds. */
+    time_t window_begin; /**< Start timestamp of the current window. */
+} ratelimit_per_source_result_t;
+
 typedef struct ratelimit_config_spec_s {
     unsigned int interval; /**< Rate limiting interval in seconds (0 disables). */
     unsigned int burst; /**< Maximum messages allowed inside @ref interval. */
@@ -212,6 +227,39 @@ ratelimitPerSourcePolicyGetOverrides(const ratelimit_per_source_policy_t *policy
 const char *ratelimitPerSourceOverrideGetKey(const ratelimit_per_source_override_t *override);
 unsigned int ratelimitPerSourceOverrideGetMax(const ratelimit_per_source_override_t *override);
 unsigned int ratelimitPerSourceOverrideGetWindow(const ratelimit_per_source_override_t *override);
+
+/**
+ * Construct a runtime helper capable of enforcing the supplied per-source
+ * policy.
+ */
+rsRetVal ratelimitPerSourceRuntimeNew(const ratelimit_per_source_policy_t *policy,
+                                      ratelimit_per_source_runtime_t **runtime);
+
+/** Release all resources held by a per-source runtime helper. */
+void ratelimitPerSourceRuntimeFree(ratelimit_per_source_runtime_t *runtime);
+
+/** Enable mutex protection for the per-source runtime helper. */
+void ratelimitPerSourceRuntimeSetThreadSafe(ratelimit_per_source_runtime_t *runtime);
+
+/**
+ * Evaluate a sender key against the per-source limiter.
+ *
+ * @param runtime Active runtime helper.
+ * @param key     Sender identifier; NULL or empty strings are mapped to a
+ *                synthetic default bucket.
+ * @param now     Timestamp used to evaluate window boundaries.
+ * @param result  Receives the outcome details; ignored when NULL.
+ *
+ * @retval RS_RET_OK on success.
+ * @retval RS_RET_INVALID_PARAMS if runtime is NULL.
+ */
+rsRetVal ratelimitPerSourceRuntimeCheck(ratelimit_per_source_runtime_t *runtime,
+                                        const char *key,
+                                        time_t now,
+                                        ratelimit_per_source_result_t *result);
+
+/** Reset drop counters accumulated for the current window. */
+void ratelimitPerSourceRuntimeResetCounters(ratelimit_per_source_runtime_t *runtime);
 
 /**
  * Resolve a configuration reference by name.
