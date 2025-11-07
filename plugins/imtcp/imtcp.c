@@ -65,6 +65,7 @@
 #include "rainerscript.h"
 #include "net.h"
 #include "parserif.h"
+#include "template.h"
 
 MODULE_TYPE_INPUT;
 MODULE_TYPE_NOKEEP;
@@ -94,6 +95,8 @@ static permittedPeers_t *pPermPeersRoot = NULL;
 #define DEFAULT_STARVATIONMAXREADS 500
 
 #define FRAMING_UNSET -1
+
+#define IMTCP_DEFAULT_PERSRC_TEMPLATE " RSYSLOG_ImtcpPerSourceKey"
 
 /* config settings */
 static struct configSettings_s {
@@ -135,6 +138,10 @@ struct instanceConf_s {
     unsigned int ratelimitInterval;
     unsigned int ratelimitBurst;
     ratelimit_config_t *ratelimitCfg;
+    sbool perSourceRate;
+    uchar *perSourcePolicyFile;
+    uchar *perSourceKeyTplName;
+    struct template *perSourceKeyTpl;
     int iAddtlFrameDelim; /* addtl frame delimiter, e.g. for netscreen, default none */
     int maxFrameSize;
     int bUseFlowControl;
@@ -280,6 +287,9 @@ static struct cnfparamdescr inppdescr[] = {{"port", eCmdHdlrString, CNFPARAM_REQ
                                            {"framingfix.cisco.asa", eCmdHdlrBinary, 0},
                                            {"ratelimit.burst", eCmdHdlrInt, 0},
                                            {"ratelimit.name", eCmdHdlrString, 0},
+                                           {"perSourceRate", eCmdHdlrBinary, 0},
+                                           {"perSourcePolicyFile", eCmdHdlrString, 0},
+                                           {"perSourceKeyTpl", eCmdHdlrString, 0},
                                            {"socketbacklog", eCmdHdlrNonNegInt, 0}};
 static struct cnfparamblk inppblk = {CNFPARAMBLK_VERSION, sizeof(inppdescr) / sizeof(struct cnfparamdescr), inppdescr};
 
@@ -364,6 +374,10 @@ static rsRetVal createInstance(instanceConf_t **pinst) {
     inst->ratelimitInterval = 0;
     inst->ratelimitBurst = 10000;
     inst->ratelimitCfg = NULL;
+    inst->perSourceRate = 0;
+    inst->perSourcePolicyFile = NULL;
+    inst->perSourceKeyTplName = NULL;
+    inst->perSourceKeyTpl = NULL;
 
     inst->pszStrmDrvrName = NULL;
     inst->pszStrmDrvrAuthMode = NULL;
@@ -696,6 +710,14 @@ BEGINnewInpInst
         } else if (!strcmp(inppblk.descr[i].name, "ratelimit.name")) {
             free(ratelimitName);
             ratelimitName = es_str2cstr(pvals[i].val.d.estr, NULL);
+        } else if (!strcmp(inppblk.descr[i].name, "perSourceRate")) {
+            inst->perSourceRate = (sbool)pvals[i].val.d.n;
+        } else if (!strcmp(inppblk.descr[i].name, "perSourcePolicyFile")) {
+            free(inst->perSourcePolicyFile);
+            inst->perSourcePolicyFile = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
+        } else if (!strcmp(inppblk.descr[i].name, "perSourceKeyTpl")) {
+            free(inst->perSourceKeyTplName);
+            inst->perSourceKeyTplName = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
         } else if (!strcmp(inppblk.descr[i].name, "preservecase")) {
             inst->bPreserveCase = (int)pvals[i].val.d.n;
         } else if (!strcmp(inppblk.descr[i].name, "socketbacklog")) {
@@ -707,6 +729,34 @@ BEGINnewInpInst
                 "imtcp: program error, non-handled "
                 "param '%s'\n",
                 inppblk.descr[i].name);
+        }
+    }
+
+    if (inst->perSourceRate) {
+        if (inst->perSourcePolicyFile == NULL || inst->perSourcePolicyFile[0] == '\0') {
+            LogError(0, RS_RET_INVALID_VALUE,
+                     "imtcp: perSourceRate enabled but perSourcePolicyFile is not set for listener '%s'",
+                     inst->cnf_params->pszPort);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+        if (inst->perSourceKeyTplName == NULL) {
+            CHKmalloc(inst->perSourceKeyTplName = (uchar *)strdup(IMTCP_DEFAULT_PERSRC_TEMPLATE));
+        }
+        inst->perSourceKeyTpl =
+            tplFind(loadModConf->pConf, (char *)inst->perSourceKeyTplName, strlen((char *)inst->perSourceKeyTplName));
+        if (inst->perSourceKeyTpl == NULL) {
+            LogError(0, RS_RET_INVALID_VALUE,
+                     "imtcp: template '%s' configured via perSourceKeyTpl was not found for listener '%s'",
+                     inst->perSourceKeyTplName, inst->cnf_params->pszPort);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+    } else {
+        if (inst->perSourcePolicyFile != NULL || inst->perSourceKeyTplName != NULL) {
+            LogError(
+                0, RS_RET_INVALID_VALUE,
+                "imtcp: perSourcePolicyFile/perSourceKeyTpl require perSourceRate=\"on\" (listener '%s')",
+                inst->cnf_params->pszPort);
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
         }
     }
 
@@ -990,6 +1040,8 @@ BEGINfreeCnf
         free((void *)inst->gnutlsPriorityString);
         free((void *)inst->pszInputName);
         free((void *)inst->dfltTZ);
+        free((void *)inst->perSourcePolicyFile);
+        free((void *)inst->perSourceKeyTplName);
         if (inst->pPermPeersRoot != NULL) {
             net.DestructPermittedPeers(&inst->pPermPeersRoot);
         }

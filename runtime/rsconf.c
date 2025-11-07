@@ -135,6 +135,7 @@ static uchar template_StdClickHouseFmt[] =
     "'%timereported:::date-unixtimestamp%', '%hostname%', '%syslogtag%', '%msg%')\",STDSQL";
 static uchar template_StdOmSenderTrack_senderid[] =
     "\"%fromhost-ip%\""; /* default template for omsendertrack "senderid" parameter*/
+static uchar template_ImtcpPerSourceKey[] = "\"%hostname%\"";
 /* end templates */
 
 /* tables for interfacing with the v6 config system (as far as we need to) */
@@ -1334,6 +1335,8 @@ static rsRetVal initLegacyConf(void) {
     tplAddLine(ourConf, " StdClickHouseFmt", &pTmp);
     pTmp = template_StdOmSenderTrack_senderid;
     tplAddLine(ourConf, " StdOmSenderTrack-senderid", &pTmp);
+    pTmp = template_ImtcpPerSourceKey;
+    tplAddLine(ourConf, " RSYSLOG_ImtcpPerSourceKey", &pTmp);
     pTmp = template_spoofadr;
     tplLastStaticInit(ourConf, tplAddLine(ourConf, "RSYSLOG_omudpspoofDfltSourceTpl", &pTmp));
 
