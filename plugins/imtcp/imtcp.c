@@ -564,6 +564,7 @@ static rsRetVal addListner(modConfData_t *modConf, instanceConf_t *inst) {
     CHKiRet(tcpsrv.SetOrigin(pOurTcpsrv, (uchar *)"imtcp"));
     CHKiRet(tcpsrv.SetDfltTZ(pOurTcpsrv, (inst->dfltTZ == NULL) ? (uchar *)"" : inst->dfltTZ));
     CHKiRet(tcpsrv.SetbSPFramingFix(pOurTcpsrv, inst->bSPFramingFix));
+    CHKiRet(tcpsrv.SetPerSourceRate(pOurTcpsrv, inst->perSourceRate, inst->perSourcePolicyFile, inst->perSourceKeyTpl));
     CHKiRet(
         tcpsrv.SetLinuxLikeRatelimiters(pOurTcpsrv, inst->ratelimitCfg, inst->ratelimitInterval, inst->ratelimitBurst));
 

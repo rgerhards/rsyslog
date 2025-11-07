@@ -32,6 +32,8 @@
 #include "statsobj.h"
 #include "ratelimit.h"
 
+struct template;
+
 /* support for framing anomalies */
 typedef enum ETCPsyslogFramingAnomaly {
     frame_normal = 0,
@@ -61,6 +63,10 @@ struct tcpLstnPortList_s {
     tcpsrv_t *pSrv; /**< pointer to higher-level server instance */
     statsobj_t *stats; /**< associated stats object */
     ratelimit_t *ratelimiter;
+    sbool perSourceEnabled;
+    struct template *perSourceTpl;
+    ratelimit_per_source_policy_t *perSourcePolicy;
+    ratelimit_per_source_runtime_t *perSourceRuntime;
     STATSCOUNTER_DEF(ctrSubmit, mutCtrSubmit)
     tcpLstnPortList_t *pNext; /**< next port or NULL */
 };
@@ -170,6 +176,9 @@ struct tcpsrv_s {
         unsigned int ratelimitInterval;
         unsigned int ratelimitBurst;
         ratelimit_config_t *ratelimitCfg;
+        sbool perSourceRate;
+        uchar *perSourcePolicyFile;
+        struct template *perSourceKeyTpl;
         tcps_sess_t **pSessions; /**< array of all of our sessions */
         unsigned int starvationMaxReads;
         void *pUsr; /**< a user-settable pointer (provides extensibility for "derived classes")*/
@@ -251,6 +260,7 @@ BEGINinterface(tcpsrv) /* name must also be changed in ENDinterface macro! */
     /* added v13 -- rgerhards, 2012-10-15 */
     rsRetVal (*SetLinuxLikeRatelimiters)(tcpsrv_t *pThis, ratelimit_config_t *cfg, unsigned int interval,
                                          unsigned int burst);
+    rsRetVal (*SetPerSourceRate)(tcpsrv_t *pThis, sbool enabled, const uchar *policyFile, struct template *tpl);
     /* added v14 -- rgerhards, 2013-07-28 */
     rsRetVal (*SetDfltTZ)(tcpsrv_t *pThis, uchar *dfltTZ);
     /* added v15 -- rgerhards, 2013-09-17 */
@@ -284,7 +294,7 @@ BEGINinterface(tcpsrv) /* name must also be changed in ENDinterface macro! */
     rsRetVal (*SetNumWrkr)(tcpsrv_t *pThis, int);
     rsRetVal (*SetStarvationMaxReads)(tcpsrv_t *pThis, unsigned int);
 ENDinterface(tcpsrv)
-#define tcpsrvCURR_IF_VERSION 29 /* increment whenever you change the interface structure! */
+#define tcpsrvCURR_IF_VERSION 30 /* increment whenever you change the interface structure! */
 /* change for v4:
  * - SetAddtlFrameDelim() added -- rgerhards, 2008-12-10
  * - SetInputName() added -- rgerhards, 2008-12-10

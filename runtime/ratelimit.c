@@ -142,7 +142,7 @@ static void ratelimitRegistryRemove(const rsconf_t *owner, const ratelimit_confi
 static void ratelimitRegistryRemoveOwner(const rsconf_t *owner);
 static rsRetVal ratelimitPolicyLoadFromYaml(const char *path, ratelimit_config_spec_t *spec);
 static void ratelimitPerSourceOverridesFree(ratelimit_per_source_override_t *head);
-static void ratelimitPerSourcePolicyFree(ratelimit_per_source_policy_t *policy);
+void ratelimitPerSourcePolicyFree(ratelimit_per_source_policy_t *policy);
 static rsRetVal ratelimitPerSourcePolicyClone(const ratelimit_per_source_policy_t *src,
                                               ratelimit_per_source_policy_t **dst);
 static rsRetVal ratelimitParseUnsigned(const char *path, const char *key, const char *value, unsigned int *out);
@@ -554,7 +554,7 @@ static void ratelimitPerSourceOverridesFree(ratelimit_per_source_override_t *hea
     }
 }
 
-static void ratelimitPerSourcePolicyFree(ratelimit_per_source_policy_t *const policy) {
+void ratelimitPerSourcePolicyFree(ratelimit_per_source_policy_t *const policy) {
     if (policy == NULL) return;
     ratelimitPerSourceOverridesFree(policy->overrides);
     free(policy);
@@ -1308,6 +1308,35 @@ unsigned int ratelimitPerSourceOverrideGetMax(const ratelimit_per_source_overrid
 
 unsigned int ratelimitPerSourceOverrideGetWindow(const ratelimit_per_source_override_t *const override) {
     return (override == NULL) ? 0 : override->window;
+}
+
+rsRetVal ratelimitPerSourcePolicyLoad(const char *const path, ratelimit_per_source_policy_t **const policy_out) {
+    ratelimit_config_spec_t spec = {0};
+    DEFiRet;
+
+    if (policy_out == NULL) {
+        ABORT_FINALIZE(RS_RET_INVALID_PARAMS);
+    }
+    *policy_out = NULL;
+
+    ratelimitConfigSpecInit(&spec);
+    CHKiRet(ratelimitPolicyLoadFromYaml(path, &spec));
+
+    if (spec.per_source == NULL) {
+        LogError(0, RS_RET_INVALID_VALUE,
+                 "ratelimit: per-source policy file '%s' did not define defaults/overrides", path);
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+
+    *policy_out = spec.per_source;
+    spec.per_source = NULL;
+
+finalize_it:
+    if (iRet != RS_RET_OK) {
+        ratelimitPerSourcePolicyFree(spec.per_source);
+    }
+    free(spec.policy_path);
+    RETiRet;
 }
 
 rsRetVal ratelimitPerSourceRuntimeNew(const ratelimit_per_source_policy_t *const policy,

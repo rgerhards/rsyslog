@@ -227,6 +227,8 @@ ratelimitPerSourcePolicyGetOverrides(const ratelimit_per_source_policy_t *policy
 const char *ratelimitPerSourceOverrideGetKey(const ratelimit_per_source_override_t *override);
 unsigned int ratelimitPerSourceOverrideGetMax(const ratelimit_per_source_override_t *override);
 unsigned int ratelimitPerSourceOverrideGetWindow(const ratelimit_per_source_override_t *override);
+void ratelimitPerSourcePolicyFree(ratelimit_per_source_policy_t *policy);
+rsRetVal ratelimitPerSourcePolicyLoad(const char *path, ratelimit_per_source_policy_t **policy_out);
 
 /**
  * Construct a runtime helper capable of enforcing the supplied per-source
