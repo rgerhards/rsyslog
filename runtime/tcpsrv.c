@@ -77,6 +77,7 @@
 #include "ratelimit.h"
 #include "unicode-helper.h"
 #include "nsd_ptcp.h"
+#include "parser.h"
 
 
 PRAGMA_IGNORE_Wswitch_enum MODULE_TYPE_LIB MODULE_TYPE_NOKEEP;
@@ -96,6 +97,7 @@ DEFobjCurrIf(netstrms);
 DEFobjCurrIf(netstrm);
 DEFobjCurrIf(prop);
 DEFobjCurrIf(statsobj);
+DEFobjCurrIf(parser);
 
 #define NSPOLL_MAX_EVENTS_PER_WAIT 128
 
@@ -2349,6 +2351,7 @@ BEGINObjClassExit(tcpsrv, OBJ_IS_LOADABLE_MODULE) /* CHANGE class also in END MA
     objRelease(statsobj, CORE_COMPONENT);
     objRelease(ruleset, CORE_COMPONENT);
     objRelease(glbl, CORE_COMPONENT);
+    objRelease(parser, CORE_COMPONENT);
     objRelease(netstrms, DONT_LOAD_LIB);
     objRelease(netstrm, LM_NETSTRMS_FILENAME);
     objRelease(net, LM_NET_FILENAME);
@@ -2370,6 +2373,7 @@ BEGINObjClassInit(tcpsrv, 1, OBJ_IS_LOADABLE_MODULE) /* class, version - CHANGE 
     CHKiRet(objUse(ruleset, CORE_COMPONENT));
     CHKiRet(objUse(statsobj, CORE_COMPONENT));
     CHKiRet(objUse(prop, CORE_COMPONENT));
+    CHKiRet(objUse(parser, CORE_COMPONENT));
 
     /* set our own handlers */
     OBJSetMethodHandler(objMethod_DEBUGPRINT, tcpsrvDebugPrint);

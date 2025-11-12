@@ -639,6 +639,7 @@ TESTS +=  \
         imtcp-ratelimit-object.sh \
         imtcp-ratelimit-legacy.sh \
         imtcp-ratelimit-policy.sh \
+        imtcp-per-source-rate.sh \
         manytcp.sh \
 	imtcp_conndrop.sh \
 	imtcp_addtlframedelim.sh \
@@ -2574,6 +2575,7 @@ EXTRA_DIST= \
         imtcp-ratelimit-legacy.sh \
         imtcp-ratelimit-policy.sh \
         imtcp-ratelimit-impstats.sh \
+        imtcp-per-source-rate.sh \
 	udp-msgreduc-orgmsg-vg.sh \
 	udp-msgreduc-vg.sh \
 	manytcp-too-few-tls-vg.sh \

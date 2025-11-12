@@ -51,11 +51,12 @@
 #include "template.h"
 #include "debug.h"
 #include "rsconf.h"
+#include "parser.h"
 
 
 /* static data */
 DEFobjStaticHelpers;
-DEFobjCurrIf(glbl) DEFobjCurrIf(netstrm) DEFobjCurrIf(prop) DEFobjCurrIf(datetime)
+DEFobjCurrIf(glbl) DEFobjCurrIf(netstrm) DEFobjCurrIf(prop) DEFobjCurrIf(datetime) DEFobjCurrIf(parser)
 
 
     /* forward definitions */
@@ -309,6 +310,14 @@ static rsRetVal defaultDoSubmitMessage(tcps_sess_t *pThis,
 
     if (pThis->pLstnInfo->perSourceEnabled && pThis->pLstnInfo->perSourceRuntime != NULL &&
         pThis->pLstnInfo->perSourceTpl != NULL) {
+        if ((pMsg->msgFlags & NEEDS_PARSING) != 0) {
+            rsRetVal parseRet = parser.ParseMsg(pMsg);
+            if (parseRet != RS_RET_OK) {
+                LogError(0, parseRet, "tcps_sess: failed to parse message for per-source limiter");
+                msgDestruct(&pMsg);
+                FINALIZE;
+            }
+        }
         actWrkrIParams_t keyParam = {0};
         rsRetVal keyRet = tplToString(pThis->pLstnInfo->perSourceTpl, pMsg, &keyParam, NULL);
         if (keyRet != RS_RET_OK) {
@@ -666,6 +675,7 @@ BEGINObjClassExit(tcps_sess, OBJ_IS_LOADABLE_MODULE) /* CHANGE class also in END
     objRelease(netstrm, LM_NETSTRMS_FILENAME);
     objRelease(datetime, CORE_COMPONENT);
     objRelease(prop, CORE_COMPONENT);
+    objRelease(parser, CORE_COMPONENT);
 ENDObjClassExit(tcps_sess)
 
 
@@ -678,6 +688,7 @@ BEGINObjClassInit(tcps_sess, 1, OBJ_IS_CORE_MODULE) /* class, version - CHANGE c
     CHKiRet(objUse(netstrm, LM_NETSTRMS_FILENAME));
     CHKiRet(objUse(datetime, CORE_COMPONENT));
     CHKiRet(objUse(prop, CORE_COMPONENT));
+    CHKiRet(objUse(parser, CORE_COMPONENT));
 
     CHKiRet(objUse(glbl, CORE_COMPONENT));
     objRelease(glbl, CORE_COMPONENT);
