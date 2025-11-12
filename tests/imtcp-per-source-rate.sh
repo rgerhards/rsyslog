@@ -62,6 +62,19 @@ if $hostname == "'${NOISY_HOST}'" then {
 			         file="'${RATELIMIT_LOG}'")
 '
 
+# Validate configuration before running so we can skip gracefully if libyaml is missing.
+verify_log="$RSYSLOG_DYNNAME.verify.log"
+if ! ../tools/rsyslogd -N1 -f${TESTCONF_NM}.conf -M../runtime/.libs:../.libs >"$verify_log" 2>&1; then
+	if grep -q "libyaml support" "$verify_log"; then
+		cat "$verify_log"
+		echo "Skipping test because rsyslogd lacks libyaml support"
+		skip_test
+	fi
+	cat "$verify_log"
+	error_exit 1
+fi
+rm -f "$verify_log"
+
 startup
 tcpflood -m $QUIET_MESSAGES -h $QUIET_HOST
 tcpflood -m $NOISY_MESSAGES -h $NOISY_HOST

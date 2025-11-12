@@ -145,8 +145,10 @@ static void ratelimitPerSourceOverridesFree(ratelimit_per_source_override_t *hea
 void ratelimitPerSourcePolicyFree(ratelimit_per_source_policy_t *policy);
 static rsRetVal ratelimitPerSourcePolicyClone(const ratelimit_per_source_policy_t *src,
                                               ratelimit_per_source_policy_t **dst);
+#ifdef HAVE_LIBYAML
 static rsRetVal ratelimitParseUnsigned(const char *path, const char *key, const char *value, unsigned int *out);
 static rsRetVal ratelimitParseWindow(const char *path, const char *key, const char *value, unsigned int *out);
+#endif
 static ratelimit_per_source_override_t *
 ratelimitPerSourcePolicyFindOverride(const ratelimit_per_source_policy_t *policy, const char *key);
 static void ratelimitPerSourceRuntimeDestroyEntry(void *value);
@@ -600,6 +602,7 @@ fail:
     return RS_RET_OUT_OF_MEMORY;
 }
 
+#ifdef HAVE_LIBYAML
 static inline void ratelimitSkipTrailingWhitespace(char **cursor) {
     if (cursor == NULL || *cursor == NULL) return;
     while (**cursor != '\0' && isspace((unsigned char)**cursor)) {
@@ -659,6 +662,7 @@ invalid:
              "ratelimit: YAML policy '%s' has invalid window value '%s' for key '%s'", path, value, key);
     return RS_RET_INVALID_VALUE;
 }
+#endif /* HAVE_LIBYAML */
 
 static ratelimit_per_source_override_t *
 ratelimitPerSourcePolicyFindOverride(const ratelimit_per_source_policy_t *const policy, const char *const key) {
