@@ -366,11 +366,12 @@ TESTS +=  \
 	dircreate_dflt.sh \
 	dircreate_off.sh \
 	imuxsock_legacy.sh \
-	imuxsock_logger.sh \
-	imuxsock_logger_ratelimit.sh \
-	imuxsock_logger_ruleset.sh \
-	imuxsock_logger_ruleset_ratelimit.sh \
-	imuxsock_logger_err.sh \
+        imuxsock_logger.sh \
+        imuxsock_logger_ratelimit.sh \
+        imuxsock_logger_ruleset.sh \
+        imuxsock_logger_ruleset_ratelimit.sh \
+        ratelimit-policy-validation.sh \
+        imuxsock_logger_err.sh \
 	imuxsock_logger_parserchain.sh \
 	imuxsock_traillf.sh \
 	imuxsock_ccmiddle.sh \
@@ -634,10 +635,12 @@ TESTS +=  \
 	imtcp_incomplete_frame_at_end.sh \
 	imtcp-multiport.sh \
 	imtcp-bigmessage-octetcounting.sh \
-	imtcp-bigmessage-octetstuffing.sh \
-	imtcp-ratelimit-object.sh \
-	imtcp-ratelimit-legacy.sh \
-	manytcp.sh \
+        imtcp-bigmessage-octetstuffing.sh \
+        imtcp-ratelimit-object.sh \
+        imtcp-ratelimit-legacy.sh \
+        imtcp-ratelimit-policy.sh \
+        imtcp-per-source-rate.sh \
+        manytcp.sh \
 	imtcp_conndrop.sh \
 	imtcp_addtlframedelim.sh \
 	imtcp_no_octet_counted.sh \
@@ -2567,10 +2570,12 @@ EXTRA_DIST= \
 	imtcp_incomplete_frame_at_end.sh \
 	imtcp-multiport.sh \
 	imtcp-bigmessage-octetcounting.sh \
-	imtcp-bigmessage-octetstuffing.sh \
-	imtcp-ratelimit-object.sh \
-	imtcp-ratelimit-legacy.sh \
-	imtcp-ratelimit-impstats.sh \
+        imtcp-bigmessage-octetstuffing.sh \
+        imtcp-ratelimit-object.sh \
+        imtcp-ratelimit-legacy.sh \
+        imtcp-ratelimit-policy.sh \
+        imtcp-ratelimit-impstats.sh \
+        imtcp-per-source-rate.sh \
 	udp-msgreduc-orgmsg-vg.sh \
 	udp-msgreduc-vg.sh \
 	manytcp-too-few-tls-vg.sh \

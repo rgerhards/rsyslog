@@ -41,10 +41,44 @@ typedef struct ratelimit_config_s ratelimit_config_t;
  * :rainerscript:`ratelimit()` object or from inline configuration values
  * that are promoted to a shared configuration entry.
  */
+struct ratelimit_per_source_override_s;
+struct ratelimit_per_source_policy_s;
+
+typedef struct ratelimit_per_source_override_s {
+    char *key; /**< Sender key subject to the override. */
+    unsigned int max; /**< Maximum messages allowed within @ref window. */
+    unsigned int window; /**< Time window in seconds. */
+    struct ratelimit_per_source_override_s *next; /**< Linked-list pointer. */
+} ratelimit_per_source_override_t;
+
+typedef struct ratelimit_per_source_policy_s {
+    unsigned int def_max; /**< Default maximum messages for senders without overrides. */
+    unsigned int def_window; /**< Default window size in seconds. */
+    ratelimit_per_source_override_t *overrides; /**< Linked list of specific overrides. */
+    size_t override_count; /**< Number of overrides recorded. */
+} ratelimit_per_source_policy_t;
+
+typedef struct ratelimit_per_source_runtime_s ratelimit_per_source_runtime_t;
+
+/**
+ * Outcome returned by the per-source runtime limiter after evaluating an
+ * event for a specific sender key.
+ */
+typedef struct ratelimit_per_source_result_s {
+    sbool allowed; /**< Message should pass through the limiter when true. */
+    unsigned int max; /**< Effective limit for the sender inside the window. */
+    unsigned int used; /**< Messages already processed within the current window. */
+    unsigned int dropped; /**< Messages dropped within the current window. */
+    unsigned int window; /**< Window length in seconds. */
+    time_t window_begin; /**< Start timestamp of the current window. */
+} ratelimit_per_source_result_t;
+
 typedef struct ratelimit_config_spec_s {
     unsigned int interval; /**< Rate limiting interval in seconds (0 disables). */
     unsigned int burst; /**< Maximum messages allowed inside @ref interval. */
     int severity; /**< Optional severity threshold, use @ref RATELIMIT_SEVERITY_UNSET for default. */
+    char *policy_path; /**< Absolute path of the YAML policy that populated the spec (if any). */
+    ratelimit_per_source_policy_t *per_source; /**< Optional per-source policy parsed from YAML. */
 } ratelimit_config_spec_t;
 
 struct cnfobj;
@@ -142,6 +176,17 @@ rsRetVal ratelimitConfigCreateAdHoc(rsconf_t *cnf,
 rsRetVal ratelimitConfigLookup(const rsconf_t *cnf, const char *name, ratelimit_config_t **cfg);
 
 /**
+ * Look up a configuration by name inside the central registry.
+ *
+ * The registry keeps track of all ratelimit definitions associated with the
+ * currently loaded configuration objects. When @p cnf is provided only entries
+ * belonging to that configuration are considered. Passing ``NULL`` for @p cnf
+ * will scan the registry globally which is primarily intended for diagnostic
+ * helpers.
+ */
+rsRetVal ratelimitRegistryLookup(const rsconf_t *cnf, const char *name, ratelimit_config_t **cfg);
+
+/**
  * Retrieve the name associated with a configuration entry.
  */
 const char *ratelimitConfigName(const ratelimit_config_t *cfg);
@@ -160,6 +205,63 @@ unsigned int ratelimitConfigGetBurst(const ratelimit_config_t *cfg);
  * Return the severity threshold associated with a configuration entry.
  */
 int ratelimitConfigGetSeverity(const ratelimit_config_t *cfg);
+
+/**
+ * Return the source policy path associated with a configuration entry, if set.
+ */
+const char *ratelimitConfigGetPolicyPath(const ratelimit_config_t *cfg);
+
+/**
+ * Return the optional per-source policy associated with a configuration entry.
+ */
+const ratelimit_per_source_policy_t *ratelimitConfigGetPerSourcePolicy(const ratelimit_config_t *cfg);
+
+/**
+ * Helpers exposing immutable per-source policy data.
+ */
+unsigned int ratelimitPerSourcePolicyGetDefaultMax(const ratelimit_per_source_policy_t *policy);
+unsigned int ratelimitPerSourcePolicyGetDefaultWindow(const ratelimit_per_source_policy_t *policy);
+size_t ratelimitPerSourcePolicyGetOverrideCount(const ratelimit_per_source_policy_t *policy);
+const ratelimit_per_source_override_t *
+ratelimitPerSourcePolicyGetOverrides(const ratelimit_per_source_policy_t *policy);
+const char *ratelimitPerSourceOverrideGetKey(const ratelimit_per_source_override_t *override);
+unsigned int ratelimitPerSourceOverrideGetMax(const ratelimit_per_source_override_t *override);
+unsigned int ratelimitPerSourceOverrideGetWindow(const ratelimit_per_source_override_t *override);
+void ratelimitPerSourcePolicyFree(ratelimit_per_source_policy_t *policy);
+rsRetVal ratelimitPerSourcePolicyLoad(const char *path, ratelimit_per_source_policy_t **policy_out);
+
+/**
+ * Construct a runtime helper capable of enforcing the supplied per-source
+ * policy.
+ */
+rsRetVal ratelimitPerSourceRuntimeNew(const ratelimit_per_source_policy_t *policy,
+                                      ratelimit_per_source_runtime_t **runtime);
+
+/** Release all resources held by a per-source runtime helper. */
+void ratelimitPerSourceRuntimeFree(ratelimit_per_source_runtime_t *runtime);
+
+/** Enable mutex protection for the per-source runtime helper. */
+void ratelimitPerSourceRuntimeSetThreadSafe(ratelimit_per_source_runtime_t *runtime);
+
+/**
+ * Evaluate a sender key against the per-source limiter.
+ *
+ * @param runtime Active runtime helper.
+ * @param key     Sender identifier; NULL or empty strings are mapped to a
+ *                synthetic default bucket.
+ * @param now     Timestamp used to evaluate window boundaries.
+ * @param result  Receives the outcome details; ignored when NULL.
+ *
+ * @retval RS_RET_OK on success.
+ * @retval RS_RET_INVALID_PARAMS if runtime is NULL.
+ */
+rsRetVal ratelimitPerSourceRuntimeCheck(ratelimit_per_source_runtime_t *runtime,
+                                        const char *key,
+                                        time_t now,
+                                        ratelimit_per_source_result_t *result);
+
+/** Reset drop counters accumulated for the current window. */
+void ratelimitPerSourceRuntimeResetCounters(ratelimit_per_source_runtime_t *runtime);
 
 /**
  * Resolve a configuration reference by name.

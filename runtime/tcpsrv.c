@@ -77,6 +77,7 @@
 #include "ratelimit.h"
 #include "unicode-helper.h"
 #include "nsd_ptcp.h"
+#include "parser.h"
 
 
 PRAGMA_IGNORE_Wswitch_enum MODULE_TYPE_LIB MODULE_TYPE_NOKEEP;
@@ -96,6 +97,7 @@ DEFobjCurrIf(netstrms);
 DEFobjCurrIf(netstrm);
 DEFobjCurrIf(prop);
 DEFobjCurrIf(statsobj);
+DEFobjCurrIf(parser);
 
 #define NSPOLL_MAX_EVENTS_PER_WAIT 128
 
@@ -364,6 +366,10 @@ static rsRetVal ATTR_NONNULL() addNewLstnPort(tcpsrv_t *const pThis, tcpLstnPara
     /* create entry */
     CHKmalloc(pEntry = (tcpLstnPortList_t *)calloc(1, sizeof(tcpLstnPortList_t)));
     pEntry->cnf_params = cnf_params;
+    pEntry->perSourceEnabled = 0;
+    pEntry->perSourceTpl = NULL;
+    pEntry->perSourcePolicy = NULL;
+    pEntry->perSourceRuntime = NULL;
 
     strcpy((char *)pEntry->cnf_params->dfltTZ, (char *)pThis->dfltTZ);
     pEntry->cnf_params->bSPFramingFix = pThis->bSPFramingFix;
@@ -381,6 +387,18 @@ static rsRetVal ATTR_NONNULL() addNewLstnPort(tcpsrv_t *const pThis, tcpLstnPara
         ratelimitSetLinuxLike(pEntry->ratelimiter, pThis->ratelimitInterval, pThis->ratelimitBurst);
     }
     ratelimitSetThreadSafe(pEntry->ratelimiter);
+
+    if (pThis->perSourceRate) {
+        if (pThis->perSourcePolicyFile == NULL || pThis->perSourceKeyTpl == NULL) {
+            LogError(0, RS_RET_INVALID_VALUE, "tcpsrv: per-source limiter missing policy or template");
+            ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+        }
+        CHKiRet(ratelimitPerSourcePolicyLoad((const char *)pThis->perSourcePolicyFile, &pEntry->perSourcePolicy));
+        CHKiRet(ratelimitPerSourceRuntimeNew(pEntry->perSourcePolicy, &pEntry->perSourceRuntime));
+        ratelimitPerSourceRuntimeSetThreadSafe(pEntry->perSourceRuntime);
+        pEntry->perSourceEnabled = 1;
+        pEntry->perSourceTpl = pThis->perSourceKeyTpl;
+    }
 
     CHKiRet(statsobj.Construct(&(pEntry->stats)));
     snprintf((char *)statname, sizeof(statname), "%s(%s)", cnf_params->pszInputName, cnf_params->pszPort);
@@ -405,12 +423,23 @@ finalize_it:
             if (pEntry->ratelimiter != NULL) {
                 ratelimitDestruct(pEntry->ratelimiter);
             }
+            if (pEntry->perSourceRuntime != NULL) {
+                ratelimitPerSourceRuntimeFree(pEntry->perSourceRuntime);
+            }
+            if (pEntry->perSourcePolicy != NULL) {
+                ratelimitPerSourcePolicyFree(pEntry->perSourcePolicy);
+            }
             if (pEntry->stats != NULL) {
                 statsobj.Destruct(&pEntry->stats);
             }
             free(pEntry);
         }
     }
+
+    pThis->perSourceRate = 0;
+    free(pThis->perSourcePolicyFile);
+    pThis->perSourcePolicyFile = NULL;
+    pThis->perSourceKeyTpl = NULL;
 
     RETiRet;
 }
@@ -544,6 +573,8 @@ static void ATTR_NONNULL() deinit_tcp_listener(tcpsrv_t *const pThis) {
         free((void *)pEntry->cnf_params->pszLstnPortFileName);
         free((void *)pEntry->cnf_params);
         ratelimitDestruct(pEntry->ratelimiter);
+        if (pEntry->perSourceRuntime != NULL) ratelimitPerSourceRuntimeFree(pEntry->perSourceRuntime);
+        if (pEntry->perSourcePolicy != NULL) ratelimitPerSourcePolicyFree(pEntry->perSourcePolicy);
         statsobj.Destruct(&(pEntry->stats));
         pDel = pEntry;
         pEntry = pEntry->pNext;
@@ -1703,6 +1734,9 @@ BEGINobjConstruct(tcpsrv) /* be sure to specify the object type also in END macr
     pThis->ratelimitInterval = 0;
     pThis->ratelimitBurst = 10000;
     pThis->ratelimitCfg = NULL;
+    pThis->perSourceRate = 0;
+    pThis->perSourcePolicyFile = NULL;
+    pThis->perSourceKeyTpl = NULL;
     pThis->bUseFlowControl = 1;
     pThis->pszDrvrName = NULL;
     pThis->bPreserveCase = 1; /* preserve case in fromhost; default to true. */
@@ -1776,6 +1810,7 @@ BEGINobjDestruct(tcpsrv) /* be sure to specify the object type also in END and C
     free(pThis->pszDrvrCRLFile);
     free(pThis->pszDrvrKeyFile);
     free(pThis->pszDrvrCertFile);
+    free(pThis->perSourcePolicyFile);
     free(pThis->ppLstn);
     free(pThis->ppLstnPort);
     free(pThis->ppioDescrPtr);
@@ -1995,6 +2030,40 @@ static rsRetVal ATTR_NONNULL(1) SetLinuxLikeRatelimiters(tcpsrv_t *pThis,
     pThis->ratelimitCfg = cfg;
     pThis->ratelimitInterval = ratelimitInterval;
     pThis->ratelimitBurst = ratelimitBurst;
+    RETiRet;
+}
+
+static rsRetVal ATTR_NONNULL(1)
+    SetPerSourceRate(tcpsrv_t *const pThis, const sbool enabled, const uchar *const policyFile, struct template *tpl) {
+    DEFiRet;
+    pThis->perSourceRate = enabled;
+    free(pThis->perSourcePolicyFile);
+    pThis->perSourcePolicyFile = NULL;
+    pThis->perSourceKeyTpl = NULL;
+
+    if (!enabled) {
+        FINALIZE;
+    }
+
+    if (policyFile == NULL || *policyFile == '\0') {
+        LogError(0, RS_RET_INVALID_VALUE, "tcpsrv: per-source rate limiting requires a policy file path");
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+    if (tpl == NULL) {
+        LogError(0, RS_RET_INVALID_VALUE, "tcpsrv: per-source rate limiting requires a sender key template");
+        ABORT_FINALIZE(RS_RET_INVALID_VALUE);
+    }
+
+    CHKmalloc(pThis->perSourcePolicyFile = ustrdup(policyFile));
+    pThis->perSourceKeyTpl = tpl;
+
+finalize_it:
+    if (iRet != RS_RET_OK) {
+        pThis->perSourceRate = 0;
+        free(pThis->perSourcePolicyFile);
+        pThis->perSourcePolicyFile = NULL;
+        pThis->perSourceKeyTpl = NULL;
+    }
     RETiRet;
 }
 
@@ -2255,6 +2324,7 @@ BEGINobjQueryInterface(tcpsrv)
     pIf->SetCBOnErrClose = SetCBOnErrClose;
     pIf->SetOnMsgReceive = SetOnMsgReceive;
     pIf->SetLinuxLikeRatelimiters = SetLinuxLikeRatelimiters;
+    pIf->SetPerSourceRate = SetPerSourceRate;
     pIf->SetNotificationOnRemoteClose = SetNotificationOnRemoteClose;
     pIf->SetNotificationOnRemoteOpen = SetNotificationOnRemoteOpen;
     pIf->SetPreserveCase = SetPreserveCase;
@@ -2281,6 +2351,7 @@ BEGINObjClassExit(tcpsrv, OBJ_IS_LOADABLE_MODULE) /* CHANGE class also in END MA
     objRelease(statsobj, CORE_COMPONENT);
     objRelease(ruleset, CORE_COMPONENT);
     objRelease(glbl, CORE_COMPONENT);
+    objRelease(parser, CORE_COMPONENT);
     objRelease(netstrms, DONT_LOAD_LIB);
     objRelease(netstrm, LM_NETSTRMS_FILENAME);
     objRelease(net, LM_NET_FILENAME);
@@ -2302,6 +2373,7 @@ BEGINObjClassInit(tcpsrv, 1, OBJ_IS_LOADABLE_MODULE) /* class, version - CHANGE 
     CHKiRet(objUse(ruleset, CORE_COMPONENT));
     CHKiRet(objUse(statsobj, CORE_COMPONENT));
     CHKiRet(objUse(prop, CORE_COMPONENT));
+    CHKiRet(objUse(parser, CORE_COMPONENT));
 
     /* set our own handlers */
     OBJSetMethodHandler(objMethod_DEBUGPRINT, tcpsrvDebugPrint);

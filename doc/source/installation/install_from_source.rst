@@ -75,6 +75,10 @@ that they must be built from source, too.
 Depending on which plugins are enabled, additional dependencies exist.
 These are reported during the ./configure run.
 
+Optional but recommended libraries include:
+
+* libyaml (required for :rainerscript:`ratelimit()` YAML policy support)
+
 **Important**: you need the **development** version of the packages in
 question. That is the version which is used by developers to build software
 that uses the respective package. Usually, they are separate from the

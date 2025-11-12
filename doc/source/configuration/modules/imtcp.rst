@@ -183,6 +183,18 @@ Module Parameters
      - .. include:: ../../reference/parameters/imtcp-preservecase.rst
         :start-after: .. summary-start
         :end-before: .. summary-end
+   * - :ref:`param-imtcp-perSourceRate`
+     - .. include:: ../../reference/parameters/imtcp-perSourceRate.rst
+        :start-after: .. summary-start
+        :end-before: .. summary-end
+   * - :ref:`param-imtcp-perSourcePolicyFile`
+     - .. include:: ../../reference/parameters/imtcp-perSourcePolicyFile.rst
+        :start-after: .. summary-start
+        :end-before: .. summary-end
+   * - :ref:`param-imtcp-perSourceKeyTpl`
+     - .. include:: ../../reference/parameters/imtcp-perSourceKeyTpl.rst
+        :start-after: .. summary-start
+        :end-before: .. summary-end
 
 .. toctree::
    :hidden:
@@ -212,6 +224,9 @@ Module Parameters
    ../../reference/parameters/imtcp-discardtruncatedmsg
    ../../reference/parameters/imtcp-gnutlsprioritystring
    ../../reference/parameters/imtcp-preservecase
+   ../../reference/parameters/imtcp-perSourceRate
+   ../../reference/parameters/imtcp-perSourcePolicyFile
+   ../../reference/parameters/imtcp-perSourceKeyTpl
    ../../reference/parameters/imtcp-port
    ../../reference/parameters/imtcp-listenportfilename
    ../../reference/parameters/imtcp-address

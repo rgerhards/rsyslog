@@ -48,13 +48,15 @@
 #include "datetime.h"
 #include "prop.h"
 #include "ratelimit.h"
+#include "template.h"
 #include "debug.h"
 #include "rsconf.h"
+#include "parser.h"
 
 
 /* static data */
 DEFobjStaticHelpers;
-DEFobjCurrIf(glbl) DEFobjCurrIf(netstrm) DEFobjCurrIf(prop) DEFobjCurrIf(datetime)
+DEFobjCurrIf(glbl) DEFobjCurrIf(netstrm) DEFobjCurrIf(prop) DEFobjCurrIf(datetime) DEFobjCurrIf(parser)
 
 
     /* forward definitions */
@@ -305,6 +307,43 @@ static rsRetVal defaultDoSubmitMessage(tcps_sess_t *pThis,
     CHKiRet(MsgSetRcvFromIP(pMsg, pThis->fromHostIP));
     CHKiRet(MsgSetRcvFromPort(pMsg, pThis->fromHostPort));
     MsgSetRuleset(pMsg, cnf_params->pRuleset);
+
+    if (pThis->pLstnInfo->perSourceEnabled && pThis->pLstnInfo->perSourceRuntime != NULL &&
+        pThis->pLstnInfo->perSourceTpl != NULL) {
+        if ((pMsg->msgFlags & NEEDS_PARSING) != 0) {
+            rsRetVal parseRet = parser.ParseMsg(pMsg);
+            if (parseRet != RS_RET_OK) {
+                LogError(0, parseRet, "tcps_sess: failed to parse message for per-source limiter");
+                msgDestruct(&pMsg);
+                FINALIZE;
+            }
+        }
+        actWrkrIParams_t keyParam = {0};
+        rsRetVal keyRet = tplToString(pThis->pLstnInfo->perSourceTpl, pMsg, &keyParam, NULL);
+        if (keyRet != RS_RET_OK) {
+            LogError(0, keyRet, "tcps_sess: failed to render perSourceKeyTpl");
+        } else {
+            const char *const key =
+                (keyParam.param != NULL) ? (const char *)keyParam.param : (const char *)"";
+            ratelimit_per_source_result_t perResult = {0};
+            rsRetVal rlRet =
+                ratelimitPerSourceRuntimeCheck(pThis->pLstnInfo->perSourceRuntime, key, ttGenTime, &perResult);
+            if (rlRet != RS_RET_OK) {
+                LogError(0, rlRet, "tcps_sess: per-source limiter check failed for key '%s'", key);
+            } else if (!perResult.allowed) {
+                uchar msgbuf[1024];
+                const char *inputName =
+                    (cnf_params->pszInputName != NULL) ? (const char *)cnf_params->pszInputName : "imtcp";
+                snprintf((char *)msgbuf, sizeof(msgbuf),
+                         "%s per-source key '%s': begin to drop messages due to rate-limiting", inputName, key);
+                logmsgInternal(RS_RET_RATE_LIMITED, LOG_SYSLOG | LOG_INFO, msgbuf, 0);
+                msgDestruct(&pMsg);
+                free(keyParam.param);
+                FINALIZE;
+            }
+        }
+        free(keyParam.param);
+    }
 
     STATSCOUNTER_INC(pThis->pLstnInfo->ctrSubmit, pThis->pLstnInfo->mutCtrSubmit);
     ratelimitAddMsg(pThis->pLstnInfo->ratelimiter, pMultiSub, pMsg);
@@ -636,6 +675,7 @@ BEGINObjClassExit(tcps_sess, OBJ_IS_LOADABLE_MODULE) /* CHANGE class also in END
     objRelease(netstrm, LM_NETSTRMS_FILENAME);
     objRelease(datetime, CORE_COMPONENT);
     objRelease(prop, CORE_COMPONENT);
+    objRelease(parser, CORE_COMPONENT);
 ENDObjClassExit(tcps_sess)
 
 
@@ -648,6 +688,7 @@ BEGINObjClassInit(tcps_sess, 1, OBJ_IS_CORE_MODULE) /* class, version - CHANGE c
     CHKiRet(objUse(netstrm, LM_NETSTRMS_FILENAME));
     CHKiRet(objUse(datetime, CORE_COMPONENT));
     CHKiRet(objUse(prop, CORE_COMPONENT));
+    CHKiRet(objUse(parser, CORE_COMPONENT));
 
     CHKiRet(objUse(glbl, CORE_COMPONENT));
     objRelease(glbl, CORE_COMPONENT);
