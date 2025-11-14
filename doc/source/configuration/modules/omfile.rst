@@ -397,3 +397,11 @@ The following command writes all syslog messages into a file.
           File="/var/log/messages")
 
 
+Common errors
+=============
+
+- :ref:`error-e2007` - Action suspended (flow control)
+- :ref:`error-e2027` - Timeout / connection issue
+- :ref:`error-e2359` - Action resumed
+
+
