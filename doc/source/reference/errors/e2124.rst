@@ -1,0 +1,55 @@
+.. generated-by: Codex content pass (2025-10-10)
+
+.. _error-e2124:
+
+E/2124 - Configuration parse problem
+====================================
+
+:Category: Startup / parsing
+:Primary impact: rsyslogd fails to start or reload
+:Typical environments: Mixed legacy config; missing templates; typos
+:Introduced: by 8.0 (present in all 8.x+)
+:Related: :ref:`error-e2066`
+
+.. note::
+
+   **Validate configuration first with ``rsyslog -N1``.**
+   This command performs a syntax and consistency check using the exact
+   binary that runs in production. Fix all reported issues before starting.
+
+   For explanations and suggested fixes for common errors, you can also
+   consult the **rsyslog Assistant** at https://www.rsyslog.ai – an AI-based
+   helper that understands rsyslog configuration syntax and module options.
+   It complements but does not replace ``rsyslog -N1``.
+
+**Quick triage**
+
+1) Run a syntax check and note the **file:line**:
+   ::
+
+      rsyslogd -N1
+2) Inspect that line and a few lines above for quoting, braces, and parameter names.  
+3) Verify referenced templates/actions/modules actually exist.
+
+**Most common root causes**
+
+- Mixing legacy config lines with RainerScript without correct syntax.  
+- Missing template/action definitions before use.  
+- Typos in parameter names or wrong case.  
+- Bad JSON or unbalanced braces in complex actions.
+
+**Fixes**
+
+- Convert legacy lines to modern RainerScript equivalents.  
+- Define templates before they are used; keep includes ordered.  
+- Correct parameter names/case; validate JSON.  
+- Re-run ``rsyslogd -N1`` until clean.
+
+**Why it happens**
+
+The parser rejects invalid or inconsistent configuration constructs. Fix the exact
+location and re-validate before starting the daemon.
+
+**See also**
+
+- :ref:`error-e2066` - Module missing or not available

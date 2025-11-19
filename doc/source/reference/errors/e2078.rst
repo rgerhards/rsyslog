@@ -1,0 +1,41 @@
+.. generated-by: Codex content pass (2025-10-10)
+
+.. _error-e2078:
+
+E/2078 - TLS certificate problem
+================================
+
+:Category: TLS / handshake
+:Primary impact: Connection fails; retries; possible suspend
+:Typical environments: TCP/TLS forwarding (OpenSSL or GnuTLS)
+:Introduced: by 8.0 (present in all 8.x+)
+:Related: :ref:`error-e2027`
+
+**Quick triage**
+
+1) Read the **library error** text on the preceding line (name mismatch, unknown CA, expired).  
+2) Verify CN/SAN of the peer matches configured permitted peers.  
+3) Ensure the **complete CA chain** is available on the verifying side.
+
+**Most common root causes**
+
+- CN/SAN mismatch with the configured peer name(s).  
+- Missing or incomplete CA chain; untrusted CA.  
+- Expired/not-yet-valid certificates; wrong keypair.  
+- Hostname verification disabled on one side but enforced on the other.
+
+**Fixes**
+
+- Align permitted peer settings with the certificate SANs (preferred) or CN.  
+- Provide the full trust chain (root + intermediates) to the verifier.  
+- Renew/replace expired or wrong certs; match key and cert.  
+- Keep TLS library settings consistent between sender and receiver.
+
+**Why it happens**
+
+TLS handshake fails when identity or trust checks cannot succeed. The network may
+look like a timeout (see ``E/2027``), but the root cause is certificate validation.
+
+**See also**
+
+- :ref:`error-e2027` - Timeout / connection issue
