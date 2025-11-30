@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <strings.h>
 #include <errno.h>
 #include <unistd.h>
 #include <pwd.h>
@@ -71,6 +72,7 @@
 #include "timezones.h"
 
 extern char *yytext;
+int cnfYamlParseFile(char *path);
 /* static data */
 DEFobjStaticHelpers;
 DEFobjCurrIf(ruleset) DEFobjCurrIf(module) DEFobjCurrIf(conf) DEFobjCurrIf(glbl) DEFobjCurrIf(parser)
@@ -1385,11 +1387,17 @@ static rsRetVal load(rsconf_t **cnf, uchar *confFile) {
     CHKiRet(loadBuildInModules());
     CHKiRet(initLegacyConf());
 
-    /* open the configuration file */
-    r = cnfSetLexFile((char *)confFile);
-    if (r == 0) {
-        r = yyparse();
+    const char *ext = strrchr((char *)confFile, '.');
+    int isYaml = ext && (!strcasecmp(ext, ".yml") || !strcasecmp(ext, ".yaml"));
+    if (isYaml) {
+        r = cnfYamlParseFile((char *)confFile);
         conf.GetNbrActActions(loadConf, &iNbrActions);
+    } else {
+        r = cnfSetLexFile((char *)confFile);
+        if (r == 0) {
+            r = yyparse();
+            conf.GetNbrActActions(loadConf, &iNbrActions);
+        }
     }
 
     /* we run the optimizer even if we have an error, as it may spit out
@@ -1413,7 +1421,9 @@ static rsRetVal load(rsconf_t **cnf, uchar *confFile) {
                  "Inputs would run, but no output whatsoever were created.");
         ABORT_FINALIZE(RS_RET_NO_ACTIONS);
     }
-    tellLexEndParsing();
+    if (!isYaml) {
+        tellLexEndParsing();
+    }
     DBGPRINTF("Number of actions in this configuration: %d\n", loadConf->actions.iActionNbr);
 
     CHKiRet(tellCoreConfigLoadDone());
