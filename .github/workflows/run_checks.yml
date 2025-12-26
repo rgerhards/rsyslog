@@ -116,6 +116,7 @@ jobs:
                      --enable-gnutls --enable-openssl --enable-gnutls-tests"
               ;;
           'openeuler')
+              export CI_MAKE_CHECK_OPT='-j10'
               export RSYSLOG_DEV_CONTAINER='rsyslog/rsyslog_dev_base_openeuler:24.03-lts'
               export RSYSLOG_CONFIGURE_OPTIONS_EXTRA="--disable-elasticsearch-tests \
                      --disable-kafka-tests"
