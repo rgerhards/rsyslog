@@ -37,6 +37,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <netinet/tcp.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 
 #include "rsyslog.h"
@@ -60,15 +61,45 @@ MODULE_TYPE_NOKEEP;
 /* static data */
 DEFobjStaticHelpers;
 DEFobjCurrIf(glbl) DEFobjCurrIf(net) DEFobjCurrIf(netstrms) DEFobjCurrIf(netstrm) DEFobjCurrIf(prop)
-
-
     /* a few deinit helpers */
 
     /* close socket if open (may always be called) */
-    static void sockClose(int *pSock) {
-    if (*pSock >= 0) {
-        close(*pSock);
-        *pSock = -1;
+    static void lingerClose(const int sock) {
+    char discard[1024];
+
+    if (sock < 0) {
+        return;
+    }
+
+    if (shutdown(sock, SHUT_WR) < 0 && errno != ENOTCONN) {
+        dbgprintf("nsd_ptcp: shutdown(SHUT_WR) failed, errno %d\n", errno);
+    }
+
+    /* Best-effort non-blocking drain: do not wait in the caller thread. */
+    for (;;) {
+        const ssize_t rc = recv(sock, discard, sizeof(discard), MSG_DONTWAIT);
+        if (rc == 0) {
+            break;
+        }
+        if (rc < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                break;
+            }
+            break;
+        }
+    }
+
+    close(sock);
+}
+
+static void sockClose(nsd_ptcp_t *pThis) {
+    if (pThis->sock >= 0) {
+        if (pThis->bAbort) {
+            close(pThis->sock);
+        } else {
+            lingerClose(pThis->sock);
+        }
+        pThis->sock = -1;
     }
 }
 
@@ -76,13 +107,14 @@ DEFobjCurrIf(glbl) DEFobjCurrIf(net) DEFobjCurrIf(netstrms) DEFobjCurrIf(netstrm
  */
 BEGINobjConstruct(nsd_ptcp) /* be sure to specify the object type also in END macro! */
     pThis->sock = -1;
+    pThis->bAbort = 0;
 ENDobjConstruct(nsd_ptcp)
 
 
 /* destructor for the nsd_ptcp object */
 BEGINobjDestruct(nsd_ptcp) /* be sure to specify the object type also in END and CODESTART macros! */
     CODESTARTobjDestruct(nsd_ptcp);
-    sockClose(&pThis->sock);
+    sockClose(pThis);
     if (pThis->remoteIP != NULL) prop.Destruct(&pThis->remoteIP);
     free(pThis->pRemHostName);
 ENDobjDestruct(nsd_ptcp)
@@ -377,6 +409,7 @@ static rsRetVal Abort(nsd_t *pNsd) {
     DEFiRet;
     ISOBJ_TYPE_assert((pThis), nsd_ptcp);
 
+    pThis->bAbort = 1;
     if ((pThis)->sock != -1) {
         ling.l_onoff = 1;
         ling.l_linger = 0;
