@@ -1,0 +1,38 @@
+.. generated-by: Codex content pass (2025-10-10)
+
+.. _error-e2359:
+
+E/2359 - Action resumed
+=======================
+
+:Category: Flow control / recovery
+:Primary impact: Output resumes; queues drain
+:Typical environments: Any action after a transient failure (e.g., network, I/O)
+:Introduced: by 8.0 (present in all 8.x+)
+:Related: :ref:`error-e2007`, :ref:`error-e2027`
+
+**Quick triage**
+
+- Confirmation signal: the previously suspended action is active again.  
+- Check queue depth and recent logs to ensure the underlying issue is **truly resolved** (not flapping).
+
+**Most common root causes**
+
+- Prior network outage or TLS error cleared (receiver back up, firewall opened).  
+- Prior I/O issue fixed (disk space restored, permissions corrected).  
+- Pipeline restarted or recovered after transient errors.
+
+**Fixes**
+
+- None required if conditions are now healthy.  
+- If flapping, investigate the preceding **suspend** reason (``E/2007`` or ``E/2027``) and stabilize the path.
+
+**Why it happens**
+
+When an action leaves suspend state, rsyslog emits ``E/2359`` as a **positive edge**.
+It pairs with the earlier failure (usually ``E/2007``) and indicates the retry loop succeeded.
+
+**See also**
+
+- :ref:`error-e2007` - Action suspended (flow control)  
+- :ref:`error-e2027` - Timeout / connection issue
