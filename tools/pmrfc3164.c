@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 #include "syslogd.h"
 #include "conf.h"
 #include "syslogd-types.h"
@@ -62,6 +63,32 @@ DEFobjCurrIf(ruleset);
 
 /* static data */
 static int bParseHOSTNAMEandTAG; /* cache for the equally-named global param - performance enhancement */
+
+static sbool isIPv6HostnameToken(const uchar* token, const size_t token_len, const int permitSquareBrackets) {
+    struct in6_addr addr;
+    char addr_buf[INET6_ADDRSTRLEN];
+    const uchar* addr_start = token;
+    size_t addr_len = token_len;
+
+    if (token_len == 0 || token_len >= (sizeof(addr_buf) - 1)) {
+        return RSFALSE;
+    }
+
+    if (token[0] == '[' && token[token_len - 1] == ']') {
+        if (!permitSquareBrackets) {
+            return RSFALSE;
+        }
+        addr_start = token + 1;
+        addr_len = token_len - 2;
+        if (addr_len == 0 || addr_len >= (sizeof(addr_buf) - 1)) {
+            return RSFALSE;
+        }
+    }
+
+    memcpy(addr_buf, addr_start, addr_len);
+    addr_buf[addr_len] = '\0';
+    return (inet_pton(AF_INET6, addr_buf, &addr) == 1) ? RSTRUE : RSFALSE;
+}
 
 
 /* parser instance parameters */
@@ -430,6 +457,7 @@ BEGINparse2
                 MsgSetHOSTNAME(pMsg, bufParseHOSTNAME, i);
             } else {
                 int isHostName = 0;
+                size_t ipv6HostLen = 0;
                 if (i > 0) {
                     if (bHadSBracket) {
                         if (p2parse[i] == ']') {
@@ -443,6 +471,26 @@ BEGINparse2
                         }
                     }
                     if (p2parse[i] != ' ') isHostName = 0;
+                }
+
+                if (!isHostName && lenMsg > 0) {
+                    for (ipv6HostLen = 0; ipv6HostLen < (size_t)lenMsg && p2parse[ipv6HostLen] != ' ' &&
+                                          ipv6HostLen < (CONF_HOSTNAME_MAXSIZE - 1);
+                         ++ipv6HostLen) {
+                    }
+                    if (ipv6HostLen > 0 && memchr(p2parse, ':', ipv6HostLen) != NULL &&
+                        isIPv6HostnameToken(p2parse, ipv6HostLen, pInst->bPermitSquareBracketsInHostname)) {
+                        memcpy(bufParseHOSTNAME, p2parse, ipv6HostLen);
+                        bufParseHOSTNAME[ipv6HostLen] = '\0';
+                        MsgSetHOSTNAME(pMsg, bufParseHOSTNAME, ipv6HostLen);
+                        if (ipv6HostLen < (size_t)lenMsg && p2parse[ipv6HostLen] == ' ') {
+                            p2parse += ipv6HostLen + 1;
+                            lenMsg -= (int)(ipv6HostLen + 1);
+                        } else {
+                            p2parse += ipv6HostLen;
+                            lenMsg -= (int)ipv6HostLen;
+                        }
+                    }
                 }
 
                 if (isHostName) {
