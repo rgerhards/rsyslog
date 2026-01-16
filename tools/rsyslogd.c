@@ -30,6 +30,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
 #ifdef ENABLE_LIBLOGGING_STDLOG
     #include <liblogging/stdlog.h>
 #else
@@ -271,37 +272,54 @@ finalize_it:
 }
 
 static rsRetVal writePidFile(void) {
-    FILE *fp;
+    int fd = -1;
+    struct flock fl;
+    char szPid[32];
+    int len;
     DEFiRet;
-
-    const char *tmpPidFile = NULL;
 
     if (!strcmp(PidFile, NO_PIDFILE)) {
         FINALIZE;
     }
-    if (asprintf((char **)&tmpPidFile, "%s.tmp", PidFile) == -1) {
-        ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
-    }
-    if (tmpPidFile == NULL) tmpPidFile = PidFile;
 
-    DBGPRINTF("rsyslogd: writing pidfile '%s'.\n", tmpPidFile);
-    if ((fp = fopen((char *)tmpPidFile, "w")) == NULL) {
-        perror("rsyslogd: error writing pid file (creation stage)\n");
+    DBGPRINTF("rsyslogd: writing pidfile '%s'.\n", PidFile);
+
+    /* Open without O_TRUNC first to prevent clearing file before lock */
+    if ((fd = open((char *)PidFile, O_WRONLY | O_CREAT, 0644)) == -1) {
+        LogError(errno, iRet, "rsyslog: error opening pid file '%s'", PidFile);
         ABORT_FINALIZE(RS_RET_ERR);
     }
-    if (fprintf(fp, "%d", (int)glblGetOurPid()) < 0) {
-        LogError(errno, iRet, "rsyslog: error writing pid file");
-    }
-    fclose(fp);
-    if (tmpPidFile != PidFile) {
-        if (rename(tmpPidFile, PidFile) != 0) {
-            perror("rsyslogd: error writing pid file (rename stage)");
-        }
+
+    /* Acquire Exclusive Lock */
+    memset(&fl, 0, sizeof(fl));
+    fl.l_type = F_WRLCK;
+    fl.l_whence = SEEK_SET;
+    if (fcntl(fd, F_SETLKW, &fl) == -1) {
+        LogError(errno, iRet, "rsyslog: error locking pid file '%s'", PidFile);
+        ABORT_FINALIZE(RS_RET_ERR);
     }
 
+    /* Now safe to truncate */
+    if (ftruncate(fd, 0) == -1) {
+        LogError(errno, iRet, "rsyslog: error truncating pid file '%s'", PidFile);
+        ABORT_FINALIZE(RS_RET_ERR);
+    }
+
+    /* Write PID */
+    len = snprintf(szPid, sizeof(szPid), "%d", (int)glblGetOurPid());
+    if (write(fd, szPid, len) != len) {
+        LogError(errno, iRet, "rsyslog: error writing pid file '%s'", PidFile);
+        ABORT_FINALIZE(RS_RET_ERR);
+    }
+
+    /* fsync to ensure it hits disk (optional but recommended) */
+    fsync(fd);
+
+    /* Lock is released automatically on close */
+
 finalize_it:
-    if (tmpPidFile != PidFile) {
-        free((void *)tmpPidFile);
+    if (fd != -1) {
+        close(fd);
     }
     RETiRet;
 }
@@ -318,7 +336,10 @@ static void clearPidFile(void) {
  * is already running. This MUST be called before we write our own pid file.
  */
 static rsRetVal checkStartupOK(void) {
-    FILE *fp = NULL;
+    int fd = -1;
+    struct flock fl;
+    char buf[32];
+    ssize_t nRead;
     DEFiRet;
 
     DBGPRINTF("rsyslogd: checking if startup is ok, pidfile '%s'.\n", PidFile);
@@ -328,28 +349,51 @@ static rsRetVal checkStartupOK(void) {
         FINALIZE;
     }
 
-    if ((fp = fopen((char *)PidFile, "r")) == NULL) FINALIZE; /* all well, no pid file yet */
-
-    int pf_pid;
-    if (fscanf(fp, "%d", &pf_pid) != 1) {
-        fprintf(stderr, "rsyslogd: error reading pid file, cannot start up\n");
+    if ((fd = open((char *)PidFile, O_RDONLY)) == -1) {
+        if (errno == ENOENT) {
+            FINALIZE; /* All good, file does not exist */
+        }
         ABORT_FINALIZE(RS_RET_ERR);
     }
 
-    /* ok, we got a pid, let's check if the process is running */
-    const pid_t pid = (pid_t)pf_pid;
-    if (kill(pid, 0) == 0 || errno != ESRCH) {
+    /* Acquire Read Lock - Waits if another instance is currently writing */
+    memset(&fl, 0, sizeof(fl));
+    fl.l_type = F_RDLCK;
+    fl.l_whence = SEEK_SET;
+    if (fcntl(fd, F_SETLKW, &fl) == -1) {
+        LogError(errno, iRet, "rsyslog: error locking pid file '%s' for check", PidFile);
+        ABORT_FINALIZE(RS_RET_ERR);
+    }
+
+    /* Read PID */
+    nRead = read(fd, buf, sizeof(buf) - 1);
+    if (nRead <= 0) {
+        /* FIX: Robustness against empty files (e.g. crash during previous startup).
+         * If file is empty/unreadable, assume it is stale and allow startup.
+         */
+        LogError(0, NO_ERRCODE,
+                 "rsyslogd: pidfile '%s' exists but is empty/unreadable - assuming stale and starting up", PidFile);
+        FINALIZE;
+    }
+
+    buf[nRead] = '\0';
+    int pf_pid = atoi(buf);
+
+    /* Check if process is running */
+    if (pf_pid > 0 && (kill((pid_t)pf_pid, 0) == 0 || errno != ESRCH)) {
         fprintf(stderr,
                 "rsyslogd: pidfile '%s' and pid %d already exist.\n"
                 "If you want to run multiple instances of rsyslog, you need "
                 "to specify\n"
                 "different pid files for them (-i option).\n",
-                PidFile, (int)getpid());
+                PidFile, pf_pid);
         ABORT_FINALIZE(RS_RET_ERR);
     }
 
 finalize_it:
-    if (fp != NULL) fclose(fp);
+    if (fd != -1) {
+        close(fd);
+    }
     RETiRet;
 }
 
