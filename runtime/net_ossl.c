@@ -1059,7 +1059,7 @@ static int ocsp_check_validate_response_and_cert(OCSP_RESPONSE *rsp,
         goto err;
     }
 
-    s = OCSP_basic_verify(bs, untrusted_peer_certs, store, OCSP_TRUSTOTHER);
+    s = OCSP_basic_verify(bs, untrusted_peer_certs, store, 0);
     if (s <= 0) {
         LogError(0, RS_RET_NO_ERRCODE, "OCSP response verification failed.\n");
         goto err;
@@ -1109,6 +1109,7 @@ static BIO *ocsp_connect(const char *host, const char *port, const char *device)
     int sock = -1;
     struct addrinfo hints, *res = NULL, *rp;
     int s;
+    int flags;
 
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
@@ -1139,7 +1140,7 @@ static BIO *ocsp_connect(const char *host, const char *port, const char *device)
         }
 
         /* Set socket to non-blocking for timeout support */
-        int flags = fcntl(sock, F_GETFL, 0);
+        flags = fcntl(sock, F_GETFL, 0);
         if (flags != -1) {
             fcntl(sock, F_SETFL, flags | O_NONBLOCK);
         }
@@ -1176,7 +1177,7 @@ static BIO *ocsp_connect(const char *host, const char *port, const char *device)
     }
 
     /* Set socket back to blocking mode */
-    int flags = fcntl(sock, F_GETFL, 0);
+    flags = fcntl(sock, F_GETFL, 0);
     if (flags != -1) {
         fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
     }
@@ -1543,6 +1544,14 @@ int net_ossl_verify_callback(int status, X509_STORE_CTX *store) {
     /* This is left here for future enhancement */
 
     /* 1. OCSP */
+    /* TODO: OCSP check performs blocking network I/O (DNS + socket connect/send/recv)
+     * inside the TLS handshake verify callback. This can cause:
+     * - Latency up to OCSP_TIMEOUT (5 seconds) per OCSP responder
+     * - Potential DoS with malicious cert chains containing many OCSP URLs
+     * - Thread blocking under load
+     * Future enhancement: Move to async OCSP with caching, or make it optional.
+     * See: https://github.com/rsyslog/rsyslog/issues/TBD
+     */
     ret = ocsp_check(cert, untrusted_peer_certs, ctx, device, &is_revoked);
     if (ret == 1) {
         /* Status is OK */
