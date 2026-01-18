@@ -1195,7 +1195,7 @@ err:
     return bio;
 }
 
-static OCSP_RESPONSE *ocsp_send_and_recieve(BIO *bio, const char *host, const char *path, OCSP_REQUEST *req) {
+static OCSP_RESPONSE *ocsp_send_and_receive(BIO *bio, const char *host, const char *path, OCSP_REQUEST *req) {
     OCSP_RESPONSE *rsp = NULL;
     char *req_data = NULL;
     int req_len;
@@ -1328,7 +1328,7 @@ static int ocsp_request_per_responder(const char *url,
     OCSP_request_add1_nonce(req, NULL, -1);
 
     /* Send request and receive response */
-    rsp = ocsp_send_and_recieve(bio, host, path, req);
+    rsp = ocsp_send_and_receive(bio, host, path, req);
     if (!rsp) {
         goto err;
     }
