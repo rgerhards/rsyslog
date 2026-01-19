@@ -179,6 +179,7 @@ TESTS +=  \
 	prop-programname-with-slashes.sh \
 	hostname-with-slash-pmrfc5424.sh \
 	hostname-with-slash-pmrfc3164.sh \
+	pmrfc3164-ipv6-hostname.sh \
 	hostname-with-slash-dflt-invld.sh \
 	func-substring-invld-startpos.sh \
 	func-substring-large-endpos.sh \
@@ -2087,6 +2088,7 @@ EXTRA_DIST= \
 	func-substring-relative-endpos.sh \
 	hostname-with-slash-pmrfc5424.sh \
 	hostname-with-slash-pmrfc3164.sh \
+	pmrfc3164-ipv6-hostname.sh \
 	pmrfc3164-msgFirstSpace.sh \
 	pmrfc3164-AtSignsInHostname.sh \
 	pmrfc3164-AtSignsInHostname_off.sh \
