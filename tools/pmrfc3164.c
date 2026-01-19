@@ -70,7 +70,7 @@ static sbool isIPv6HostnameToken(const uchar* token, const size_t token_len, con
     const uchar* addr_start = token;
     size_t addr_len = token_len;
 
-    if (token_len == 0 || token_len >= sizeof(addr_buf)) {
+    if (token_len == 0 || token_len >= (sizeof(addr_buf) - 1)) {
         return RSFALSE;
     }
 
@@ -80,7 +80,7 @@ static sbool isIPv6HostnameToken(const uchar* token, const size_t token_len, con
         }
         addr_start = token + 1;
         addr_len = token_len - 2;
-        if (addr_len == 0 || addr_len >= sizeof(addr_buf)) {
+        if (addr_len == 0 || addr_len >= (sizeof(addr_buf) - 1)) {
             return RSFALSE;
         }
     }
