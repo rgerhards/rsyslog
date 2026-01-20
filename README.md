@@ -88,6 +88,9 @@ For users in regions where GitHub access is limited, see the
 
 See: [Build Instructions](https://rsyslog.com/doc/v8-stable/installation/build_from_repo.html)
 
+> **AI Agents**: Please follow the specialized, machine-optimized build guide in [`doc/ai/BUILDING.md`](doc/ai/BUILDING.md).
+
+
 #### Build Environment Requirements
 * `pkg-config`  
 * `libestr`  

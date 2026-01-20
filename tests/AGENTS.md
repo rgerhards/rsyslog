@@ -33,19 +33,12 @@ agents.
   should know about the new knob.
 
 ## Running tests locally
-- Build rsyslog first using the efficient incremental command:
-  ```bash
-  make -j$(nproc) check TESTS=""
-  ```
-  This ensures the testbench can load freshly built binaries and modules. If the `Makefile` is missing, see "Step 2" in the top-level `AGENTS.md`.
-- Execute individual scenarios directly for quick feedback
-  (`./tests/imfile-basic.sh`).
-- Use `make check TESTS='script.sh'` when you need Automake logging,
-  parallelisation control, or to exercise the Valgrind wrappers.
-- Remove stale `.log`/`.trs` files before re-running a flaky test to avoid
-  Automake caching previous outcomes.
-- For configuration validation changes, run `./tests/validation-run.sh` to
-  confirm both failure and success paths.
+- **Build Instructions**: See [`doc/ai/BUILDING.md`](../doc/ai/BUILDING.md) for the detailed build and test execution guide.
+- **Quick Reference**:
+  - Execute individual scenarios directly: `./tests/imfile-basic.sh`.
+  - Use `make check TESTS='script.sh'` only when you specifically need Automake logging or harness features.
+  - For configuration validation changes, run `./tests/validation-run.sh`.
+
 
 ## Debugging & environment control
 - `tests/diag.sh` documents environment variables such as `SUDO`,

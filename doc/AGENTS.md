@@ -44,7 +44,7 @@ This guide applies to everything under `doc/`.
   the size guidance in `doc/ai/chunking_and_embeddings.md`.
 
 ## Build & validation
-- Run `./doc/tools/build-doc-linux.sh --clean --format html` after changes to catch Sphinx errors early.
+- Run `make html` (from project root or `doc/`) after changes to catch Sphinx errors early.
 - For RAG Knowledge Base updates, use `make -j16 json-formatter`. This builds the doctrees and runs the extraction script to generate `doc/build/rag/rsyslog_rag_db.json`.
 - For quick linting, use `make -C doc html` (uses the repo’s virtualenv if present).
 - Verify Mermaid diagrams render correctly; invalid syntax halts the build.
@@ -55,10 +55,16 @@ This guide applies to everything under `doc/`.
 - Include the `AI-Agent: ChatGPT` trailer as requested by repository guidelines.
 - If a change updates or regenerates the KB, mention the **KB version** in the message.
 
+## File Registration (Makefile.am)
+**CRITICAL**: Any new file added to `doc/` **must** be registered in `doc/Makefile.am`.
+- Add the filename to the `EXTRA_DIST` variable list.
+- Failure to do this means the file will be missing from the distribution tarball.
+
 ## Coordination
 - When editing module-specific docs, consult `doc/ai/module_map.yaml` for component ownership.
 - Mention any **locking or runtime considerations** in the relevant module page.
 - If the change alters common terms (e.g., *log pipeline*), update both the glossary and `/doc/ai/terminology.md`.
+
 
 ## Quick reference
 | Task | Location |

@@ -7,9 +7,9 @@
 - Support status: core-supported. Maturity: deprecated.
 
 ## Build & dependencies
-- Built automatically when plugins are enabled; no extra configure flags or external dependencies.
-- **Efficient Build:** Use `make -j$(nproc) check TESTS=""`.
-- **Bootstrap:** Run `./autogen.sh` only when autotools inputs change.
+- **Build Instructions**: See [`doc/ai/BUILDING.md`](../../doc/ai/BUILDING.md).
+- Built automatically when plugins are enabled.
+
 
 ## Local testing
 - There is no standalone test suite for `omruleset`. Building rsyslog with `make` is sufficient validation.

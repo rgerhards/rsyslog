@@ -4,13 +4,9 @@ These instructions apply to everything under `plugins/` (except `plugins/externa
 which vendors third-party code; do not modify it unless specifically requested).
 
 ## Build & bootstrap reminders
-- **Efficient Build:** Use `make -j$(nproc) check TESTS=""` to incrementally build the core and all test dependencies. This is the primary build command.
-- **Bootstrap/Configure:** Only run `./autogen.sh` and `./configure` if:
-    1.  The `Makefile` is missing (first run).
-    2.  You have modified `configure.ac`, `Makefile.am`, or `m4/` files.
-    3.  You need to change build options (e.g., enabling a new module).
-- **Testbench:** Keep the testbench enabled with `./configure --enable-testbench` (when configuring) so module-specific tests continue to compile.
-- **Run Tests:** Execute the most relevant smoke/regression test directly (e.g., `./tests/imtcp-basic.sh`). Direct invocation keeps stdout/stderr visible. Use `make check` only when mirroring CI.
+- **Build Instructions**: See [`doc/ai/BUILDING.md`](../doc/ai/BUILDING.md) for the authoritative build and test guide.
+- **Bootstrapping**: Build the project from the root using the instructions in `doc/ai/BUILDING.md`.
+
 
 ## Module-level agent guides
 High-complexity modules benefit from their own `AGENTS.md` living directly

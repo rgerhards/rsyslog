@@ -10,8 +10,9 @@ These instructions apply to files inside `plugins/omotel/`.
 - Run `devtools/format-code.sh` before committing.
 
 ## Build & dependencies
-- **Efficient Build:** Use `make -j$(nproc) check TESTS=""`.
-- **Configure:** Use `--enable-omotel` to enable this module.
+- **Build Instructions**: See [`doc/ai/BUILDING.md`](../../doc/ai/BUILDING.md).
+- **Configure**: Use `--enable-omotel` to enable this module.
+
 
 ## Testing
 - Run `tests/omotel-http-batch.sh` to exercise the HTTP batching, gzip, and

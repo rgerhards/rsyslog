@@ -6,9 +6,9 @@
 - Support status: contributor-supported. Maturity: mature.
 
 ## Build & dependencies
-- **Efficient Build:** Use `make -j$(nproc) check TESTS=""` to build the module and test dependencies.
-- **Configure:** Run `./configure --enable-omkafka` (and `--enable-imkafka` if needed).
-- **Bootstrap:** Only run `./autogen.sh` if you touch `configure.ac`, `Makefile.am`, or `m4/`.
+- **Build Instructions**: See [`doc/ai/BUILDING.md`](../../doc/ai/BUILDING.md).
+- **Configure**: Run `./configure --enable-omkafka` (and `--enable-imkafka` if needed).
+
 
 ## Local testing
 - **Skip the Kafka integration tests for routine agent tasks.** They download and run Kafka plus ZooKeeper, which exceeds the sandbox resource budget.

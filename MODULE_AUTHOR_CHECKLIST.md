@@ -22,5 +22,8 @@
 **Testing**
 - [ ] Run with `queue.workerThreads > 1`. CI already runs TSAN on the full suite.
 
+**File Registration (Critical)**
+- [ ] **Makefile.am**: New files (code or tests) MUST be listed in `_SOURCES`, `TESTS`, or `EXTRA_DIST` in the `Makefile.am`.
+
 **Style**
 - [ ] Commit subject ≤ 65 chars; aim for 62. ASCII only. See `CONTRIBUTING.md`.
