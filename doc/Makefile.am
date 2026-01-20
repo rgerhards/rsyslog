@@ -55,6 +55,9 @@ EXTRA_DIST = \
     LICENSE \
     README.md \
     STRATEGY.md \
+    ai/BUILDING.md \
+    ai/CODING_STANDARDS.md \
+    ai/MODULES.md \
     ai/README.md \
     ai/authoring_guidelines.md \
     ai/chunking_and_embeddings.md \

@@ -6,6 +6,8 @@ This doc is intended for maintainers and regular contributors to
 the project. The [`README.md`](README.md) doc covers the basic steps for one-off
 builds from the `main` branch.
 
+> **AI Agents**: Do not use this file. Refer to [`doc/ai/BUILDING.md`](ai/BUILDING.md) for build instructions.
+
 Quick links:
 
 -   Helper scripts: `doc/tools/build-doc-linux.sh`, `doc/tools/build-doc-windows.ps1`

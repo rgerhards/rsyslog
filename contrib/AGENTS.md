@@ -10,13 +10,9 @@ These instructions apply to everything under `contrib/`.
   available in CI.  Document any manual setup that reviewers must perform.
 
 ## Build & bootstrap reminders
-- **Efficient Build:** Use `make -j$(nproc) check TESTS=""` to incrementally build the core and all test dependencies. This is the primary build command.
-- **Bootstrap/Configure:** Only run `./autogen.sh` and `./configure` if:
-    1.  The `Makefile` is missing (first run).
-    2.  You have modified `configure.ac`, `Makefile.am`, or `m4/` files.
-    3.  You need to change build options (e.g., enabling a new contrib module).
-    4.  You need to enable a module that requires specific flags (check `MODULE_METADATA.yaml`).
-- **Run Tests:** Execute the most relevant smoke/regression test directly (e.g., `./tests/imtcp-basic.sh`). Direct invocation keeps stdout/stderr visible. Use `make check` only when mirroring CI.
+- **Build Instructions**: See [`doc/ai/BUILDING.md`](../doc/ai/BUILDING.md).
+- **Contrib Specifics**: You may need to enable the specific contrib module via `./configure` (e.g., `--enable-mmkubernetes`). Check `MODULE_METADATA.yaml` for module-specific flags.
+
 
 ## Metadata required for every module
 Each contrib module directory (for example `contrib/mmkubernetes/`) must contain

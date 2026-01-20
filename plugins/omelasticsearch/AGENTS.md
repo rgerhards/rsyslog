@@ -6,9 +6,9 @@
 - Support status: core-supported. Maturity: fully-mature.
 
 ## Build & dependencies
-- **Efficient Build:** Use `make -j$(nproc) check TESTS=""` to build the module and test dependencies.
-- **Configure:** Run `./configure --enable-elasticsearch` (and other needed flags).
-- **Bootstrap:** Only run `./autogen.sh` if you touch `configure.ac`, `Makefile.am`, or `m4/`.
+- **Build Instructions**: See [`doc/ai/BUILDING.md`](../../doc/ai/BUILDING.md).
+- **Configure**: Run `./configure --enable-elasticsearch` (and other needed flags).
+
 
 ## Local testing
 - **Do not run the integration tests during routine agent work.** They require

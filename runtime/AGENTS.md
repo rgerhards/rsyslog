@@ -21,13 +21,9 @@ collection, and process orchestration).
 - `timezones.c`, `datetime.c`: time conversion helpers.
 
 ## Build & validation
-- **Efficient Build:** Use `make -j$(nproc) check TESTS=""` to incrementally build the core, shared libraries, and test dependencies. This ensures that tests can dynamically load the runtime via `-M../runtime/.libs`.
-- **Bootstrap/Configure:** Run `./autogen.sh` and `./configure --enable-testbench` only when build scripts change (`configure.ac`, `Makefile.am`, etc.) or if the `Makefile` is missing. Run these from the repository root.
-- **Run Tests:** Prefer targeted test runs:
-  - Directly invoke the most relevant shell test under `tests/` (e.g. `./tests/queue-persist.sh`).
-  - Use `make check TESTS='<script>.sh'` when you need automake’s harness or Valgrind variants (`*-vg.sh`).
-  - For configuration validation edits, run `./tests/validation-run.sh`.
-- When changing exported symbols, update `runtime/Makefile.am` and ensure the library version script (if touched) remains consistent with existing SONAME policies.
+- **Build Instructions**: See [`doc/ai/BUILDING.md`](../doc/ai/BUILDING.md) for the authoritative build and test guide.
+- **Core-Specific Note**: When changing exported symbols, update `runtime/Makefile.am` and ensure the library version script (if touched) remains consistent with existing SONAME policies.
+
 
 ## Coding expectations
 - Follow `COMMENTING_STYLE.md` and add/update "Concurrency & Locking" blocks in
