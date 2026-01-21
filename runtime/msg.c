@@ -3264,6 +3264,49 @@ static rsRetVal ATTR_NONNULL() jsonField(const struct templateEntry *const pTpe,
     buflen = (*pBufLen == -1) ? (int)ustrlen(pSrc) : *pBufLen;
     dbgprintf("jsonEncode: datatype: %u, onEmpty: %u val %*s\n", (unsigned)pTpe->data.field.options.dataType,
               (unsigned)pTpe->data.field.options.onEmpty, buflen, pSrc);
+    if (pTpe->data.field.options.bOmitIfZero && pTpe->data.field.options.dataType == TPE_DATATYPE_NUMBER &&
+        buflen > 0) {
+        unsigned start = 0;
+        while (start < buflen && isspace((unsigned char)pSrc[start])) {
+            ++start;
+        }
+        unsigned end = buflen;
+        while (end > start && isspace((unsigned char)pSrc[end - 1])) {
+            --end;
+        }
+        if (start < end) {
+            const unsigned trimmed_len = end - start;
+            char *json_buf = malloc(trimmed_len + 1);
+            if (json_buf != NULL) {
+                int omitField = 0;
+                memcpy(json_buf, pSrc + start, trimmed_len);
+                json_buf[trimmed_len] = '\0';
+                enum fjson_tokener_error parse_err;
+                struct json_object *parsed = fjson_tokener_parse_verbose(json_buf, &parse_err);
+                if (parsed != NULL && parse_err == fjson_tokener_success) {
+                    const enum json_type parsed_type = json_object_get_type(parsed);
+                    if (parsed_type == json_type_double) {
+                        omitField = json_object_get_double(parsed) == 0.0;
+                    } else if (parsed_type == json_type_int) {
+                        omitField = json_object_get_int64(parsed) == 0;
+                    }
+                    json_object_put(parsed);
+                } else if (parsed != NULL) {
+                    json_object_put(parsed);
+                }
+                free(json_buf);
+                if (omitField) {
+                    if (*pbMustBeFreed) {
+                        free(*ppRes);
+                        *pbMustBeFreed = 0;
+                    }
+                    *ppRes = UCHAR_CONSTANT("");
+                    *pBufLen = 0;
+                    FINALIZE;
+                }
+            }
+        }
+    }
     if (buflen == 0) {
         if (pTpe->data.field.options.onEmpty == TPE_DATAEMPTY_SKIP) {
             FINALIZE;
