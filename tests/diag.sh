@@ -3194,37 +3194,82 @@ omhttp_get_data() {
         omhttp_path=$2
     fi
 
-    # The test server returns a json encoded array of strings containing whatever omhttp sent to it in each request
-    python_init="import json, sys; dat = json.load(sys.stdin)"
-    python_print="print('\n'.join(out))"
-    if [ "x$3" == "x" ]; then
-        # dat = ['{"msgnum":"1"}, '{"msgnum":"2"}', '{"msgnum":"3"}', '{"msgnum":"4"}']
-        python_parse="$python_init; out = [json.loads(l)['msgnum'] for l in dat]; $python_print"
-    else
-       if [ "x$3" == "xjsonarray" ]; then
-            # dat = ['[{"msgnum":"1"},{"msgnum":"2"}]', '[{"msgnum":"3"},{"msgnum":"4"}]']
-            python_parse="$python_init; out = [l['msgnum'] for a in dat for l in json.loads(a)]; $python_print"
-        elif [ "x$3" == "xnewline" ]; then
-            # dat = ['{"msgnum":"1"}\n{"msgnum":"2"}', '{"msgnum":"3"}\n{"msgnum":"4"}']
-            python_parse="$python_init; out = [json.loads(l)['msgnum'] for a in dat for l in a.split('\n')]; $python_print"
-        elif [ "x$3" == "xkafkarest" ]; then
-            # dat = ['{"records":[{"value":{"msgnum":"1"}},{"value":{"msgnum":"2"}}]}',
-            #        '{"records":[{"value":{"msgnum":"3"}},{"value":{"msgnum":"4"}}]}']
-            python_parse="$python_init; out = [l['value']['msgnum'] for a in dat for l in json.loads(a)['records']]; $python_print"
-        elif [ "x$3" == "xlokirest" ]; then
-            # dat = ['{"streams":[{"msgnum":"1"},{"msgnum":"2"}]}',
-            #        '{"streams":[{"msgnum":"3"},{"msgnum":"4"}]}']
-            python_parse="$python_init; out = [l['msgnum'] for a in dat for l in json.loads(a)['streams']]; $python_print"
-        else
-            # use newline parsing as default
-            python_parse="$python_init; out = [json.loads(l)['msgnum'] for a in dat for l in a.split('\n')]; $python_print"
-        fi
-
-    fi
+    python_parse='import json, sys\n'
+    python_parse+='fmt = sys.argv[1] if len(sys.argv) > 1 else ""\n'
+    python_parse+='data = json.load(sys.stdin)\n'
+    python_parse+='try:\n'
+    python_parse+='    string_types = (str, bytes)\n'
+    python_parse+='except NameError:\n'
+    python_parse+='    string_types = (str,)\n'
+    python_parse+='def ensure_list(val):\n'
+    python_parse+='    if isinstance(val, list):\n'
+    python_parse+='        return val\n'
+    python_parse+='    return [val]\n'
+    python_parse+='def extract_from_obj(obj, out):\n'
+    python_parse+='    if isinstance(obj, dict):\n'
+    python_parse+='        if "msgnum" in obj:\n'
+    python_parse+='            out.append(str(obj["msgnum"]))\n'
+    python_parse+='        if "value" in obj:\n'
+    python_parse+='            extract_from_obj(obj["value"], out)\n'
+    python_parse+='        if "streams" in obj and isinstance(obj["streams"], list):\n'
+    python_parse+='            for item in obj["streams"]:\n'
+    python_parse+='                extract_from_obj(item, out)\n'
+    python_parse+='        if "records" in obj and isinstance(obj["records"], list):\n'
+    python_parse+='            for item in obj["records"]:\n'
+    python_parse+='                extract_from_obj(item, out)\n'
+    python_parse+='        if "event" in obj:\n'
+    python_parse+='            event_value = obj["event"]\n'
+    python_parse+='            if isinstance(event_value, string_types):\n'
+    python_parse+='                try:\n'
+    python_parse+='                    event_value = json.loads(event_value)\n'
+    python_parse+='                except (TypeError, ValueError):\n'
+    python_parse+='                    event_value = None\n'
+    python_parse+='            extract_from_obj(event_value, out)\n'
+    python_parse+='    elif isinstance(obj, list):\n'
+    python_parse+='        for item in obj:\n'
+    python_parse+='            extract_from_obj(item, out)\n'
+    python_parse+='def extract_msgnums(raw):\n'
+    python_parse+='    nums = []\n'
+    python_parse+='    try:\n'
+    python_parse+='        parsed = json.loads(raw)\n'
+    python_parse+='    except (TypeError, ValueError):\n'
+    python_parse+='        for line in raw.splitlines():\n'
+    python_parse+='            line = line.strip()\n'
+    python_parse+='            if not line:\n'
+    python_parse+='                continue\n'
+    python_parse+='            try:\n'
+    python_parse+='                parsed_line = json.loads(line)\n'
+    python_parse+='            except (TypeError, ValueError):\n'
+    python_parse+='                continue\n'
+    python_parse+='            extract_from_obj(parsed_line, nums)\n'
+    python_parse+='    else:\n'
+    python_parse+='        extract_from_obj(parsed, nums)\n'
+    python_parse+='    return nums\n'
+    python_parse+='def parse_entry(entry):\n'
+    python_parse+='    if isinstance(entry, dict):\n'
+    python_parse+='        summary = entry.get("summary", {})\n'
+    python_parse+='        if isinstance(summary, dict):\n'
+    python_parse+='            msgnums = summary.get("msgnums")\n'
+    python_parse+='            if msgnums:\n'
+    python_parse+='                return [str(v) for v in ensure_list(msgnums)]\n'
+    python_parse+='            if fmt == "hec" and summary.get("hec_events"):\n'
+    python_parse+='                extracted = []\n'
+    python_parse+='                for ev in summary.get("hec_events") or []:\n'
+    python_parse+='                    extract_from_obj(ev, extracted)\n'
+    python_parse+='                if extracted:\n'
+    python_parse+='                    return extracted\n'
+    python_parse+='        raw = entry.get("raw", "")\n'
+    python_parse+='    else:\n'
+    python_parse+='        raw = entry\n'
+    python_parse+='    return [str(v) for v in extract_msgnums(raw)]\n'
+    python_parse+='out = []\n'
+    python_parse+='for item in data:\n'
+    python_parse+='    out.extend(parse_entry(item))\n'
+    python_parse+='print("\\n".join(out))\n'
 
     omhttp_url="localhost:${omhttp_server_port}/${omhttp_path}"
     curl -s ${omhttp_url} \
-        | $PYTHON -c "${python_parse}" | sort -n \
+        | $PYTHON -c "${python_parse}" "$3" | sort -n \
         > ${RSYSLOG_OUT_LOG}
 }
 
