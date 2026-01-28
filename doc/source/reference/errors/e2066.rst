@@ -1,0 +1,47 @@
+.. generated-by: Codex content pass (2025-10-10)
+
+.. _error-e2066:
+
+E/2066 - Module missing or not available
+========================================
+
+:Category: Startup / module loading
+:Primary impact: Action/config not loaded; feature unavailable
+:Typical environments: Distro split packages; custom builds; optional modules
+:Introduced: by 8.0 (present in all 8.x+)
+:Related: :ref:`error-e2124`
+
+**Quick triage**
+
+1) Identify which module is referenced by the config (page/module name).  
+2) Check installed packages and module directory:
+   ::
+
+      rsyslogd -v | grep -i modules || true
+      find /usr/lib*/rsyslog -maxdepth 1 -type f -name "*.so" 2>/dev/null
+3) If using a distro package, verify the matching subpackage is installed.
+
+**Most common root causes**
+
+- Module not built or not installed (e.g., TLS, database, special outputs).  
+- Distro split packages (e.g., `rsyslog-gnutls`, database drivers) not present.  
+- Legacy directive refers to functionality that now requires a module.
+
+**Fixes**
+
+- Install the appropriate package or rebuild with the module enabled.  
+- Load the module explicitly if required:
+  ::
+
+    module(load="omfwd")
+- Replace legacy directives with modern action syntax if applicable.
+
+**Why it happens**
+
+The configuration references a capability provided by a loadable module, but the
+module is not available in the runtime. Install or enable it, then re-run
+``rsyslogd -N1`` to validate.
+
+**See also**
+
+- :ref:`error-e2124` - Configuration parse problem

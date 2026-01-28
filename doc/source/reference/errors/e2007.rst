@@ -1,0 +1,48 @@
+.. generated-by: Codex seed (2025-10-10)
+
+.. _error-e2007:
+
+E/2007 - Action suspended (flow control)
+========================================
+
+:Category: Flow control / output failure
+:Primary impact: Output stalls; queues grow
+:Typical environments: Debian/Raspbian; omfile/ompipe; pipe ``/dev/xconsole``
+:Introduced: by 8.0 (present in all 8.x+)
+:Related: :ref:`error-e2359`, :ref:`error-e2027`
+
+**Quick triage**
+
+1) Read the **line before** E/2007 for the specific I/O error and failing action.  
+2) On Debian/Raspbian, check for an ``/dev/xconsole`` pipe sink; comment it out if unused.  
+3) Name actions to trace failures clearly: add ``name="..."`` to actions.
+
+**Most common root causes**
+
+- Unread named pipe (``/dev/xconsole``) causing suspend/retry loops.  
+- Output I/O failure for ``omfile`` (disk full, permissions, path missing).  
+- Downstream blocks (e.g. network) causing backpressure.
+
+**Fixes**
+
+- Remove or comment the rule writing to ``/dev/xconsole`` if not consumed.  
+- Free disk space or correct permissions/paths for affected files.  
+- Add explicit action names, e.g.:
+  ::
+
+    action(
+      type="omfile"
+      name="to-secure"
+      file="/var/log/secure"
+    )
+
+**Why it happens**
+
+``E/2007`` is a **generic flow-control** message indicating an action entered
+suspend state. The **preceding** log line contains the concrete reason (I/O,
+permission, device, or network related). Resolve that root cause to resume.
+
+**See also**
+
+- :ref:`error-e2359` - Action resumed  
+- :ref:`error-e2027` - Timeout / connection issues that can trigger suspends

@@ -13,5 +13,6 @@ Reference
    how2help
    community
    features
+   reference/errors/index
    proposals/index
    whitepapers/index

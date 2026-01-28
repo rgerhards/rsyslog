@@ -981,3 +981,12 @@ syslogs to remote servers in different namespaces specify them as separate actio
    action(type="omfwd" Target="192.168.1.13" Port="10514" Protocol="tcp" NetworkNamespace="ns_eth0.0")
    action(type="omfwd" Target="192.168.2.24" Port="10514" Protocol="tcp" NetworkNamespace="ns_eth0.1")
    action(type="omfwd" Target="192.168.3.38" Port="10514" Protocol="tcp" NetworkNamespace="ns_eth0.2")
+
+
+Common errors
+=============
+
+- :ref:`error-e2007` - Action suspended (flow control)
+- :ref:`error-e2027` - Timeout / connection issue
+- :ref:`error-e2359` - Action resumed
+
