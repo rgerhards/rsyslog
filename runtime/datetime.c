@@ -31,6 +31,7 @@
 #include <ctype.h>
 #include <assert.h>
 #include <string.h>
+#include <pthread.h>
 #ifdef HAVE_SYS_TIME_H
     #include <sys/time.h>
 #endif
@@ -47,6 +48,8 @@
 
 /* static data */
 DEFobjStaticHelpers;
+
+static pthread_rwlock_t mutClock;
 
 /* the following table of ten powers saves us some computation */
 static const int tenPowers[6] = {1, 10, 100, 1000, 10000, 100000};
@@ -94,6 +97,19 @@ static const char *monthNames[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 
 /* ------------------------------ methods ------------------------------ */
 
+static struct tm *sys_localtime_r(const time_t *timep, struct tm *result) {
+    struct tm *ret;
+    pthread_rwlock_rdlock(&mutClock);
+    ret = localtime_r(timep, result);
+    pthread_rwlock_unlock(&mutClock);
+    return ret;
+}
+
+static void updateTimezone(void) {
+    pthread_rwlock_wrlock(&mutClock);
+    tzset();
+    pthread_rwlock_unlock(&mutClock);
+}
 
 /**
  * Convert struct timeval to syslog_time
@@ -111,7 +127,7 @@ static void timeval2syslogTime(struct timeval *tp, struct syslogTime *t, const i
     if (inUTC)
         tm = gmtime_r(&secs, &tmBuf);
     else
-        tm = localtime_r(&secs, &tmBuf);
+        tm = sys_localtime_r(&secs, &tmBuf);
 
     t->year = tm->tm_year + 1900;
     t->month = tm->tm_mon + 1;
@@ -1308,6 +1324,8 @@ BEGINobjQueryInterface(datetime)
     pIf->formatTimestampUnix = formatTimestampUnix;
     pIf->syslogTime2time_t = syslogTime2time_t;
     pIf->formatUnixTimeFromTime_t = formatUnixTimeFromTime_t;
+    pIf->sys_localtime_r = sys_localtime_r;
+    pIf->updateTimezone = updateTimezone;
 finalize_it:
 ENDobjQueryInterface(datetime)
 
@@ -1318,7 +1336,12 @@ ENDobjQueryInterface(datetime)
  */
 BEGINAbstractObjClassInit(datetime, 1, OBJ_IS_CORE_MODULE) /* class, version */
     /* request objects we use */
+    pthread_rwlock_init(&mutClock, NULL);
 ENDObjClassInit(datetime)
+
+BEGINObjClassExit(datetime, OBJ_IS_CORE_MODULE)
+    pthread_rwlock_destroy(&mutClock);
+ENDObjClassExit(datetime)
 
 /* vi:set ai:
  */

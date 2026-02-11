@@ -51,6 +51,7 @@
 #include "prop.h"
 #include "ruleset.h"
 #include "parserif.h"
+#include "datetime.h"
 #include <libfastjson/json.h> /* libfastjson for robust JSON parsing in Zabbix collector */
 
 #ifdef ENABLE_IMPSTATS_PUSH
@@ -71,7 +72,7 @@ MODULE_CNFNAME("impstats")
 
 /* Module static data */
 DEF_IMOD_STATIC_DATA;
-DEFobjCurrIf(glbl) DEFobjCurrIf(prop) DEFobjCurrIf(statsobj) DEFobjCurrIf(ruleset)
+DEFobjCurrIf(glbl) DEFobjCurrIf(prop) DEFobjCurrIf(statsobj) DEFobjCurrIf(ruleset) DEFobjCurrIf(datetime)
 
     typedef struct configSettings_s {
     int iStatsInterval;
@@ -167,6 +168,7 @@ BEGINmodExit
     objRelease(prop, CORE_COMPONENT);
     objRelease(statsobj, CORE_COMPONENT);
     objRelease(ruleset, CORE_COMPONENT);
+    objRelease(datetime, CORE_COMPONENT);
 ENDmodExit
 BEGINisCompatibleWithFeature
     CODESTARTisCompatibleWithFeature;
@@ -1095,7 +1097,7 @@ static void generateZabbixStats(void) {
     char timebuf[32];
 #if defined(OS_LINUX) || defined(_POSIX_VERSION)
     struct tm tm_local;
-    localtime_r(&t, &tm_local);
+    datetime.sys_localtime_r(&t, &tm_local);
     strftime(timebuf, sizeof(timebuf), "%a %b %d %H:%M:%S %Y", &tm_local);
 #else
     strftime(timebuf, sizeof(timebuf), "%a %b %d %H:%M:%S %Y", localtime(&t));

@@ -2209,7 +2209,7 @@ static rsRetVal RateLimiter(qqueue_t *pThis) {
     if (pThis->iDeqtWinToHr != 25) { /* 25 means disabled */
         /* time calls are expensive, so only do them when needed */
         datetime.GetTime(&tCurr);
-        localtime_r(&tCurr, &m);
+        datetime.sys_localtime_r(&tCurr, &m);
         iHrCurr = m.tm_hour;
 
         if (pThis->iDeqtWinToHr < pThis->iDeqtWinFromHr) {

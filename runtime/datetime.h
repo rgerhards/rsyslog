@@ -21,6 +21,9 @@
 #ifndef INCLUDED_DATETIME_H
 #define INCLUDED_DATETIME_H
 
+#include <time.h>
+#include "obj-types.h"
+
 /* TODO: define error codes */
 #define NO_ERRCODE -1
 
@@ -56,8 +59,11 @@ BEGINinterface(datetime) /* name must also be changed in ENDinterface macro! */
     time_t (*syslogTime2time_t)(const struct syslogTime *ts);
     /* v11, 2017-10-05 */
     int (*formatUnixTimeFromTime_t)(time_t time, const char *format, char *pBuf, uint pBufMax);
+    /* v12 - 2025-05-23: Add updateTimezone and sys_localtime_r */
+    void (*updateTimezone)(void);
+    struct tm *(*sys_localtime_r)(const time_t *timep, struct tm *result);
 ENDinterface(datetime)
-#define datetimeCURR_IF_VERSION 11 /* increment whenever you change the interface structure! */
+#define datetimeCURR_IF_VERSION 12 /* increment whenever you change the interface structure! */
     /* interface changes:
      * 1 - initial version
      * 2 - not compatible to 1 - bugfix required ParseTIMESTAMP3164 to accept char ** as
@@ -72,6 +78,7 @@ ENDinterface(datetime)
      * 10 - functions having addtl paramater inUTC to emit time in UTC:
      *      timeval2syslogTime, getCurrtime
      * 11 - Add formatUnixTimeFromTime_t
+     * 12 - Add updateTimezone and sys_localtime_r
      */
 
 #define PARSE3164_TZSTRING 1

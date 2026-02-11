@@ -35,6 +35,8 @@
 #include "errmsg.h"
 #include "operatingstate.h"
 #include "rsconf.h"
+#include "datetime.h"
+#include "obj.h"
 
 #ifndef O_LARGEFILE
     #define O_LARGEFILE 0
@@ -43,11 +45,13 @@
     #define lseek64(fd, offset, whence) lseek(fd, offset, whence)
 #endif
 
+DEFobjStaticHelpers DEFobjCurrIf(datetime)
+
 /* some important standard states */
 #define STATE_INITIALIZING "INITIALIZING"
 #define STATE_CLEAN_CLOSE "CLEAN CLOSE"
 
-static int fd_osf = -1;
+    static int fd_osf = -1;
 
 /* check if old osf points to a problem and, if so, report */
 static void osf_checkOnStartup(void) {
@@ -123,9 +127,12 @@ done:
 }
 
 void osf_open(void) {
+    rsRetVal iRet = RS_RET_OK;
     assert(fd_osf == -1);
     const char *fn_osf = (const char *)glblGetOperatingStateFile(loadConf);
     assert(fn_osf != NULL);
+
+    CHKiRet(objUse(datetime, CORE_COMPONENT));
 
     osf_checkOnStartup();
 
@@ -141,6 +148,7 @@ void osf_open(void) {
     assert(fd_osf != -1);
 
     osf_write(OSF_TAG_STATE, STATE_INITIALIZING " " VERSION);
+finalize_it:
 done:
     return;
 }
@@ -158,7 +166,7 @@ void ATTR_NONNULL() osf_write(const char *const tag, const char *const line) {
     if (fd_osf == -1) return;
 
     time(&tt);
-    localtime_r(&tt, &tm);
+    datetime.sys_localtime_r(&tt, &tm);
     len = snprintf(buf, sizeof(buf) - 1, "%d%2.2d%2.2d-%2.2d%2.2d%2.2d: %-5.5s %s\n", tm.tm_year + 1900, tm.tm_mon + 1,
                    tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, tag, line);
     if (len > sizeof(buf) - 1) {
@@ -176,4 +184,5 @@ void osf_close(void) {
     if (fd_osf == -1) return;
     osf_write(OSF_TAG_STATE, STATE_CLEAN_CLOSE);
     close(fd_osf);
+    objRelease(datetime, CORE_COMPONENT);
 }
