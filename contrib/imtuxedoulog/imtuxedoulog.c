@@ -60,6 +60,7 @@
 #include "stringbuf.h"
 #include "ruleset.h"
 #include "ratelimit.h"
+#include "datetime.h"
 
 struct instanceConf_s {
     uchar *pszUlogBaseName;
@@ -102,6 +103,7 @@ MODULE_CNFNAME("imtuxedoulog")
 /* Module static data */
 DEF_IMOD_STATIC_DATA /* must be present, starts static data */
     DEFobjCurrIf(glbl) DEFobjCurrIf(strm) DEFobjCurrIf(prop) DEFobjCurrIf(ruleset)
+    DEFobjCurrIf(datetime)
 
 #define NUM_MULTISUB 1024 /* default max number of submits */
 #define DFLT_PollInterval 10
@@ -137,7 +139,7 @@ static uchar *mkFileNameWithTime(instanceConf_t *in) {
 #else
     gettimeofday(&tp, NULL);
 #endif
-    localtime_r(&tp.tv_sec, &(in->currTm));
+    datetime.sys_localtime_r(&tp.tv_sec, &(in->currTm));
     snprintf((char *)out, MAXFNAME, "%s.%02d%02d%02d", (char *)in->pszUlogBaseName, in->currTm.tm_mon + 1,
              in->currTm.tm_mday, in->currTm.tm_year % 100);
     return ustrdup(out);
@@ -768,6 +770,7 @@ BEGINmodExit
     objRelease(glbl, CORE_COMPONENT);
     objRelease(prop, CORE_COMPONENT);
     objRelease(ruleset, CORE_COMPONENT);
+    objRelease(datetime, CORE_COMPONENT);
 ENDmodExit
 
 BEGINqueryEtryPt
@@ -792,4 +795,5 @@ BEGINmodInit()
     CHKiRet(objUse(strm, CORE_COMPONENT));
     CHKiRet(objUse(ruleset, CORE_COMPONENT));
     CHKiRet(objUse(prop, CORE_COMPONENT));
+    CHKiRet(objUse(datetime, CORE_COMPONENT));
 ENDmodInit

@@ -61,6 +61,7 @@
 #include "hashtable.h"
 #include "hashtable_itr.h"
 #include "rsconf.h"
+#include "datetime.h"
 
 
 /* externally-visiable data (see statsobj.h for explanation) */
@@ -68,6 +69,7 @@ int GatherStats = 0;
 
 /* static data */
 DEFobjStaticHelpers;
+DEFobjCurrIf(datetime)
 
 /* doubly linked list of stats objects. Object is automatically linked to it
  * upon construction. Enqueue always happens at the front (simplifies logic).
@@ -804,7 +806,7 @@ void checkGoneAwaySenders(const time_t tCurr) {
             stat = (struct sender_stats *)hashtable_iterator_value(itr);
             if (stat->lastSeen < rqdLast) {
                 if (runConf->globals.reportGoneAwaySenders) {
-                    localtime_r(&stat->lastSeen, &tm);
+                    datetime.sys_localtime_r(&stat->lastSeen, &tm);
                     LogMsg(0, RS_RET_SENDER_GONE_AWAY, LOG_WARNING,
                            "removing sender '%s' from connection "
                            "table, last seen at "
@@ -883,6 +885,7 @@ ENDobjQueryInterface(statsobj)
  */
 BEGINAbstractObjClassInit(statsobj, 1, OBJ_IS_CORE_MODULE) /* class, version */
     /* request objects we use */
+    CHKiRet(objUse(datetime, CORE_COMPONENT));
 
     /* set our own handlers */
     OBJSetMethodHandler(objMethod_DEBUGPRINT, statsobjDebugPrint);
@@ -904,6 +907,7 @@ ENDObjClassInit(statsobj)
  */
 BEGINObjClassExit(statsobj, OBJ_IS_CORE_MODULE) /* class, version */
     /* release objects we no longer need */
+    objRelease(datetime, CORE_COMPONENT);
     pthread_mutex_destroy(&mutStats);
     pthread_mutex_destroy(&mutSenders);
     hashtable_destroy(stats_senders, 1);

@@ -51,7 +51,7 @@ MODULE_TYPE_LIB
 MODULE_TYPE_KEEP
 
 /* static data */
-DEFobjStaticHelpers DEFobjCurrIf(glbl) DEFobjCurrIf(net) DEFobjCurrIf(nsd_ptcp)
+DEFobjStaticHelpers DEFobjCurrIf(glbl) DEFobjCurrIf(net) DEFobjCurrIf(nsd_ptcp) DEFobjCurrIf(datetime)
 /* Mbed TLS debug level (0..5)
  * 5 is the most logs.
  */
@@ -159,7 +159,7 @@ static rsRetVal get_custom_string(char **out) {
     struct tm tm;
 
     CHKiRet(gettimeofday(&tv, NULL));
-    if (localtime_r(&(tv.tv_sec), &tm) == NULL) {
+    if (datetime.sys_localtime_r(&(tv.tv_sec), &tm) == NULL) {
         ABORT_FINALIZE(RS_RET_NO_ERRCODE);
     }
     if (asprintf(out, "nsd_mbedtls-%04d-%02d-%02d %02d:%02d:%02d:%08ld", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
@@ -1393,6 +1393,7 @@ BEGINObjClassExit(nsd_mbedtls, OBJ_IS_LOADABLE_MODULE) /* CHANGE class also in E
     objRelease(nsd_ptcp, LM_NSD_PTCP_FILENAME);
     objRelease(net, LM_NET_FILENAME);
     objRelease(glbl, CORE_COMPONENT);
+    objRelease(datetime, CORE_COMPONENT);
 ENDObjClassExit(nsd_mbedtls)
 
 /* Initialize the nsd_mbedtls class. Must be called as the very first method
@@ -1404,6 +1405,7 @@ BEGINObjClassInit(nsd_mbedtls, 1, OBJ_IS_LOADABLE_MODULE) /* class, version */
     CHKiRet(objUse(glbl, CORE_COMPONENT));
     CHKiRet(objUse(nsd_ptcp, LM_NSD_PTCP_FILENAME));
     CHKiRet(objUse(net, LM_NET_FILENAME));
+    CHKiRet(objUse(datetime, CORE_COMPONENT));
 
     /* now do global TLS init stuff */
     CHKiRet(mbedtlsGlblInit());
