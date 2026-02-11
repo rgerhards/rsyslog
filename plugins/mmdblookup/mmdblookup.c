@@ -464,6 +464,7 @@ BEGINdoAction_NoStrings
         MMDB_dump_entry_data_list(memstream, entry_data_list, 2);
     }
     /* We must close the memstream before calling str_split. This is because
+     * the stream holds a pointer to the buffer, which str_split will free.
      * str_split() frees and re-allocates the buffer. If we close the stream
      * after that, the stream implementation may try to access the already-freed
      * buffer, leading to double-free or heap corruption (as seen in CI).
