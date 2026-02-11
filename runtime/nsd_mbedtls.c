@@ -46,6 +46,7 @@
 #include "nsd_mbedtls.h"
 #include "rsconf.h"
 #include "net.h"
+#include "datetime.h"
 
 MODULE_TYPE_LIB
 MODULE_TYPE_KEEP
