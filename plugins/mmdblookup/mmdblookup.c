@@ -325,68 +325,70 @@ ENDtryResume
 
 
 static rsRetVal str_split(char **membuf) {
-	DEFiRet;
-	int in_quotes = 0;
-	char *buf = *membuf;
-	char *dst;
-	char *tempbuf = NULL;
+    DEFiRet;
+    int in_quotes = 0;
+    char *buf = *membuf;
+    char *dst;
+    char *tempbuf = NULL;
 
-	if (buf == NULL)
-		RETiRet;
+    if (buf == NULL) {
+        RETiRet;
+    }
 
-	/* allocate 2x buffer to be safe against expansion (e.g. '}' -> '},') */
-	CHKmalloc(tempbuf = malloc(strlen(buf) * 2 + 1));
-	dst = tempbuf;
+    /* allocate 2x buffer to be safe against expansion (e.g. '}' -> '},') */
+    CHKmalloc(tempbuf = malloc(strlen(buf) * 2 + 1));
+    dst = tempbuf;
 
-	/* skip first char (e.g. '{') as per original logic */
-	if (*buf != '\0')
-		buf++;
+    /* skip first char (e.g. '{') as per original logic */
+    if (*buf != '\0') {
+        buf++;
+    }
 
-	while (*buf != '\0') {
-		if (in_quotes) {
-			if (*buf == '"' && *(buf - 1) != '\\') {
-				in_quotes = !in_quotes;
-				*dst++ = *buf;
-			} else {
-				*dst++ = *buf;
-			}
-		} else {
-			if (*buf == '\n' || *buf == '\t' || *buf == ' ') {
-				/* skip */
-			} else if (*buf == '<') {
-				char *p = strchr(buf, '>');
-				if (p) {
-					buf = p; /* point to '>', loop inc skips it */
-					*dst++ = ',';
-				} else {
-					*dst++ = *buf;
-				}
-			} else if (*buf == '}') {
-				*dst++ = '}';
-				*dst++ = ',';
-			} else if (*buf == ']') {
-				*dst++ = ']';
-				*dst++ = ',';
-			} else if (*buf == '"' && *(buf - 1) != '\\') {
-				in_quotes = !in_quotes;
-				*dst++ = *buf;
-			} else {
-				*dst++ = *buf;
-			}
-		}
-		buf++;
-	}
-	*dst = '\0';
+    while (*buf != '\0') {
+        if (in_quotes) {
+            if (*buf == '"' && *(buf - 1) != '\\') {
+                in_quotes = !in_quotes;
+                *dst++ = *buf;
+            } else {
+                *dst++ = *buf;
+            }
+        } else {
+            if (*buf == '\n' || *buf == '\t' || *buf == ' ') {
+                /* skip */
+            } else if (*buf == '<') {
+                char *p = strchr(buf, '>');
+                if (p) {
+                    buf = p; /* point to '>', loop inc skips it */
+                    *dst++ = ',';
+                } else {
+                    *dst++ = *buf;
+                }
+            } else if (*buf == '}') {
+                *dst++ = '}';
+                *dst++ = ',';
+            } else if (*buf == ']') {
+                *dst++ = ']';
+                *dst++ = ',';
+            } else if (*buf == '"' && *(buf - 1) != '\\') {
+                in_quotes = !in_quotes;
+                *dst++ = *buf;
+            } else {
+                *dst++ = *buf;
+            }
+        }
+        buf++;
+    }
+    *dst = '\0';
 
-	free(*membuf);
-	*membuf = tempbuf;
-	tempbuf = NULL;
+    free(*membuf);
+    *membuf = tempbuf;
+    tempbuf = NULL;
 
 finalize_it:
-	if (iRet != RS_RET_OK) {
-		free(tempbuf);
-	}
-	RETiRet;
+    if (iRet != RS_RET_OK) {
+        free(tempbuf);
+    }
+    RETiRet;
 }
 
 
@@ -460,7 +462,18 @@ BEGINdoAction_NoStrings
 
     if (entry_data_list != NULL && memstream != NULL) {
         MMDB_dump_entry_data_list(memstream, entry_data_list, 2);
-        fflush(memstream);
+    }
+    /* We must close the memstream before calling str_split. This is because
+     * str_split() frees and re-allocates the buffer. If we close the stream
+     * after that, the stream implementation may try to access the already-freed
+     * buffer, leading to double-free or heap corruption (as seen in CI).
+     */
+    if (memstream != NULL) {
+        fclose(memstream);
+        memstream = NULL;
+    }
+
+    if (entry_data_list != NULL) {
         CHKiRet(str_split(&membuf));
     }
 
@@ -468,9 +481,9 @@ BEGINdoAction_NoStrings
     total_json = json_tokener_parse(membuf);
     if (total_json == NULL) {
         LogError(0, RS_RET_JSON_PARSE_ERR, "mmdblookup: failed to parse JSON from MMDB: '%s'", membuf);
+        free(membuf);
         ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
     }
-    fclose(memstream);
     free(membuf);
 
     /* extract and amend fields (to message) as configured */
