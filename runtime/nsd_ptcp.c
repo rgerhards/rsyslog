@@ -967,6 +967,7 @@ static rsRetVal Connect(nsd_t *pNsd, int family, uchar *port, uchar *host, char 
     int saved_errno = 0;
     struct timeval start, end;
     long seconds = 0, useconds = 0;
+    int gai_rc;
 
     DEFiRet;
     ISOBJ_TYPE_assert(pThis, nsd_ptcp);
@@ -977,8 +978,9 @@ static rsRetVal Connect(nsd_t *pNsd, int family, uchar *port, uchar *host, char 
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = family;
     hints.ai_socktype = SOCK_STREAM;
-    if (getaddrinfo((char *)host, (char *)port, &hints, &res) != 0) {
-        LogError(errno, RS_RET_IO_ERROR, "cannot resolve hostname '%s'", host);
+    gai_rc = getaddrinfo((char *)host, (char *)port, &hints, &res);
+    if (gai_rc != 0) {
+        LogError(0, RS_RET_IO_ERROR, "cannot resolve hostname '%s': %s", host, gai_strerror(gai_rc));
         ABORT_FINALIZE(RS_RET_IO_ERROR);
     }
 
@@ -996,14 +998,18 @@ static rsRetVal Connect(nsd_t *pNsd, int family, uchar *port, uchar *host, char 
 
         if (device) {
 #if defined(SO_BINDTODEVICE)
-            if (setsockopt(pThis->sock, SOL_SOCKET, SO_BINDTODEVICE, device, strlen(device) + 1) < 0)
-#endif
-            {
+            if (setsockopt(pThis->sock, SOL_SOCKET, SO_BINDTODEVICE, device, strlen(device) + 1) < 0) {
                 saved_errno = errno;
                 dbgprintf("setsockopt(SO_BINDTODEVICE) failed\n");
                 sockClose(&pThis->sock);
                 continue;
             }
+#else
+            saved_errno = ENOTSUP;
+            dbgprintf("SO_BINDTODEVICE not supported\n");
+            sockClose(&pThis->sock);
+            continue;
+#endif
         }
 
         if (connect(pThis->sock, currAddr->ai_addr, currAddr->ai_addrlen) == 0) {
