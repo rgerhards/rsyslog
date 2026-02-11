@@ -101,7 +101,7 @@ static struct cnfparamblk actpblk = {CNFPARAMBLK_VERSION, sizeof(actpdescr) / si
 
 
 /* protype functions */
-void str_split(char **membuf);
+static rsRetVal str_split(char **membuf);
 
 int open_mmdb(const char *file, MMDB_s *mmdb);
 void close_mmdb(MMDB_s *mmdb);
@@ -324,40 +324,69 @@ BEGINtryResume
 ENDtryResume
 
 
-void str_split(char **membuf) {
-    int in_quotes = 0;
-    char *buf = *membuf;
-    char tempbuf[strlen(buf)];
-    memset(tempbuf, 0, strlen(buf));
+static rsRetVal str_split(char **membuf) {
+	DEFiRet;
+	int in_quotes = 0;
+	char *buf = *membuf;
+	char *dst;
+	char *tempbuf = NULL;
 
-    while (*buf++ != '\0') {
-        if (in_quotes) {
-            if (*buf == '"' && *(buf - 1) != '\\') {
-                in_quotes = !in_quotes;
-                strncat(tempbuf, buf, 1);
-            } else {
-                strncat(tempbuf, buf, 1);
-            }
-        } else {
-            if (*buf == '\n' || *buf == '\t' || *buf == ' ') continue;
-            if (*buf == '<') {
-                char *p = strchr(buf, '>');
-                buf = buf + (int)(p - buf);
-                strcat(tempbuf, ",");
-            } else if (*buf == '}') {
-                strcat(tempbuf, "},");
-            } else if (*buf == ']') {
-                strcat(tempbuf, "],");
-            } else if (*buf == '"' && *(buf - 1) != '\\') {
-                in_quotes = !in_quotes;
-                strncat(tempbuf, buf, 1);
-            } else {
-                strncat(tempbuf, buf, 1);
-            }
-        }
-    }
+	if (buf == NULL)
+		RETiRet;
 
-    memcpy(*membuf, tempbuf, strlen(tempbuf) + 1);
+	/* allocate 2x buffer to be safe against expansion (e.g. '}' -> '},') */
+	CHKmalloc(tempbuf = malloc(strlen(buf) * 2 + 1));
+	dst = tempbuf;
+
+	/* skip first char (e.g. '{') as per original logic */
+	if (*buf != '\0')
+		buf++;
+
+	while (*buf != '\0') {
+		if (in_quotes) {
+			if (*buf == '"' && *(buf - 1) != '\\') {
+				in_quotes = !in_quotes;
+				*dst++ = *buf;
+			} else {
+				*dst++ = *buf;
+			}
+		} else {
+			if (*buf == '\n' || *buf == '\t' || *buf == ' ') {
+				/* skip */
+			} else if (*buf == '<') {
+				char *p = strchr(buf, '>');
+				if (p) {
+					buf = p; /* point to '>', loop inc skips it */
+					*dst++ = ',';
+				} else {
+					*dst++ = *buf;
+				}
+			} else if (*buf == '}') {
+				*dst++ = '}';
+				*dst++ = ',';
+			} else if (*buf == ']') {
+				*dst++ = ']';
+				*dst++ = ',';
+			} else if (*buf == '"' && *(buf - 1) != '\\') {
+				in_quotes = !in_quotes;
+				*dst++ = *buf;
+			} else {
+				*dst++ = *buf;
+			}
+		}
+		buf++;
+	}
+	*dst = '\0';
+
+	free(*membuf);
+	*membuf = tempbuf;
+	tempbuf = NULL;
+
+finalize_it:
+	if (iRet != RS_RET_OK) {
+		free(tempbuf);
+	}
+	RETiRet;
 }
 
 
@@ -432,11 +461,15 @@ BEGINdoAction_NoStrings
     if (entry_data_list != NULL && memstream != NULL) {
         MMDB_dump_entry_data_list(memstream, entry_data_list, 2);
         fflush(memstream);
-        str_split(&membuf);
+        CHKiRet(str_split(&membuf));
     }
 
     DBGPRINTF("maxmindb returns: '%s'\n", membuf);
     total_json = json_tokener_parse(membuf);
+    if (total_json == NULL) {
+        LogError(0, RS_RET_JSON_PARSE_ERR, "mmdblookup: failed to parse JSON from MMDB: '%s'", membuf);
+        ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
+    }
     fclose(memstream);
     free(membuf);
 
