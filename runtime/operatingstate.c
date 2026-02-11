@@ -45,14 +45,13 @@
     #define lseek64(fd, offset, whence) lseek(fd, offset, whence)
 #endif
 
-DEFobjStaticHelpers
-DEFobjCurrIf(datetime)
+DEFobjStaticHelpers DEFobjCurrIf(datetime)
 
 /* some important standard states */
 #define STATE_INITIALIZING "INITIALIZING"
 #define STATE_CLEAN_CLOSE "CLEAN CLOSE"
 
-static int fd_osf = -1;
+    static int fd_osf = -1;
 
 /* check if old osf points to a problem and, if so, report */
 static void osf_checkOnStartup(void) {

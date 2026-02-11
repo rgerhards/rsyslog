@@ -72,8 +72,7 @@ MODULE_CNFNAME("impstats")
 
 /* Module static data */
 DEF_IMOD_STATIC_DATA;
-DEFobjCurrIf(glbl) DEFobjCurrIf(prop) DEFobjCurrIf(statsobj) DEFobjCurrIf(ruleset)
-    DEFobjCurrIf(datetime)
+DEFobjCurrIf(glbl) DEFobjCurrIf(prop) DEFobjCurrIf(statsobj) DEFobjCurrIf(ruleset) DEFobjCurrIf(datetime)
 
     typedef struct configSettings_s {
     int iStatsInterval;

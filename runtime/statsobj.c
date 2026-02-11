@@ -71,10 +71,10 @@ int GatherStats = 0;
 DEFobjStaticHelpers;
 DEFobjCurrIf(datetime)
 
-/* doubly linked list of stats objects. Object is automatically linked to it
- * upon construction. Enqueue always happens at the front (simplifies logic).
- */
-static statsobj_t *objRoot = NULL;
+    /* doubly linked list of stats objects. Object is automatically linked to it
+     * upon construction. Enqueue always happens at the front (simplifies logic).
+     */
+    static statsobj_t *objRoot = NULL;
 static statsobj_t *objLast = NULL;
 
 static pthread_mutex_t mutStats;

@@ -102,8 +102,7 @@ MODULE_CNFNAME("imtuxedoulog")
 
 /* Module static data */
 DEF_IMOD_STATIC_DATA /* must be present, starts static data */
-    DEFobjCurrIf(glbl) DEFobjCurrIf(strm) DEFobjCurrIf(prop) DEFobjCurrIf(ruleset)
-    DEFobjCurrIf(datetime)
+    DEFobjCurrIf(glbl) DEFobjCurrIf(strm) DEFobjCurrIf(prop) DEFobjCurrIf(ruleset) DEFobjCurrIf(datetime)
 
 #define NUM_MULTISUB 1024 /* default max number of submits */
 #define DFLT_PollInterval 10

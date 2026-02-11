@@ -22,6 +22,7 @@
 #define INCLUDED_DATETIME_H
 
 #include <time.h>
+#include "obj-types.h"
 
 /* TODO: define error codes */
 #define NO_ERRCODE -1
