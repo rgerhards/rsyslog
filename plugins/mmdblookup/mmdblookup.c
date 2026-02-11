@@ -456,7 +456,7 @@ BEGINdoAction_NoStrings
     }
 
     size_t memlen;
-    char *membuf;
+    char *membuf = NULL;
     FILE *memstream;
     CHKmalloc(memstream = open_memstream(&membuf, &memlen));
 
@@ -483,9 +483,11 @@ BEGINdoAction_NoStrings
     if (total_json == NULL) {
         LogError(0, RS_RET_JSON_PARSE_ERR, "mmdblookup: failed to parse JSON from MMDB: '%s'", membuf);
         free(membuf);
+        membuf = NULL;
         ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
     }
     free(membuf);
+    membuf = NULL;
 
     /* extract and amend fields (to message) as configured */
     for (int i = 0; i < pData->fieldList.nmemb; ++i) {
@@ -512,6 +514,7 @@ BEGINdoAction_NoStrings
 finalize_it:
     pthread_mutex_unlock(&pWrkrData->mmdbMutex);
     if (entry_data_list != NULL) MMDB_free_entry_data_list(entry_data_list);
+    free(membuf);
     json_object_put(keyjson);
     if (total_json != NULL) json_object_put(total_json);
 ENDdoAction
