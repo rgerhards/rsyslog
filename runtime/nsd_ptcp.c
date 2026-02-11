@@ -1005,7 +1005,13 @@ static rsRetVal Connect(nsd_t *pNsd, int family, uchar *port, uchar *host, char 
                 continue;
             }
 #else
+    #if defined(EOPNOTSUPP)
+            saved_errno = EOPNOTSUPP;
+    #elif defined(ENOTSUP)
             saved_errno = ENOTSUP;
+    #else
+            saved_errno = ENOSYS;
+    #endif
             dbgprintf("SO_BINDTODEVICE not supported\n");
             sockClose(&pThis->sock);
             continue;
