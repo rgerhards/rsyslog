@@ -397,6 +397,7 @@ BEGINdoAction_NoStrings
     smsg_t *pMsg = ppMsg[0];
     struct json_object *keyjson = NULL;
     const char *pszValue;
+    char *membuf = NULL;
     instanceData *const pData = pWrkrData->pData;
     json_object *total_json = NULL;
     MMDB_entry_data_list_s *entry_data_list = NULL;
@@ -456,7 +457,6 @@ BEGINdoAction_NoStrings
     }
 
     size_t memlen;
-    char *membuf = NULL;
     FILE *memstream;
     CHKmalloc(memstream = open_memstream(&membuf, &memlen));
 
