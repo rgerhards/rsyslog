@@ -21,6 +21,12 @@ ensure_mysqld_datadir() {
 	$SUDO mkdir -p /var/lib/mysql /var/run/mysqld
 	$SUDO chown -R mysql:mysql /var/lib/mysql /var/run/mysqld
 
+	# Some package versions leave partial files in /var/lib/mysql without system
+	# tables. In that state, mysqld initialization aborts unless we start clean.
+	if $SUDO find /var/lib/mysql -mindepth 1 -maxdepth 1 | grep -q .; then
+		printf 'mysql datadir contains partial files, resetting it before init...\n'
+		$SUDO find /var/lib/mysql -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+	fi
 	if command -v mysqld >/dev/null 2>&1 && \
 	   mysqld --help --verbose 2>/dev/null | grep -q -- '--initialize-insecure'; then
 		$SUDO mysqld --initialize-insecure --user=mysql --datadir=/var/lib/mysql
