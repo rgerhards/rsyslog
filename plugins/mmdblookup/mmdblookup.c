@@ -101,7 +101,7 @@ static struct cnfparamblk actpblk = {CNFPARAMBLK_VERSION, sizeof(actpdescr) / si
 
 
 /* protype functions */
-void str_split(char **membuf);
+static rsRetVal str_split(char **membuf);
 
 int open_mmdb(const char *file, MMDB_s *mmdb);
 void close_mmdb(MMDB_s *mmdb);
@@ -324,40 +324,71 @@ BEGINtryResume
 ENDtryResume
 
 
-void str_split(char **membuf) {
+static rsRetVal str_split(char **membuf) {
+    DEFiRet;
     int in_quotes = 0;
     char *buf = *membuf;
-    char tempbuf[strlen(buf)];
-    memset(tempbuf, 0, strlen(buf));
+    char *dst;
+    char *tempbuf = NULL;
 
-    while (*buf++ != '\0') {
+    if (buf == NULL) {
+        RETiRet;
+    }
+
+    /* allocate 2x buffer to be safe against expansion (e.g. '}' -> '},') */
+    CHKmalloc(tempbuf = malloc(strlen(buf) * 2 + 1));
+    dst = tempbuf;
+
+    /* skip first char (e.g. '{') as per original logic */
+    if (*buf != '\0') {
+        buf++;
+    }
+
+    while (*buf != '\0') {
         if (in_quotes) {
             if (*buf == '"' && *(buf - 1) != '\\') {
                 in_quotes = !in_quotes;
-                strncat(tempbuf, buf, 1);
+                *dst++ = *buf;
             } else {
-                strncat(tempbuf, buf, 1);
+                *dst++ = *buf;
             }
         } else {
-            if (*buf == '\n' || *buf == '\t' || *buf == ' ') continue;
-            if (*buf == '<') {
+            if (*buf == '\n' || *buf == '\t' || *buf == ' ') {
+                /* skip */
+            } else if (*buf == '<') {
                 char *p = strchr(buf, '>');
-                buf = buf + (int)(p - buf);
-                strcat(tempbuf, ",");
+                if (p) {
+                    buf = p; /* point to '>', loop inc skips it */
+                    *dst++ = ',';
+                } else {
+                    *dst++ = *buf;
+                }
             } else if (*buf == '}') {
-                strcat(tempbuf, "},");
+                *dst++ = '}';
+                *dst++ = ',';
             } else if (*buf == ']') {
-                strcat(tempbuf, "],");
+                *dst++ = ']';
+                *dst++ = ',';
             } else if (*buf == '"' && *(buf - 1) != '\\') {
                 in_quotes = !in_quotes;
-                strncat(tempbuf, buf, 1);
+                *dst++ = *buf;
             } else {
-                strncat(tempbuf, buf, 1);
+                *dst++ = *buf;
             }
         }
+        buf++;
     }
+    *dst = '\0';
 
-    memcpy(*membuf, tempbuf, strlen(tempbuf) + 1);
+    free(*membuf);
+    *membuf = tempbuf;
+    tempbuf = NULL;
+
+finalize_it:
+    if (iRet != RS_RET_OK) {
+        free(tempbuf);
+    }
+    RETiRet;
 }
 
 
@@ -366,6 +397,7 @@ BEGINdoAction_NoStrings
     smsg_t *pMsg = ppMsg[0];
     struct json_object *keyjson = NULL;
     const char *pszValue;
+    char *membuf = NULL;
     instanceData *const pData = pWrkrData->pData;
     json_object *total_json = NULL;
     MMDB_entry_data_list_s *entry_data_list = NULL;
@@ -425,20 +457,37 @@ BEGINdoAction_NoStrings
     }
 
     size_t memlen;
-    char *membuf;
     FILE *memstream;
     CHKmalloc(memstream = open_memstream(&membuf, &memlen));
 
     if (entry_data_list != NULL && memstream != NULL) {
         MMDB_dump_entry_data_list(memstream, entry_data_list, 2);
-        fflush(memstream);
-        str_split(&membuf);
+    }
+    /* We must close the memstream before calling str_split. This is because
+     * the stream holds a pointer to the buffer, which str_split will free.
+     * str_split() frees and re-allocates the buffer. If we close the stream
+     * after that, the stream implementation may try to access the already-freed
+     * buffer, leading to double-free or heap corruption (as seen in CI).
+     */
+    if (memstream != NULL) {
+        fclose(memstream);
+        memstream = NULL;
+    }
+
+    if (entry_data_list != NULL) {
+        CHKiRet(str_split(&membuf));
     }
 
     DBGPRINTF("maxmindb returns: '%s'\n", membuf);
     total_json = json_tokener_parse(membuf);
-    fclose(memstream);
+    if (total_json == NULL) {
+        LogError(0, RS_RET_JSON_PARSE_ERR, "mmdblookup: failed to parse JSON from MMDB: '%s'", membuf);
+        free(membuf);
+        membuf = NULL;
+        ABORT_FINALIZE(RS_RET_JSON_PARSE_ERR);
+    }
     free(membuf);
+    membuf = NULL;
 
     /* extract and amend fields (to message) as configured */
     for (int i = 0; i < pData->fieldList.nmemb; ++i) {
@@ -465,6 +514,7 @@ BEGINdoAction_NoStrings
 finalize_it:
     pthread_mutex_unlock(&pWrkrData->mmdbMutex);
     if (entry_data_list != NULL) MMDB_free_entry_data_list(entry_data_list);
+    free(membuf);
     json_object_put(keyjson);
     if (total_json != NULL) json_object_put(total_json);
 ENDdoAction
