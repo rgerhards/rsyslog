@@ -484,12 +484,13 @@ int openConn(const int connIdx) {
             }
     #endif
         }
-        relpCltArray[connIdx] = relpClt;
-        relp_r = relpCltConnect(relpCltArray[connIdx], 2, (unsigned char *)relpPort, (unsigned char *)targetIP);
+        relp_r = relpCltConnect(relpClt, 2, (unsigned char *)relpPort, (unsigned char *)targetIP);
         if (relp_r != RELP_RET_OK) {
             fprintf(stderr, "relp connect failed with return %d\n", relp_r);
+            relpEngineCltDestruct(pRelpEngine, &relpClt);
             return (1);
         }
+        relpCltArray[connIdx] = relpClt;
         sockArray[connIdx] = 1; /* mimic "all ok" state TODO: this looks invalid! */
 #endif
     } else { /* TCP, with or without TLS */
@@ -532,6 +533,8 @@ int openConn(const int connIdx) {
 static int progressCounter = 0;
 static pthread_mutex_t counterLock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t reportedConnOpenErrLock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t connectionOpenFailedLock = PTHREAD_MUTEX_INITIALIZER;
+static int connectionOpenFailed = 0;
 typedef struct {
     int startIdx;
     int endIdx;
@@ -550,6 +553,9 @@ void *connectionWorker(void *arg) {
                 fprintf(stderr, "Error opening connection %d; %s\n", i, strerror(errno));
             }
             pthread_mutex_unlock(&reportedConnOpenErrLock);
+            pthread_mutex_lock(&connectionOpenFailedLock);
+            connectionOpenFailed = 1;
+            pthread_mutex_unlock(&connectionOpenFailedLock);
             pthread_exit(NULL);
         }
 
@@ -618,6 +624,10 @@ int openConnections(void) {
     int remainder = numConnections % threadCount;
     int startIdx = 0;
 
+    pthread_mutex_lock(&connectionOpenFailedLock);
+    connectionOpenFailed = 0;
+    pthread_mutex_unlock(&connectionOpenFailedLock);
+
     for (i = 0; i < threadCount; i++) {
         int endIdx = startIdx + connectionsPerThread - 1;
         endIdx += remainder;
@@ -637,6 +647,13 @@ int openConnections(void) {
     /* Wait for all connection open threads to finish */
     for (i = 0; i < threadCount; i++) {
         pthread_join(threads[i], NULL);
+    }
+
+    pthread_mutex_lock(&connectionOpenFailedLock);
+    const int failed = connectionOpenFailed;
+    pthread_mutex_unlock(&connectionOpenFailedLock);
+    if (failed) {
+        return 1;
     }
 
     return 0;

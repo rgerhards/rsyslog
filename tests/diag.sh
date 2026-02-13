@@ -2098,20 +2098,27 @@ tcpflood() {
 	else
 		check_only="no"
 	fi
-	eval ./tcpflood -p$TCPFLOOD_PORT "$@" $TCPFLOOD_EXTRA_OPTS
-	res=$?
-	if [ "$check_only" == "yes" ]; then
-		if [ "$res" -ne "0" ]; then
-			echo "error during tcpflood on port ${TCPFLOOD_PORT}! But test continues..."
-		fi
-		return 0
-	else
-		if [ "$res" -ne "0" ]; then
-			echo "error during tcpflood on port ${TCPFLOOD_PORT}! see ${RSYSLOG_OUT_LOG}.save for what was written"
-			cp ${RSYSLOG_OUT_LOG} ${RSYSLOG_OUT_LOG}.save
-			error_exit 1 stacktrace
-		fi
-	fi
+        eval ./tcpflood -p$TCPFLOOD_PORT "$@" $TCPFLOOD_EXTRA_OPTS
+        res=$?
+        if [ "$res" -ne "0" ]; then
+                if [ "$res" -ge 128 ]; then
+                        sig=$(( res - 128 ))
+                        echo "tcpflood terminated by signal ${sig} on port ${TCPFLOOD_PORT}!"
+                        if [ -f "${RSYSLOG_OUT_LOG}" ]; then
+                                cp "${RSYSLOG_OUT_LOG}" "${RSYSLOG_OUT_LOG}.save"
+                        fi
+                        error_exit 1 stacktrace
+                fi
+                if [ "$check_only" == "yes" ]; then
+                        echo "error during tcpflood on port ${TCPFLOOD_PORT}! But test continues..."
+                        return 0
+                fi
+                echo "error during tcpflood on port ${TCPFLOOD_PORT}! see ${RSYSLOG_OUT_LOG}.save for what was written"
+                if [ -f "${RSYSLOG_OUT_LOG}" ]; then
+                        cp "${RSYSLOG_OUT_LOG}" "${RSYSLOG_OUT_LOG}.save"
+                fi
+                error_exit 1 stacktrace
+        fi
 }
 
 
