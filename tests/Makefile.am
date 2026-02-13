@@ -95,6 +95,7 @@ TESTS_DEFAULT = \
 	prop-programname-with-slashes.sh \
 	hostname-with-slash-pmrfc5424.sh \
 	hostname-with-slash-pmrfc3164.sh \
+	pmrfc3164-ipv6-hostname.sh \
 	hostname-with-slash-dflt-invld.sh \
 	func-substring-invld-startpos.sh \
 	func-substring-large-endpos.sh \
@@ -2743,34 +2744,60 @@ test_files = testbench.h runtime-dummy.c
 DISTCLEANFILES=rsyslog.pid
 
 distclean-local:
+
 	rm -rf .dep_cache .dep_wrk
 
 
 
 EXTRA_DIST += \
+
 	faketime_common.sh \
+
 	privdrop_common.sh \
+
 	rscript_compare-common.sh \
+
 	rscript_parse_time_get-ts.py \
+
 	queue-persist-drvr.sh \
+
 	daqueue-persist-drvr.sh \
+
 	snmptrapreceiverv2.py \
+
 	validate_json_shell.sh \
+
 	tls-check-for-certificate.sh \
+
 	set-envvars.in \
+
 	urlencode.py \
+
 	dns_srv_mock.py \
+
 	omrelp-keepalive.sh \
+
 	improg-simul.sh \
+
 	sndrcv_drvr.sh \
+
 	sndrcv_drvr_noexit.sh \
+
 	diag.sh \
+
 	testsuites/mmexternal-SegFault-mm-python.py \
+
 	testsuites/mmsnareparse/sample-custom-pattern.data \
+
 	testsuites/mmsnareparse/sample-windows2022-security.data \
+
 	testsuites/mmsnareparse/sample-windows2025-security.data \
+
 	testsuites/mmsnareparse/sample-events.data \
+
 	1.rstest 2.rstest 3.rstest err1.rstest \
+
+
 	testsuites/include-std1-omfile-action.conf \
 	testsuites/include-std2-omfile-action.conf \
 	tls-certs/ca-key.pem \
