@@ -78,6 +78,133 @@ RSYSLOG_MODDIR=${RSYSLOG_MODDIR:-"../runtime/.libs:../.libs"}
 # CONFIG
 export ZOOPIDFILE="$(pwd)/zookeeper.pid"
 
+# ---------------------------------------------------------------------------
+# ClickHouse helpers
+# ---------------------------------------------------------------------------
+
+# CLICKHOUSE_CLIENT
+#   Command that invokes the ClickHouse client.
+#   Defaults to "clickhouse-client" but may include additional arguments
+#   (e.g. "docker exec clickhouse clickhouse-client").
+# CLICKHOUSE_SERVER
+#   Hostname that omclickhouse should connect to. Defaults to "localhost".
+# CLICKHOUSE_HTTP_PORT / CLICKHOUSE_HTTPS_PORT
+#   Ports for HTTP and HTTPS connections. Defaults match upstream defaults.
+# CLICKHOUSE_USE_HTTPS_DEFAULT
+#   Default for omclickhouse's usehttps parameter when tests do not override it.
+CLICKHOUSE_CLIENT=${CLICKHOUSE_CLIENT:-clickhouse-client}
+CLICKHOUSE_SERVER=${CLICKHOUSE_SERVER:-localhost}
+CLICKHOUSE_HTTP_PORT=${CLICKHOUSE_HTTP_PORT:-8123}
+CLICKHOUSE_HTTPS_PORT=${CLICKHOUSE_HTTPS_PORT:-8443}
+CLICKHOUSE_USE_HTTPS_DEFAULT=${CLICKHOUSE_USE_HTTPS_DEFAULT:-off}
+CLICKHOUSE_READY_MARKER=${CLICKHOUSE_READY_MARKER:-"$(pwd)/.clickhouse-ready"}
+
+_clickhouse_exec() {
+    if [ -z "$CLICKHOUSE_CLIENT" ]; then
+        printf 'TESTBENCH_ERROR: CLICKHOUSE_CLIENT must not be empty\n'
+        error_exit 100
+    fi
+    local -a cmd
+    # shellcheck disable=SC2206 # intentional splitting of command string
+    cmd=($CLICKHOUSE_CLIENT)
+    "${cmd[@]}" "$@"
+}
+
+clickhouse_query() {
+    if [ "$1" == "" ]; then
+        printf 'TESTBENCH_ERROR: clickhouse_query requires a SQL statement\n'
+        error_exit 100
+    fi
+    local query="$1"
+    shift
+    _clickhouse_exec --query="$query" "$@"
+}
+
+clickhouse_action_params() {
+    local use_https="${1:-$CLICKHOUSE_USE_HTTPS_DEFAULT}"
+    local port_override="$2"
+    local port
+    if [ -n "$port_override" ]; then
+        port="$port_override"
+    elif [ "$use_https" == "on" ]; then
+        port="$CLICKHOUSE_HTTPS_PORT"
+    else
+        port="$CLICKHOUSE_HTTP_PORT"
+    fi
+
+    printf 'server="%s" port="%s" usehttps="%s"' \
+        "$CLICKHOUSE_SERVER" "$port" "$use_https"
+}
+
+clickhouse_wait_ready() {
+    local attempts="${1:-30}"
+    local delay="${2:-2}"
+    local try
+
+    for try in $(seq 1 "$attempts"); do
+        if clickhouse_query "SELECT 1" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep "$delay"
+    done
+
+    return 1
+}
+
+_clickhouse_marker_write() {
+    local state="$1"
+    if [ -z "$CLICKHOUSE_READY_MARKER" ]; then
+        return 0
+    fi
+    printf '%s\n' "$state" >"$CLICKHOUSE_READY_MARKER"
+}
+
+clickhouse_mark_available() {
+    _clickhouse_marker_write "available"
+}
+
+clickhouse_mark_unavailable() {
+    _clickhouse_marker_write "unavailable"
+}
+
+clickhouse_clear_marker() {
+    if [ -n "$CLICKHOUSE_READY_MARKER" ]; then
+        rm -f "$CLICKHOUSE_READY_MARKER"
+    fi
+}
+
+clickhouse_marker_status() {
+    if [ -n "$CLICKHOUSE_READY_MARKER" ] && [ -f "$CLICKHOUSE_READY_MARKER" ]; then
+        cat "$CLICKHOUSE_READY_MARKER"
+        return 0
+    fi
+    return 1
+}
+
+clickhouse_require_server() {
+    local status
+    if status=$(clickhouse_marker_status 2>/dev/null); then
+        case "$status" in
+            available)
+                return 0
+                ;;
+            unavailable)
+                printf 'ClickHouse unavailable - skipping test.\n'
+                exit 77
+                ;;
+        esac
+    fi
+
+    if clickhouse_wait_ready 10 2; then
+        clickhouse_mark_available
+        return 0
+    fi
+
+    clickhouse_mark_unavailable
+    printf 'ClickHouse not reachable - skipping test.\n'
+    exit 77
+}
+
 #valgrind="valgrind --malloc-fill=ff --free-fill=fe --log-fd=1"
 #valgrind="valgrind --tool=callgrind" # for kcachegrind profiling
 
