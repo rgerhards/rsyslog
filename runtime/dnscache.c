@@ -310,7 +310,7 @@ static rsRetVal ATTR_NONNULL() resolveAddr(struct sockaddr_storage *addr, dnscac
             } else { /* we have a valid entry, so let's create the respective properties */
                 fqdnLen = strlen(fqdnBuf);
                 prop.CreateStringProp(&etry->fqdn, (uchar *)fqdnBuf, fqdnLen);
-                for (i = 0; i < fqdnLen; ++i) fqdnBuf[i] = tolower(fqdnBuf[i]);
+                for (i = 0; i < fqdnLen; ++i) fqdnBuf[i] = tolower((unsigned char)fqdnBuf[i]);
                 prop.CreateStringProp(&etry->fqdnLowerCase, (uchar *)fqdnBuf, fqdnLen);
             }
         }
