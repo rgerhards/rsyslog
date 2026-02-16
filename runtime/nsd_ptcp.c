@@ -448,38 +448,58 @@ finalize_it:
 
 /* obtain connection info as soon as we are connected */
 static void get_socket_info(const int sockfd, char *const connInfo) {
-    char local_ip_str[INET_ADDRSTRLEN];  // Buffer to hold the IP address string
+    char local_ip_str[INET6_ADDRSTRLEN];  // Buffer to hold the IP address string
     int local_port = -1;
     char local_port_str[8];
-    char remote_ip_str[INET_ADDRSTRLEN];  // Buffer to hold the IP address string
+    char remote_ip_str[INET6_ADDRSTRLEN];  // Buffer to hold the IP address string
     int remote_port = -1;
     char remote_port_str[8];
-    struct sockaddr_in local_addr;
+    struct sockaddr_storage local_addr;
     socklen_t local_addr_len = sizeof(local_addr);
 
-    struct sockaddr_in remote_addr;
+    struct sockaddr_storage remote_addr;
     socklen_t remote_addr_len = sizeof(remote_addr);
 
     /* local system info */
-    local_addr.sin_port = 0; /* just to keep clang static analyzer happy */
     if (getsockname(sockfd, (struct sockaddr *)&local_addr, &local_addr_len) == -1) {
         strcpy(local_ip_str, "?");
     } else {
-        if (inet_ntop(AF_INET, &local_addr.sin_addr, local_ip_str, INET_ADDRSTRLEN) == NULL) {
+        if (local_addr.ss_family == AF_INET) {
+            struct sockaddr_in *sin = (struct sockaddr_in *)&local_addr;
+            if (inet_ntop(AF_INET, &sin->sin_addr, local_ip_str, sizeof(local_ip_str)) == NULL) {
+                strcpy(local_ip_str, "?");
+            }
+            local_port = ntohs(sin->sin_port);
+        } else if (local_addr.ss_family == AF_INET6) {
+            struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&local_addr;
+            if (inet_ntop(AF_INET6, &sin6->sin6_addr, local_ip_str, sizeof(local_ip_str)) == NULL) {
+                strcpy(local_ip_str, "?");
+            }
+            local_port = ntohs(sin6->sin6_port);
+        } else {
             strcpy(local_ip_str, "?");
         }
-        local_port = ntohs(local_addr.sin_port);
     }
 
     /* remote system info */
-    remote_addr.sin_port = 0; /* just to keep clang static analyzer happy */
     if (getpeername(sockfd, (struct sockaddr *)&remote_addr, &remote_addr_len) == -1) {
         strcpy(remote_ip_str, "?");
     } else {
-        if (inet_ntop(AF_INET, &remote_addr.sin_addr, remote_ip_str, INET_ADDRSTRLEN) == NULL) {
+        if (remote_addr.ss_family == AF_INET) {
+            struct sockaddr_in *sin = (struct sockaddr_in *)&remote_addr;
+            if (inet_ntop(AF_INET, &sin->sin_addr, remote_ip_str, sizeof(remote_ip_str)) == NULL) {
+                strcpy(remote_ip_str, "?");
+            }
+            remote_port = ntohs(sin->sin_port);
+        } else if (remote_addr.ss_family == AF_INET6) {
+            struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&remote_addr;
+            if (inet_ntop(AF_INET6, &sin6->sin6_addr, remote_ip_str, sizeof(remote_ip_str)) == NULL) {
+                strcpy(remote_ip_str, "?");
+            }
+            remote_port = ntohs(sin6->sin6_port);
+        } else {
             strcpy(remote_ip_str, "?");
         }
-        remote_port = ntohs(remote_addr.sin_port);
     }
 
     if (local_port == -1) {

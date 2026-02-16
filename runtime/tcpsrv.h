@@ -198,7 +198,7 @@ struct tcpsrv_s {
         rsRetVal (*pOnErrClose)(tcps_sess_t *pSess);
         /* session specific callbacks */
         rsRetVal (*pOnSessAccept)(tcpsrv_t *, tcps_sess_t *, char *connInfo);
-#define TCPSRV_CONNINFO_SIZE (2 * (INET_ADDRSTRLEN + 20))
+#define TCPSRV_CONNINFO_SIZE (2 * (INET6_ADDRSTRLEN + 20))
         rsRetVal (*OnSessConstructFinalize)(void *);
         rsRetVal (*pOnSessDestruct)(void *);
         rsRetVal (*OnMsgReceive)(tcps_sess_t *, uchar *pszMsg, int iLenMsg); /* submit message callback */
