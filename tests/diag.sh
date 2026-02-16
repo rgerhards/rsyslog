@@ -2463,51 +2463,78 @@ otel_exit_handling() {
 	fi
 }
 
+# Helper function to download and verify a tgz file
+# $1 - URL
+# $2 - Destination file
+# $3 - Descriptive name
+download_and_verify_tgz() {
+	local url="$1"
+	local dest="$2"
+	local name="$3"
+	local retries=3
+	local i=0
+
+	# If file exists, verify integrity
+	if [ -f "$dest" ]; then
+		if gzip -t "$dest" >/dev/null 2>&1; then
+			printf '%s: satisfying dependency from cache %s\n' "$name" "$dest"
+			return 0
+		else
+			printf '%s: cached file %s is corrupted, removing it.\n' "$name" "$dest"
+			rm -f "$dest"
+		fi
+	fi
+
+	# Download loop
+	while [ $i -lt $retries ]; do
+		printf '%s: downloading from %s (attempt %d/%d)\n' "$name" "$url" "$((i+1))" "$retries"
+		if wget -q -O "$dest" "$url"; then
+			if [ -f "$dest" ] && gzip -t "$dest" >/dev/null 2>&1; then
+				return 0
+			else
+				printf '%s: downloaded file verification failed, retrying...\n' "$name"
+			fi
+		else
+			printf '%s: wget failed, retrying...\n' "$name"
+		fi
+		rm -f "$dest"
+		((i++))
+		$TESTTOOL_DIR/msleep 2000
+	done
+
+	printf '%s: failed to download valid archive after %d attempts\n' "$name" "$retries"
+	return 1
+}
+
 download_kafka() {
 	if [ ! -d $dep_cache_dir ]; then
 		echo "Creating dependency cache dir $dep_cache_dir"
 		mkdir $dep_cache_dir
 	fi
-	if [ ! -f $dep_zk_cached_file ]; then
-		if [ -f /local_dep_cache/$RS_ZK_DOWNLOAD ]; then
-			printf 'Zookeeper: satisfying dependency %s from system cache.\n' "$RS_ZK_DOWNLOAD"
-			cp /local_dep_cache/$RS_ZK_DOWNLOAD $dep_zk_cached_file
-		else
-			echo "Downloading zookeeper from $dep_zk_url"
-			echo wget -q $dep_zk_url -O $dep_zk_cached_file
-			wget -q $dep_zk_url -O $dep_zk_cached_file
-			if [ $? -ne 0 ]
-			then
-                                echo error during wget, retry:
-                                wget $dep_zk_url -O $dep_zk_cached_file
-                                if [ $? -ne 0 ]
-                                then
-                                        echo "Skipping test - unable to download zookeeper"
-                                        error_exit 77
-                                fi
-                        fi
-                fi
-        fi
-	if [ ! -f $dep_kafka_cached_file ]; then
-		if [ -f /local_dep_cache/$RS_KAFKA_DOWNLOAD ]; then
-			printf 'Kafka: satisfying dependency %s from system cache.\n' "$RS_KAFKA_DOWNLOAD"
-			cp /local_dep_cache/$RS_KAFKA_DOWNLOAD $dep_kafka_cached_file
-		else
-			echo "Downloading kafka from $dep_kafka_url"
-			wget -q $dep_kafka_url -O $dep_kafka_cached_file
-			if [ $? -ne 0 ]
-			then
-				echo error during wget, retry:
-                                wget $dep_kafka_url -O $dep_kafka_cached_file
-                                if [ $? -ne 0 ]
-                                then
-                                        rm $dep_kafka_cached_file # a 0-size file may be left over
-                                        echo "Skipping test - unable to download kafka"
-                                        error_exit 77
-                                fi
-                        fi
-                fi
-        fi
+
+	# Zookeeper
+	if [ ! -f $dep_zk_cached_file ] && [ -f /local_dep_cache/$RS_ZK_DOWNLOAD ]; then
+		printf 'Zookeeper: satisfying dependency %s from system cache.\n' "$RS_ZK_DOWNLOAD"
+		cp /local_dep_cache/$RS_ZK_DOWNLOAD $dep_zk_cached_file
+	fi
+
+	download_and_verify_tgz "$dep_zk_url" "$dep_zk_cached_file" "Zookeeper"
+	if [ $? -ne 0 ]; then
+		echo "Skipping test - unable to download zookeeper"
+		error_exit 77
+	fi
+
+	# Kafka
+	if [ ! -f $dep_kafka_cached_file ] && [ -f /local_dep_cache/$RS_KAFKA_DOWNLOAD ]; then
+		printf 'Kafka: satisfying dependency %s from system cache.\n' "$RS_KAFKA_DOWNLOAD"
+		cp /local_dep_cache/$RS_KAFKA_DOWNLOAD $dep_kafka_cached_file
+	fi
+
+	download_and_verify_tgz "$dep_kafka_url" "$dep_kafka_cached_file" "Kafka"
+	if [ $? -ne 0 ]; then
+		echo "Skipping test - unable to download kafka"
+		error_exit 77
+	fi
 }
 
 stop_kafka() {
@@ -2915,15 +2942,17 @@ download_elasticsearch() {
 		echo "Creating dependency cache dir $dep_cache_dir"
 		mkdir $dep_cache_dir
 	fi
-	if [ ! -f $dep_es_cached_file ]; then
-		if [ -f /local_dep_cache/$ES_DOWNLOAD ]; then
-			printf 'ElasticSearch: satisfying dependency %s from system cache.\n' "$ES_DOWNLOAD"
-			cp /local_dep_cache/$ES_DOWNLOAD $dep_es_cached_file
-		else
-			dep_es_url="https://www.rsyslog.com/files/download/rsyslog/$ES_DOWNLOAD"
-			printf 'ElasticSearch: satisfying dependency %s from %s\n' "$ES_DOWNLOAD" "$dep_es_url"
-			wget -q $dep_es_url -O $dep_es_cached_file
-		fi
+
+	if [ ! -f $dep_es_cached_file ] && [ -f /local_dep_cache/$ES_DOWNLOAD ]; then
+		printf 'ElasticSearch: satisfying dependency %s from system cache.\n' "$ES_DOWNLOAD"
+		cp /local_dep_cache/$ES_DOWNLOAD $dep_es_cached_file
+	fi
+
+	dep_es_url="https://www.rsyslog.com/files/download/rsyslog/$ES_DOWNLOAD"
+	download_and_verify_tgz "$dep_es_url" "$dep_es_cached_file" "ElasticSearch"
+	if [ $? -ne 0 ]; then
+		echo "Skipping test - unable to download Elasticsearch"
+		error_exit 77
 	fi
 }
 
@@ -3277,23 +3306,16 @@ download_otel_collector() {
 		echo "Creating dependency cache dir $dep_cache_dir"
 		mkdir -p $dep_cache_dir
 	fi
-	if [ ! -f $dep_otel_collector_cached_file ]; then
-		if [ -f /local_dep_cache/$OTEL_COLLECTOR_DOWNLOAD ]; then
-			printf 'OTEL Collector: satisfying dependency %s from system cache.\n' "$OTEL_COLLECTOR_DOWNLOAD"
-			cp /local_dep_cache/$OTEL_COLLECTOR_DOWNLOAD $dep_otel_collector_cached_file
-		else
-			printf 'OTEL Collector: downloading %s from %s\n' "$OTEL_COLLECTOR_DOWNLOAD" "$dep_otel_collector_url"
-			wget -q $dep_otel_collector_url -O $dep_otel_collector_cached_file
-			if [ $? -ne 0 ]; then
-				echo "error during wget, retry:"
-				wget $dep_otel_collector_url -O $dep_otel_collector_cached_file
-				if [ $? -ne 0 ]; then
-					rm -f $dep_otel_collector_cached_file
-					echo "Skipping test - unable to download OTEL Collector"
-					error_exit 77
-				fi
-			fi
-		fi
+
+	if [ ! -f $dep_otel_collector_cached_file ] && [ -f /local_dep_cache/$OTEL_COLLECTOR_DOWNLOAD ]; then
+		printf 'OTEL Collector: satisfying dependency %s from system cache.\n' "$OTEL_COLLECTOR_DOWNLOAD"
+		cp /local_dep_cache/$OTEL_COLLECTOR_DOWNLOAD $dep_otel_collector_cached_file
+	fi
+
+	download_and_verify_tgz "$dep_otel_collector_url" "$dep_otel_collector_cached_file" "OTEL Collector"
+	if [ $? -ne 0 ]; then
+		echo "Skipping test - unable to download OTEL Collector"
+		error_exit 77
 	fi
 }
 
