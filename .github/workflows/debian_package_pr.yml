@@ -1,0 +1,91 @@
+# Copyright 2026 Rainer Gerhards and Others
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+name: debian-package-pr
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  debian-build:
+    name: Build Debian packages (debian/master)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+
+    container:
+      image: debian:sid
+
+    steps:
+      - name: Install packaging toolchain
+        run: |
+          set -eux
+          apt-get update
+          apt-get install --yes --no-install-recommends \
+            ca-certificates \
+            devscripts \
+            dpkg-dev \
+            equivs \
+            fakeroot \
+            git \
+            quilt \
+            rsync
+
+      - name: Checkout rsyslog source
+        uses: actions/checkout@v4
+
+      - name: Pull Debian packaging from salsa
+        run: |
+          set -eux
+          git clone --depth=1 --branch=debian/master \
+            https://salsa.debian.org/debian/rsyslog.git /tmp/debian-rsyslog
+          rsync -a /tmp/debian-rsyslog/debian/ debian/
+
+      - name: Install Debian build dependencies from debian/control
+        run: |
+          set -eux
+          mk-build-deps \
+            --install \
+            --remove \
+            --tool='apt-get --yes --no-install-recommends' \
+            debian/control
+
+      - name: Build orig tarball expected by Debian packaging
+        run: |
+          set -eux
+          deb_version="$(dpkg-parsechangelog -SVersion)"
+          upstream_version="${deb_version%%-*}"
+          git archive \
+            --format=tar.gz \
+            --prefix="rsyslog-${upstream_version}/" \
+            --output="../rsyslog_${upstream_version}.orig.tar.gz" \
+            HEAD
+
+      - name: Build Debian binary packages
+        run: |
+          set -eux
+          dpkg-buildpackage -us -uc -b
+
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-packages
+          path: |
+            ../*.deb
+            ../*.changes
+            ../*.buildinfo
+          if-no-files-found: error
