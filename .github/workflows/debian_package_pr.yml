@@ -21,9 +21,9 @@ on:
 
 jobs:
   debian-build:
-    name: Build Debian packages (debian/master)
+    name: Build Debian packages from dist tarball
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     permissions:
       contents: read
 
@@ -31,53 +31,80 @@ jobs:
       image: debian:sid
 
     steps:
-      - name: Install packaging toolchain
+      - name: Install packaging and dist-build toolchain
         run: |
           set -eux
           apt-get update
           apt-get install --yes --no-install-recommends \
+            autoconf \
+            automake \
+            build-essential \
             ca-certificates \
             devscripts \
             dpkg-dev \
             equivs \
             fakeroot \
             git \
+            libtool \
+            pkgconf \
             quilt \
             rsync
 
       - name: Checkout rsyslog source
         uses: actions/checkout@v4
 
+      - name: Build upstream dist tarball from PR source
+        run: |
+          set -eux
+          ./autogen.sh
+          ./configure
+          make -j"$(nproc)" dist
+
+          dist_tgz="$(find . -maxdepth 1 -type f -name 'rsyslog-*.tar.gz' | head -n1)"
+          test -n "$dist_tgz"
+          echo "DIST_TGZ=$dist_tgz" >> "$GITHUB_ENV"
+
       - name: Pull Debian packaging from salsa
         run: |
           set -eux
           git clone --depth=1 --branch=debian/master \
             https://salsa.debian.org/debian/rsyslog.git /tmp/debian-rsyslog
-          rsync -a /tmp/debian-rsyslog/debian/ debian/
+
+      - name: Prepare Debian source tree from dist tarball
+        run: |
+          set -eux
+
+          dist_base="$(basename "$DIST_TGZ" .tar.gz)"
+          upstream_version="${dist_base#rsyslog-}"
+
+          cp "$DIST_TGZ" "../rsyslog_${upstream_version}.orig.tar.gz"
+          tar -xzf "$DIST_TGZ" -C ..
+          build_dir="../$dist_base"
+          rsync -a /tmp/debian-rsyslog/debian/ "$build_dir/debian/"
+
+          export DEBFULLNAME='rsyslog CI'
+          export DEBEMAIL='ci@rsyslog.invalid'
+          cd "$build_dir"
+          dch --distribution unstable \
+            --newversion "${upstream_version}-0local1" \
+            "CI build for PR snapshot using Debian packaging metadata."
+
+          echo "BUILD_DIR=$build_dir" >> "$GITHUB_ENV"
 
       - name: Install Debian build dependencies from debian/control
         run: |
           set -eux
+          cd "$BUILD_DIR"
           mk-build-deps \
             --install \
             --remove \
             --tool='apt-get --yes --no-install-recommends' \
             debian/control
 
-      - name: Build orig tarball expected by Debian packaging
-        run: |
-          set -eux
-          deb_version="$(dpkg-parsechangelog -SVersion)"
-          upstream_version="${deb_version%%-*}"
-          git archive \
-            --format=tar.gz \
-            --prefix="rsyslog-${upstream_version}/" \
-            --output="../rsyslog_${upstream_version}.orig.tar.gz" \
-            HEAD
-
       - name: Build Debian binary packages
         run: |
           set -eux
+          cd "$BUILD_DIR"
           dpkg-buildpackage -us -uc -b
 
       - name: Upload .deb artifacts
