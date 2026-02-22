@@ -232,6 +232,15 @@ rsRetVal ATTR_NONNULL() wtiCancelThrd(wti_t *pThis, const uchar *const cancelobj
 
         /* Wait for thread to terminate */
         while ((state = wtiGetState(pThis)) != WRKTHRD_STOPPED && state != WRKTHRD_WAIT_JOIN) {
+            /* Some platforms can miss/absorb the initial wakeup while worker is entering
+             * idle wait. Periodically nudge both condition wakeup and SIGTTIN again.
+             */
+            if ((waitLoops % 10) == 0) {
+                d_pthread_mutex_lock(pWtp->pmutUsr);
+                pthread_cond_signal(&pThis->pcondBusy);
+                d_pthread_mutex_unlock(pWtp->pmutUsr);
+                pthread_kill(thrdID, SIGTTIN);
+            }
             if ((waitLoops++ % 100) == 0) {
                 const int rAlive = pthread_kill(thrdID, 0);
                 if (dbgTimeoutToStderr) {
