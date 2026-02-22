@@ -211,8 +211,9 @@ rsRetVal ATTR_NONNULL() wtiCancelThrd(wti_t *pThis, const uchar *const cancelobj
         }
         const int rCancel = pthread_cancel(thrdID);
         const int rWakeup = pthread_kill(thrdID, SIGTTIN);
-        DBGPRINTF("%s: hard cancel requested for thread %p: pthread_cancel=%d pthread_kill(SIGTTIN)=%d\n",
-                  cancelobj, (void *)thrdID, rCancel, rWakeup);
+        LogMsg(0, RS_RET_ERR, LOG_WARNING,
+               "%s: hard cancel requested for thread %p: pthread_cancel=%d pthread_kill(SIGTTIN)=%d", cancelobj,
+               (void *)thrdID, rCancel, rWakeup);
         DBGPRINTF("cooperative worker termination failed, using cancellation...\n");
         DBGOPRINT((obj_t *)pThis, "canceling worker thread\n");
 
@@ -220,8 +221,9 @@ rsRetVal ATTR_NONNULL() wtiCancelThrd(wti_t *pThis, const uchar *const cancelobj
         while ((state = wtiGetState(pThis)) != WRKTHRD_STOPPED && state != WRKTHRD_WAIT_JOIN) {
             if ((waitLoops++ % 100) == 0) {
                 const int rAlive = pthread_kill(thrdID, 0);
-                DBGPRINTF("%s: still waiting on termination, state=%d thread=%p aliveCheck=%d%s\n", cancelobj, state,
-                          (void *)thrdID, rAlive, (rAlive == ESRCH) ? " (ESRCH)" : "");
+                LogMsg(0, RS_RET_ERR, LOG_WARNING,
+                       "%s: still waiting on termination, state=%d thread=%p aliveCheck=%d%s", cancelobj, state,
+                       (void *)thrdID, rAlive, (rAlive == ESRCH) ? " (ESRCH)" : "");
             }
             DBGOPRINT((obj_t *)pThis, "waiting on termination, state %d\n", state);
             srSleep(0, 10000);

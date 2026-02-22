@@ -88,14 +88,19 @@ wait_shutdown_or_kill() {
 					-ex "thread apply all bt full" \
 					-p "$pid" > "$bt_file" 2>&1 || true
 				if [ -s "$bt_file" ]; then
-					printf '--- BEGIN GDB BACKTRACE (%s) ---\n' "$bt_file"
+					printf '%s\n' "--- BEGIN GDB BACKTRACE ($bt_file) ---"
 					cat "$bt_file"
-					printf '--- END GDB BACKTRACE (%s) ---\n' "$bt_file"
+					printf '%s\n' "--- END GDB BACKTRACE ($bt_file) ---"
 				else
 					printf 'gdb backtrace file %s is empty\n' "$bt_file"
 				fi
 			else
 				printf 'gdb not available; cannot collect thread backtrace for pid %s\n' "$pid"
+			fi
+			if [ -f "$RSYSLOGD_LOG" ]; then
+				printf '%s\n' "--- BEGIN RSYSLOGD LOG TAIL ($RSYSLOGD_LOG) ---"
+				tail -n 200 "$RSYSLOGD_LOG"
+				printf '%s\n' "--- END RSYSLOGD LOG TAIL ($RSYSLOGD_LOG) ---"
 			fi
 			kill -9 "$pid" 2>/dev/null || true
 			timed_out=1
