@@ -67,8 +67,10 @@ jobs:
       - name: Build upstream dist tarball from PR source
         run: |
           set -eux
-          ./autogen.sh
-          ./configure
+          ./autogen.sh \
+            --disable-impstats-push \
+            --disable-liblogging-stdlog \
+            --without-valgrind-testbench
           make -j"$(nproc)" dist
 
           dist_tgz="$(find . -maxdepth 1 -type f -name 'rsyslog-*.tar.gz' | head -n1)"
