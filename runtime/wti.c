@@ -86,6 +86,10 @@ void ATTR_NONNULL() wtiJoinThrd(wti_t *const pThis) {
     int r;
     ISOBJ_TYPE_assert(pThis, wti);
     if (wtiGetState(pThis) == WRKTHRD_WAIT_JOIN) {
+        if (dbgTimeoutToStderr) {
+            fprintf(stderr, "rsyslog debug: %s: join begin thrdID=%p state=%d\n", wtiGetDbgHdr(pThis),
+                    (void *)pThis->thrdID, wtiGetState(pThis));
+        }
         DBGPRINTF("%s: joining terminated worker\n", wtiGetDbgHdr(pThis));
         if ((r = pthread_join(pThis->thrdID, NULL)) != 0) {
             LogMsg(r, RS_RET_INTERNAL_ERROR, LOG_WARNING, "rsyslog bug? wti cannot join terminated wrkr");
@@ -93,7 +97,8 @@ void ATTR_NONNULL() wtiJoinThrd(wti_t *const pThis) {
         DBGPRINTF("%s: worker fully terminated\n", wtiGetDbgHdr(pThis));
         wtiSetState(pThis, WRKTHRD_STOPPED);
         if (dbgTimeoutToStderr) {
-            fprintf(stderr, "rsyslog debug: %s: thread joined\n", wtiGetDbgHdr(pThis));
+            fprintf(stderr, "rsyslog debug: %s: join done thrdID=%p state=%d\n", wtiGetDbgHdr(pThis),
+                    (void *)pThis->thrdID, wtiGetState(pThis));
         }
     }
 }
@@ -181,6 +186,10 @@ rsRetVal ATTR_NONNULL() wtiCancelThrd(wti_t *pThis, const uchar *const cancelobj
     state = wtiGetState(pThis);
     if (state == WRKTHRD_RUNNING || state == WRKTHRD_INITIALIZING) {
         thrdID = pThis->thrdID; /* Safe copy under mutex */
+        if (dbgTimeoutToStderr) {
+            fprintf(stderr, "rsyslog debug: %s: cooperative cancel state=%d slot=%p thrdID=%p\n", cancelobj, state,
+                    (void *)pThis, (void *)thrdID);
+        }
         d_pthread_mutex_unlock(&pWtp->mutWtp);
 
         LogMsg(0, RS_RET_ERR, LOG_WARNING,
@@ -203,6 +212,10 @@ rsRetVal ATTR_NONNULL() wtiCancelThrd(wti_t *pThis, const uchar *const cancelobj
     state = wtiGetState(pThis);
     if (state == WRKTHRD_RUNNING || state == WRKTHRD_INITIALIZING) {
         thrdID = pThis->thrdID; /* Safe copy under mutex */
+        if (dbgTimeoutToStderr) {
+            fprintf(stderr, "rsyslog debug: %s: hard cancel state=%d slot=%p thrdID=%p\n", cancelobj, state,
+                    (void *)pThis, (void *)thrdID);
+        }
         d_pthread_mutex_unlock(&pWtp->mutWtp);
 
         LogMsg(0, RS_RET_ERR, LOG_WARNING, "%s: need to do hard cancellation", cancelobj);
@@ -221,6 +234,14 @@ rsRetVal ATTR_NONNULL() wtiCancelThrd(wti_t *pThis, const uchar *const cancelobj
         while ((state = wtiGetState(pThis)) != WRKTHRD_STOPPED && state != WRKTHRD_WAIT_JOIN) {
             if ((waitLoops++ % 100) == 0) {
                 const int rAlive = pthread_kill(thrdID, 0);
+                if (dbgTimeoutToStderr) {
+                    const pthread_t thrdIDNow = pThis->thrdID;
+                    fprintf(stderr,
+                            "rsyslog debug: %s: waitloop=%d state=%d slot=%p thrdID(captured)=%p thrdID(now)=%p "
+                            "aliveCheck=%d%s\n",
+                            cancelobj, waitLoops, state, (void *)pThis, (void *)thrdID, (void *)thrdIDNow, rAlive,
+                            (rAlive == ESRCH) ? " (ESRCH)" : "");
+                }
                 LogMsg(0, RS_RET_ERR, LOG_WARNING,
                        "%s: still waiting on termination, state=%d thread=%p aliveCheck=%d%s", cancelobj, state,
                        (void *)thrdID, rAlive, (rAlive == ESRCH) ? " (ESRCH)" : "");

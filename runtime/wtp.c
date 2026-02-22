@@ -335,7 +335,8 @@ static void wtpWrkrExecCleanup(wti_t *pWti) {
 
     // TESTBENCH bughunt - remove when done! 2018-11-05 rgerhards
     if (dbgTimeoutToStderr) {
-        fprintf(stderr, "rsyslog debug: %s: enter WrkrExecCleanup\n", wtiGetDbgHdr(pWti));
+        fprintf(stderr, "rsyslog debug: %s: enter WrkrExecCleanup slot=%p thrdID=%p state=%d\n", wtiGetDbgHdr(pWti),
+                (void *)pWti, (void *)pWti->thrdID, wtiGetState(pWti));
     }
     /* the order of the next two statements is important! */
     wtiSetState(pWti, WRKTHRD_WAIT_JOIN);
@@ -412,7 +413,8 @@ PRAGMA_IGNORE_Wempty_body static void *wtpWorker(
 
     // TESTBENCH bughunt - remove when done! 2018-11-05 rgerhards
     if (dbgTimeoutToStderr) {
-        fprintf(stderr, "rsyslog debug: %s: worker %p started\n", wtpGetDbgHdr(pThis), pThis);
+        fprintf(stderr, "rsyslog debug: %s: worker started slot=%p thrdID=%p\n", wtpGetDbgHdr(pThis), (void *)pWti,
+                (void *)pWti->thrdID);
     }
     /* let the parent know we're done with initialization */
     d_pthread_mutex_lock(&pThis->mutWtp);
@@ -431,7 +433,8 @@ PRAGMA_IGNORE_Wempty_body static void *wtpWorker(
     pthread_cond_broadcast(&pThis->condThrdTrm); /* activate anyone waiting on thread shutdown */
     pthread_cleanup_pop(1); /* unlock mutex */
     if (dbgTimeoutToStderr) {
-        fprintf(stderr, "rsyslog debug: %p: worker exiting\n", pWti);
+        fprintf(stderr, "rsyslog debug: %s: worker exiting slot=%p thrdID=%p state=%d\n", wtpGetDbgHdr(pThis),
+                (void *)pWti, (void *)pWti->thrdID, wtiGetState(pWti));
     }
     pthread_exit(0);
     return NULL; /* To suppress warning */
@@ -494,8 +497,11 @@ static rsRetVal ATTR_NONNULL() wtpStartWrkr(wtp_t *const pThis, const int permit
 
     // TESTBENCH bughunt - remove when done! 2018-11-05 rgerhards
     if (dbgTimeoutToStderr) {
-        fprintf(stderr, "%s: wrkr start initiated with state %d, num workers now %d\n", wtpGetDbgHdr(pThis), iState,
-                ATOMIC_FETCH_32BIT(&pThis->iCurNumWrkThrd, &pThis->mutCurNumWrkThrd));
+        fprintf(stderr,
+                "%s: wrkr start initiated slot=%p thrdID=%p createState=%d num workers now %d wtpState=%d\n",
+                wtpGetDbgHdr(pThis), (void *)pWti, (void *)pWti->thrdID, iState,
+                ATOMIC_FETCH_32BIT(&pThis->iCurNumWrkThrd, &pThis->mutCurNumWrkThrd),
+                (int)ATOMIC_FETCH_32BIT((int *)&pThis->wtpState, &pThis->mutWtpState));
     }
     DBGPRINTF("%s: started with state %d, num workers now %d\n", wtpGetDbgHdr(pThis), iState,
               ATOMIC_FETCH_32BIT(&pThis->iCurNumWrkThrd, &pThis->mutCurNumWrkThrd));
