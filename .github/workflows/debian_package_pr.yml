@@ -31,27 +31,38 @@ jobs:
       image: debian:sid
 
     steps:
-      - name: Install packaging and dist-build toolchain
+      - name: Install packaging toolchain bootstrap
         run: |
           set -eux
           apt-get update
           apt-get install --yes --no-install-recommends \
-            autoconf \
-            automake \
-            build-essential \
             ca-certificates \
             devscripts \
             dpkg-dev \
             equivs \
             fakeroot \
             git \
-            libtool \
-            pkgconf \
             quilt \
             rsync
 
       - name: Checkout rsyslog source
         uses: actions/checkout@v4
+
+      - name: Pull Debian packaging from salsa
+        run: |
+          set -eux
+          git clone --depth=1 --branch=debian/master \
+            https://salsa.debian.org/debian/rsyslog.git /tmp/debian-rsyslog
+          rsync -a /tmp/debian-rsyslog/debian/ debian/
+
+      - name: Install Debian build dependencies from debian/control
+        run: |
+          set -eux
+          mk-build-deps \
+            --install \
+            --remove \
+            --tool='apt-get --yes --no-install-recommends' \
+            debian/control
 
       - name: Build upstream dist tarball from PR source
         run: |
@@ -63,12 +74,6 @@ jobs:
           dist_tgz="$(find . -maxdepth 1 -type f -name 'rsyslog-*.tar.gz' | head -n1)"
           test -n "$dist_tgz"
           echo "DIST_TGZ=$dist_tgz" >> "$GITHUB_ENV"
-
-      - name: Pull Debian packaging from salsa
-        run: |
-          set -eux
-          git clone --depth=1 --branch=debian/master \
-            https://salsa.debian.org/debian/rsyslog.git /tmp/debian-rsyslog
 
       - name: Prepare Debian source tree from dist tarball
         run: |
@@ -91,7 +96,7 @@ jobs:
 
           echo "BUILD_DIR=$build_dir" >> "$GITHUB_ENV"
 
-      - name: Install Debian build dependencies from debian/control
+      - name: Build Debian binary packages
         run: |
           set -eux
           cd "$BUILD_DIR"
@@ -100,11 +105,6 @@ jobs:
             --remove \
             --tool='apt-get --yes --no-install-recommends' \
             debian/control
-
-      - name: Build Debian binary packages
-        run: |
-          set -eux
-          cd "$BUILD_DIR"
           dpkg-buildpackage -us -uc -b
 
       - name: Upload .deb artifacts
