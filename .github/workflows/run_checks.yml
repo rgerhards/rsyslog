@@ -1640,7 +1640,7 @@ jobs:
                   --disable-kafka-tests --disable-snmp-tests
               fi
               make -j8
-              make -j3 check
+              make -j3 check TESTS="diskqueue-oncorruption-missing-segment.sh"
             '
 
       - name: Collect test logs

@@ -87,6 +87,13 @@ wait_shutdown_or_kill() {
 					-ex "set pagination off" \
 					-ex "thread apply all bt full" \
 					-p "$pid" > "$bt_file" 2>&1 || true
+				if [ -s "$bt_file" ]; then
+					printf '--- BEGIN GDB BACKTRACE (%s) ---\n' "$bt_file"
+					cat "$bt_file"
+					printf '--- END GDB BACKTRACE (%s) ---\n' "$bt_file"
+				else
+					printf 'gdb backtrace file %s is empty\n' "$bt_file"
+				fi
 			else
 				printf 'gdb not available; cannot collect thread backtrace for pid %s\n' "$pid"
 			fi
