@@ -16,6 +16,14 @@ EXTRA_DIST = \
 TESTS_JSON_OMITIFZERO = json-omitifzero.sh json-omitifzero-subtree.sh json-whitespace.sh
 EXTRA_DIST += $(TESTS_JSON_OMITIFZERO)
 
+#
+# DEBUG-ONLY: temporarily limit "make check" to the diskqueue corruption test
+# to speed up investigation of CI-only ARM64 hangs.
+# Revert this once debugging is complete.
+#
+TESTS_DEBUG_FOCUS = \
+	diskqueue-oncorruption-missing-segment.sh
+
 TESTS_IMPTCP_TABESCAPE = \
 	tabescape_dflt.sh \
 	tabescape_dflt-udp.sh \
@@ -1950,8 +1958,7 @@ endif # if ENABLE_ELASTICSEARCH_TESTS
 
 
 if ENABLE_DEFAULT_TESTS
-TESTS += $(TESTS_DEFAULT)
-TESTS += $(TESTS_JSON_OMITIFZERO)
+TESTS += $(TESTS_DEBUG_FOCUS)
 
 if ENABLE_MMSNAREPARSE
 TESTS += $(TESTS_MMSNAREPARSE_MINIMAL)

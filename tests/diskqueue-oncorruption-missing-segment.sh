@@ -70,6 +70,7 @@ wait_shutdown_or_kill() {
 	local pid
 	local deadline
 	local timed_out=0
+	local bt_file="${RSYSLOG_DYNNAME}.ignore-timeout.gdb.bt"
 
 	pid="$(cat "$pid_file" 2>/dev/null || true)"
 	if [ -z "$pid" ]; then
@@ -80,6 +81,15 @@ wait_shutdown_or_kill() {
 	while kill -0 "$pid" 2>/dev/null; do
 		if [ "$(date +%s)" -gt "$deadline" ]; then
 			printf 'FAIL: shutdown timeout in ignore mode (pid %s), forcing kill -9\n' "$pid"
+			if command -v gdb >/dev/null 2>&1; then
+				printf 'Collecting gdb thread backtraces from hung pid %s into %s\n' "$pid" "$bt_file"
+				gdb -batch \
+					-ex "set pagination off" \
+					-ex "thread apply all bt full" \
+					-p "$pid" > "$bt_file" 2>&1 || true
+			else
+				printf 'gdb not available; cannot collect thread backtrace for pid %s\n' "$pid"
+			fi
 			kill -9 "$pid" 2>/dev/null || true
 			timed_out=1
 			break
