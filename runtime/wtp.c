@@ -386,6 +386,7 @@ PRAGMA_IGNORE_Wempty_body static void *wtpWorker(
     wti_t *pWti = (wti_t *)arg;
     wtp_t *pThis;
     sigset_t sigSet;
+    int iCancelStateSave;
 #if defined(HAVE_PRCTL) && defined(PR_SET_NAME)
     uchar *pszDbgHdr;
     uchar thrdName[32] = "rs:";
@@ -400,6 +401,13 @@ PRAGMA_IGNORE_Wempty_body static void *wtpWorker(
     sigdelset(&sigSet, SIGTTIN);
     sigdelset(&sigSet, SIGSEGV);
     pthread_sigmask(SIG_BLOCK, &sigSet, NULL);
+
+    /* Avoid a startup race: cancellation can be requested very early during
+     * shutdown. If that happens before our cleanup handler is registered,
+     * the thread can exit without transitioning state to WAIT_JOIN.
+     */
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &iCancelStateSave);
+    pthread_cleanup_push(wtpWrkrExecCancelCleanup, pWti);
 
 #if defined(HAVE_PRCTL) && defined(PR_SET_NAME)
     /* set thread name - we ignore if the call fails, has no harsh consequences... */
@@ -421,8 +429,6 @@ PRAGMA_IGNORE_Wempty_body static void *wtpWorker(
     wtiSetState(pWti, WRKTHRD_RUNNING);
     pthread_cond_broadcast(&pThis->condThrdInitDone);
     d_pthread_mutex_unlock(&pThis->mutWtp);
-
-    pthread_cleanup_push(wtpWrkrExecCancelCleanup, pWti);
 
     wtiWorker(pWti);
     pthread_cleanup_pop(0);
@@ -497,8 +503,7 @@ static rsRetVal ATTR_NONNULL() wtpStartWrkr(wtp_t *const pThis, const int permit
 
     // TESTBENCH bughunt - remove when done! 2018-11-05 rgerhards
     if (dbgTimeoutToStderr) {
-        fprintf(stderr,
-                "%s: wrkr start initiated slot=%p thrdID=%p createState=%d num workers now %d wtpState=%d\n",
+        fprintf(stderr, "%s: wrkr start initiated slot=%p thrdID=%p createState=%d num workers now %d wtpState=%d\n",
                 wtpGetDbgHdr(pThis), (void *)pWti, (void *)pWti->thrdID, iState,
                 ATOMIC_FETCH_32BIT(&pThis->iCurNumWrkThrd, &pThis->mutCurNumWrkThrd),
                 (int)ATOMIC_FETCH_32BIT((int *)&pThis->wtpState, &pThis->mutWtpState));
