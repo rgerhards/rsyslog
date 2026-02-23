@@ -362,7 +362,7 @@ jobs:
             arch: arm64
             sanitizer: tsan
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     name: macOS CI (${{ matrix.os }}, ${{ matrix.arch }}, ${{ matrix.sanitizer }})
     env:
       USE_AUTO_DEBUG: true
