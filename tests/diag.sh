@@ -1397,12 +1397,20 @@ shutdown_immediate() {
 
 # actually, we wait for rsyslog.pid to be deleted.
 # $1 is the instance
+# $2 optional timeout in seconds (defaults to remaining TB_TEST_MAX_RUNTIME window)
 wait_shutdown() {
+	local shutdown_deadline now timeout_override
+	timeout_override="${2:-}"
 	if [ "$USE_VALGRIND" == "YES" ] || [ "$USE_VALGRIND" == "YES-NOLEAK" ]; then
 		wait_shutdown_vg "$1"
 		return
 	fi
 	out_pid=$(cat $RSYSLOG_PIDBASE$1.pid.save)
+	if [ -n "$timeout_override" ]; then
+		shutdown_deadline=$(( $(date +%s) + timeout_override ))
+	else
+		shutdown_deadline=$(( TB_STARTTEST + TB_TEST_MAX_RUNTIME ))
+	fi
 	printf '%s wait on shutdown of %s\n' "$(tb_timestamp)" "$out_pid"
 	if [[ "$out_pid" == "" ]]
 	then
@@ -1416,7 +1424,8 @@ wait_shutdown() {
 			terminated=1
 		fi
 		$TESTTOOL_DIR/msleep 100 # wait 100 milliseconds
-		if [ $(date +%s) -gt $(( TB_STARTTEST + TB_TEST_MAX_RUNTIME )) ]; then
+		now=$(date +%s)
+		if [ "$now" -gt "$shutdown_deadline" ]; then
 		   printf '%s wait_shutdown ABORT! Timeout waiting on shutdown (pid %s)\n' "$(tb_timestamp)" $out_pid
 		   ps -fp $out_pid
 		   echo "Instance is possibly still running and may need"
