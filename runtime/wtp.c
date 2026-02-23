@@ -400,6 +400,13 @@ PRAGMA_IGNORE_Wempty_body static void *wtpWorker(
     sigdelset(&sigSet, SIGSEGV);
     pthread_sigmask(SIG_BLOCK, &sigSet, NULL);
 
+    /* Avoid startup race: cancellation can be requested very early during
+     * shutdown. If that happens before the cleanup handler is registered,
+     * the thread can exit without transitioning state to WAIT_JOIN.
+     */
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+    pthread_cleanup_push(wtpWrkrExecCancelCleanup, pWti);
+
 #if defined(HAVE_PRCTL) && defined(PR_SET_NAME)
     /* set thread name - we ignore if the call fails, has no harsh consequences... */
     pszDbgHdr = wtpGetDbgHdr(pThis);
@@ -419,8 +426,6 @@ PRAGMA_IGNORE_Wempty_body static void *wtpWorker(
     wtiSetState(pWti, WRKTHRD_RUNNING);
     pthread_cond_broadcast(&pThis->condThrdInitDone);
     d_pthread_mutex_unlock(&pThis->mutWtp);
-
-    pthread_cleanup_push(wtpWrkrExecCancelCleanup, pWti);
 
     wtiWorker(pWti);
     pthread_cleanup_pop(0);
