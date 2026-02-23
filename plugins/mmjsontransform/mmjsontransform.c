@@ -32,7 +32,7 @@
 #include <strings.h>
 #include <sys/stat.h>
 #ifdef HAVE_LIBYAML
-#include <yaml.h>
+    #include <yaml.h>
 #endif
 
 #include "rsyslog.h"
@@ -755,7 +755,7 @@ static rsRetVal jsontransformApplyPolicyRules(struct json_object *src,
             rewrittenValue = NULL;
         }
 
-loop_finalize:
+    loop_finalize:
         if (rewrittenValue != NULL) json_object_put(rewrittenValue);
         if (fullKey != NULL) free(fullKey);
         if (iRet != RS_RET_OK) {
