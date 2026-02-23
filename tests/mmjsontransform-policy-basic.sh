@@ -28,10 +28,10 @@ local4.* {
 '
 
 startup
-tcpflood -m1 -M '"{ \"usr\": \"alice\", \"debug\": true }"'
+tcpflood -m1 -M '"<166>Mar 10 01:00:00 host app: { \"usr\": \"alice\", \"debug\": true }"'
 
-# Ensure mtime change is visible on filesystems with 1s timestamp granularity.
-sleep 1
+# Ensure mtime change is visible on filesystems with coarse timestamp granularity.
+sleep 2
 cat > "$policy_file" <<'YAML'
 version: 1
 map:
@@ -40,10 +40,15 @@ map:
 YAML
 
 issue_HUP
-tcpflood -m1 -M '"{ \"usr\": \"bob\", \"debug\": true }"'
+tcpflood -m1 -M '"<166>Mar 10 01:00:00 host app: { \"usr\": \"bob\", \"debug\": true }"'
 
 shutdown_when_empty
 wait_shutdown
+
+if [ ! -f "$RSYSLOG_OUT_LOG" ]; then
+    echo "FAIL: expected output file '$RSYSLOG_OUT_LOG' was not created"
+    error_exit 1
+fi
 
 python3 - "$RSYSLOG_OUT_LOG" <<'PY'
 import json
@@ -74,6 +79,9 @@ if second != expected_second:
     print("unexpected second output:", second)
     sys.exit(1)
 PY
+if [ $? -ne 0 ]; then
+    error_exit 1
+fi
 
 rm -f "$policy_file"
 exit_test

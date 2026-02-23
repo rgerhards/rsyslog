@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <errno.h>
 #include <sys/stat.h>
 #ifdef HAVE_LIBYAML
     #include <yaml.h>
@@ -66,6 +67,11 @@ typedef struct jsontransformConflict {
     char *detail; /**< Human-readable description of the conflict. */
 } jsontransformConflict_t;
 
+typedef struct renameRule {
+    char *from;
+    char *to;
+} renameRule_t;
+
 typedef struct _instanceData {
     msgPropDescr_t *inputProp;
     msgPropDescr_t *outputProp;
@@ -73,11 +79,10 @@ typedef struct _instanceData {
     char *policyPath;
     char **dropKeys;
     size_t nDropKeys;
-    struct {
-        char *from;
-        char *to;
-    } *renameRules;
+    struct json_object *dropKeySet;
+    renameRule_t *renameRules;
     size_t nRenameRules;
+    struct json_object *renameMap;
     time_t policyMtime;
     pthread_mutex_t policyLock;
 } instanceData;
@@ -225,6 +230,15 @@ BEGINfreeCnf
     CODESTARTfreeCnf;
 ENDfreeCnf
 
+BEGINdoHUP
+    CODESTARTdoHUP;
+    if (pData->policyPath != NULL) {
+        pthread_mutex_lock(&pData->policyLock);
+        jsontransformMaybeReloadPolicy(pData);
+        pthread_mutex_unlock(&pData->policyLock);
+    }
+ENDdoHUP
+
 BEGINcreateInstance
     CODESTARTcreateInstance;
     pData->inputProp = NULL;
@@ -233,8 +247,10 @@ BEGINcreateInstance
     pData->policyPath = NULL;
     pData->dropKeys = NULL;
     pData->nDropKeys = 0;
+    pData->dropKeySet = NULL;
     pData->renameRules = NULL;
     pData->nRenameRules = 0;
+    pData->renameMap = NULL;
     pData->policyMtime = 0;
     pthread_mutex_init(&pData->policyLock, NULL);
 ENDcreateInstance
@@ -276,13 +292,10 @@ ENDdbgPrintInstInfo
 
 BEGINtryResume
     CODESTARTtryResume;
-    if (pData->policyPath != NULL) {
-        pthread_mutex_lock(&pData->policyLock);
-        iRet = jsontransformMaybeReloadPolicy(pData);
-        pthread_mutex_unlock(&pData->policyLock);
-        if (iRet != RS_RET_OK) {
-            FINALIZE;
-        }
+    if (pWrkrData->pData->policyPath != NULL) {
+        pthread_mutex_lock(&pWrkrData->pData->policyLock);
+        jsontransformMaybeReloadPolicy(pWrkrData->pData);
+        pthread_mutex_unlock(&pWrkrData->pData->policyLock);
     }
 ENDtryResume
 
@@ -447,6 +460,7 @@ BEGINdoAction_NoStrings
     smsg_t *pMsg = ppMsg[0];
     instanceData *pData = pWrkrData->pData;
     struct json_object *input = NULL;
+    struct json_object *activeInput = NULL;
     struct json_object *policyAdjusted = NULL;
     struct json_object *rewritten = NULL;
     jsontransformConflict_t conflict = {0, NULL};
@@ -474,19 +488,20 @@ BEGINdoAction_NoStrings
         ABORT_FINALIZE(localRet);
     }
 
+    activeInput = input;
+
     if (pData->policyPath != NULL) {
         pthread_mutex_lock(&pData->policyLock);
-        localRet = jsontransformApplyPolicyRules(input, &policyAdjusted, pData, &conflict, NULL);
+        localRet = jsontransformApplyPolicyRules(activeInput, &policyAdjusted, pData, &conflict, NULL);
         pthread_mutex_unlock(&pData->policyLock);
         CHKiRet(localRet);
-        input = policyAdjusted;
-        json_object_get(input);
+        activeInput = policyAdjusted;
     }
 
     if (pData->mode == MMJSONTRANSFORM_MODE_UNFLATTEN) {
-        CHKiRet(jsontransformRewriteObject(input, &rewritten, &conflict, NULL));
+        CHKiRet(jsontransformRewriteObject(activeInput, &rewritten, &conflict, NULL));
     } else {
-        CHKiRet(jsontransformFlattenObject(input, &rewritten, &conflict));
+        CHKiRet(jsontransformFlattenObject(activeInput, &rewritten, &conflict));
     }
     if (conflict.occurred) {
         if (conflict.detail != NULL) {
@@ -517,6 +532,8 @@ static void jsontransformFreePolicy(instanceData *pData) {
     free(pData->dropKeys);
     pData->dropKeys = NULL;
     pData->nDropKeys = 0;
+    if (pData->dropKeySet != NULL) json_object_put(pData->dropKeySet);
+    pData->dropKeySet = NULL;
 
     for (i = 0; i < pData->nRenameRules; ++i) {
         free(pData->renameRules[i].from);
@@ -525,6 +542,8 @@ static void jsontransformFreePolicy(instanceData *pData) {
     free(pData->renameRules);
     pData->renameRules = NULL;
     pData->nRenameRules = 0;
+    if (pData->renameMap != NULL) json_object_put(pData->renameMap);
+    pData->renameMap = NULL;
 }
 
 static rsRetVal jsontransformLoadPolicy(instanceData *pData, const char *policyPath) {
@@ -545,12 +564,12 @@ static rsRetVal jsontransformLoadPolicy(instanceData *pData, const char *policyP
     char *renameFrom = NULL;
     char **newDropKeys = NULL;
     size_t nNewDropKeys = 0;
-    struct {
-        char *from;
-        char *to;
-    } *newRenameRules = NULL;
+    renameRule_t *newRenameRules = NULL;
     size_t nNewRenameRules = 0;
+    struct json_object *newDropKeySet = NULL;
+    struct json_object *newRenameMap = NULL;
     struct stat st;
+    size_t i;
     DEFiRet;
 
     fh = fopen(policyPath, "r");
@@ -634,23 +653,50 @@ static rsRetVal jsontransformLoadPolicy(instanceData *pData, const char *policyP
         pData->policyMtime = st.st_mtime;
     }
 
+    newDropKeySet = json_object_new_object();
+    if (newDropKeySet == NULL) ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+    for (i = 0; i < nNewDropKeys; ++i) {
+        struct json_object *existing = NULL;
+        if (!json_object_object_get_ex(newDropKeySet, newDropKeys[i], &existing)) {
+            struct json_object *marker = json_object_new_boolean(1);
+            if (marker == NULL) ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+            json_object_object_add(newDropKeySet, newDropKeys[i], marker);
+        }
+    }
+
+    newRenameMap = json_object_new_object();
+    if (newRenameMap == NULL) ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+    for (i = 0; i < nNewRenameRules; ++i) {
+        struct json_object *existing = NULL;
+        if (!json_object_object_get_ex(newRenameMap, newRenameRules[i].from, &existing)) {
+            struct json_object *mapped = json_object_new_string(newRenameRules[i].to);
+            if (mapped == NULL) ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+            json_object_object_add(newRenameMap, newRenameRules[i].from, mapped);
+        }
+    }
+
     jsontransformFreePolicy(pData);
     pData->dropKeys = newDropKeys;
     pData->nDropKeys = nNewDropKeys;
+    pData->dropKeySet = newDropKeySet;
     pData->renameRules = newRenameRules;
     pData->nRenameRules = nNewRenameRules;
+    pData->renameMap = newRenameMap;
     newDropKeys = NULL;
     nNewDropKeys = 0;
+    newDropKeySet = NULL;
     newRenameRules = NULL;
     nNewRenameRules = 0;
+    newRenameMap = NULL;
 
 finalize_it:
-    if (renameFrom != NULL) free(renameFrom);
-    if (currentKey != NULL) free(currentKey);
+    free(renameFrom);
+    free(currentKey);
     if (parserInitialized) yaml_parser_delete(&parser);
     if (fh != NULL) fclose(fh);
+    if (newDropKeySet != NULL) json_object_put(newDropKeySet);
+    if (newRenameMap != NULL) json_object_put(newRenameMap);
     if (iRet != RS_RET_OK) {
-        size_t i;
         for (i = 0; i < nNewDropKeys; ++i) free(newDropKeys[i]);
         free(newDropKeys);
         for (i = 0; i < nNewRenameRules; ++i) {
@@ -719,25 +765,20 @@ static rsRetVal jsontransformApplyPolicyRules(struct json_object *src,
         struct json_object *rewrittenValue = NULL;
         char *fullKey = NULL;
         const char *targetKey = key;
-        size_t i;
+        struct json_object *lookupValue = NULL;
         sbool drop = 0;
 
         iRet = jsontransformBuildPath(&fullKey, contextPath, key);
         if (iRet != RS_RET_OK) {
             goto loop_finalize;
         }
-        for (i = 0; i < pData->nDropKeys; ++i) {
-            if (!strcmp(pData->dropKeys[i], fullKey)) {
-                drop = 1;
-                break;
-            }
+        if (pData->dropKeySet != NULL && json_object_object_get_ex(pData->dropKeySet, fullKey, &lookupValue)) {
+            drop = 1;
         }
         if (!drop) {
-            for (i = 0; i < pData->nRenameRules; ++i) {
-                if (!strcmp(pData->renameRules[i].from, fullKey)) {
-                    targetKey = pData->renameRules[i].to;
-                    break;
-                }
+            if (pData->renameMap != NULL && json_object_object_get_ex(pData->renameMap, fullKey, &lookupValue) &&
+                json_object_is_type(lookupValue, json_type_string)) {
+                targetKey = json_object_get_string(lookupValue);
             }
 
             if (json_object_is_type(value, json_type_object)) {
@@ -757,7 +798,7 @@ static rsRetVal jsontransformApplyPolicyRules(struct json_object *src,
 
     loop_finalize:
         if (rewrittenValue != NULL) json_object_put(rewrittenValue);
-        if (fullKey != NULL) free(fullKey);
+        free(fullKey);
         if (iRet != RS_RET_OK) {
             goto finalize_it;
         }
@@ -782,6 +823,7 @@ BEGINqueryEtryPt
     CODEqueryEtryPt_STD_OMOD_QUERIES;
     CODEqueryEtryPt_STD_OMOD8_QUERIES;
     CODEqueryEtryPt_STD_CONF2_OMOD_QUERIES;
+    CODEqueryEtryPt_doHUP
     CODEqueryEtryPt_STD_CONF2_QUERIES;
 ENDqueryEtryPt
 
@@ -867,8 +909,8 @@ static rsRetVal jsontransformInsertDotted(struct json_object *dest,
     leaf = NULL;
 
 finalize_it:
-    if (segment != NULL) free(segment);
-    if (leaf != NULL) free(leaf);
+    free(segment);
+    free(leaf);
     RETiRet;
 }
 
