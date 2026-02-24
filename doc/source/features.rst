@@ -8,25 +8,25 @@ is a vital project. Features are added each few days. If you would like
 to keep up of what is going on, you can also subscribe to the `rsyslog
 mailing list <http://lists.adiscon.net/mailman/listinfo/rsyslog>`_.
 
-A better structured feature list is now contained in our `rsyslog vs.
-syslog-ng comparison <rsyslog_ng_comparison.html>`_. Probably that page
+A better structured feature list used to be contained in our rsyslog vs.
+syslog-ng comparison. Probably that page
 will replace this one in the future.
 
 Current Features
 ----------------
 
--  native support for `writing to MariaDB/MySQL databases <rsyslog_mysql.html>`_
+-  native support for :doc:`writing to MariaDB/MySQL databases </tutorials/database>`
 -  native support for writing to Postgres databases
 -  direct support for Firebird/Interbase, OpenTDS (MS SQL, Sybase),
    SQLite, Ingres, Oracle, and mSQL via libdbi, a database abstraction
    layer (almost as good as native)
--  native support for `sending mail messages <ommail.html>`_ (first seen
+-  native support for :doc:`sending mail messages </configuration/modules/ommail>` (first seen
    in 3.17.0)
 -  support for (plain) tcp based syslog - much better reliability
 -  support for sending and receiving compressed syslog messages
 -  support for on-demand on-disk spooling of messages that can not be
-   processed fast enough (a great feature for `writing massive amounts
-   of syslog messages to a database <rsyslog_high_database_rate.html>`_)
+   processed fast enough (a great feature for :doc:`writing massive amounts
+   of syslog messages to a database </tutorials/high_database_rate>`)
 -  support for selectively `processing messages only during specific
    timeframes <http://wiki.rsyslog.com/index.php/OffPeakHours>`_ and
    spooling them to disk otherwise
@@ -48,9 +48,8 @@ Current Features
 -  support for file size limitation and automatic rollover command
    execution
 -  support for running multiple rsyslogd instances on a single machine
--  support for `TLS-protected syslog <rsyslog_tls.html>`_ (both
-   `natively <rsyslog_tls.html>`_ and via
-   `stunnel <rsyslog_stunnel.html>`_)
+-  support for :doc:`TLS-protected syslog </tutorials/tls>` (both
+   :doc:`natively </tutorials/tls>` and via stunnel wrappers)
 -  ability to filter on any part of the message, not just facility and
    severity
 -  ability to use regular expressions in filters
@@ -67,7 +66,7 @@ Current Features
    and shut themselves down on an as-needed basis (great for high log
    volume on multicore machines)
 -  very experimental and volatile support for
-   `syslog-protocol <syslog_protocol.html>`_ compliant messages (it is
+   :doc:`syslog-protocol </whitepapers/syslog_protocol>` compliant messages (it is
    volatile because standardization is currently underway and this is a
    proof-of-concept implementation to aid this effort)
 -  world's first implementation of syslog-transport-tls

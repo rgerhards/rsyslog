@@ -136,7 +136,7 @@ used. This template is:
 This creates the BSON document needed for MongoDB if no template is
 specified. The default schema is aligned to CEE and project lumberjack.
 As such, the field names are standard lumberjack field names, and
-**not** `rsyslog property names <property_replacer.html>`_. When
+**not** :doc:`rsyslog property names </configuration/property_replacer>`. When
 specifying templates, be sure to use rsyslog property names as given in
 the table. If you would like to use lumberjack-based field names inside
 MongoDB (which probably is useful depending on the use case), you need
@@ -245,5 +245,4 @@ PWD
    "word", "none", "no", "none"
 
 The user's password.
-
 

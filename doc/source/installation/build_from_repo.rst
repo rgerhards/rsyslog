@@ -67,7 +67,6 @@ Creating the Build Environment
 This is fairly easy: just issue "**autoreconf -fvi**\ ", which should do
 everything you need. Once this is done, you can follow the usual
 ./configure steps just like when you downloaded an official distribution
-tarball (see the `rsyslog install guide <install.html>`_, starting at
+tarball (see the :doc:`rsyslog install guide </installation/install_from_source>`, starting at
 step 2, for further details about that).
-
 

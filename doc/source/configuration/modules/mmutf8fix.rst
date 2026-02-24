@@ -42,7 +42,7 @@ problems, mmutf8fix can be conditionally called only on messages from
 them. This also offers performance benefits. If such multiple sources
 exists, it probably is a good idea to define different listeners for
 their incoming traffic, bind them to specific
-`ruleset <multi_ruleset.html>`_ and call mmutf8fix as first action in
+:doc:`ruleset </concepts/multi_ruleset>` and call mmutf8fix as first action in
 this ruleset.
 
 Configuration Parameters

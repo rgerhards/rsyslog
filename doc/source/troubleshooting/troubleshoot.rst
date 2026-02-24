@@ -23,8 +23,8 @@ Useful troubleshooting resources are:
 Malformed Messages and Message Properties
 -----------------------------------------
 
-A common trouble source are `ill-formed syslog
-messages <syslog_parsing.html>`_, which lead to all sorts of
+A common trouble source are :doc:`ill-formed syslog
+messages </whitepapers/syslog_parsing>`, which lead to all sorts of
 interesting problems, including malformed hostnames and dates. Read the
 quoted guide to find relief. A common symptom is that the %HOSTNAME%
 property is used for generating dynafile names, but some gibberish

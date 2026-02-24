@@ -77,9 +77,9 @@ fix it.
 
 Once this schema is created, we simply instruct rsyslogd to store
 received data in it. I won't go into too much detail here. If you are
-interested in some more details, you might find my paper "`Writing
-syslog messages to MySQL <rsyslog_mysql.html>`_\ " worth reading. For
-this article, we simply modify `rsyslog.conf <rsyslog_conf.html>`_\ so
+interested in some more details, you might find my paper
+:doc:`Writing syslog messages to MySQL </tutorials/database>` worth reading. For
+this article, we simply modify :doc:`rsyslog.conf </configuration/basic_structure>` so
 that it writes to the database. That is easy. Just these two lines are
 needed:
 
@@ -98,7 +98,7 @@ inefficiency in our current usage: the
 ``'%timereported:::date-mysql%'``
 property is used for both the time
 and the date (if you wonder about what all these funny characters mean,
-see the `rsyslogd property replacer manual <property_replacer.html>`_) .
+see the :doc:`rsyslogd property replacer manual </configuration/property_replacer>`).
 We could have extracted just the date and time parts of the respective
 properties. However, this is more complicated and also adds processing
 time to rsyslogd's processing (substrings must be extracted). So we take

@@ -22,8 +22,8 @@ To be compatible to sysklogd, this option must be turned on.
    sets (like Japanese, Chinese and Korean)
 -  turning on this option destroys digital signatures if such exists
    inside the message
--  if turned on, the drop-cc, space-cc and escape-cc `property
-   replacer <property_replacer.html>`_ options do not work as expected
+-  if turned on, the drop-cc, space-cc and escape-cc :doc:`property
+   replacer </configuration/property_replacer>` options do not work as expected
    because control characters are already removed upon message
    reception. If you intend to use these property replacer options, you
    must turn off $EscapeControlCharactersOnReceive.
@@ -31,4 +31,3 @@ To be compatible to sysklogd, this option must be turned on.
 **Sample:**
 
 ``$EscapeControlCharactersOnReceive on``
-

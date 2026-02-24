@@ -21,7 +21,7 @@ have found the right spot.
 
 This is a quick guide. There is a more elaborate guide currently under
 construction which provides a much more secure environment. It is highly
-recommended to `at least have a look at it <rsyslog_secure_tls.html>`_.
+recommended to :doc:`at least have a look at it </tutorials/tls_cert_summary>`.
 
 Background
 ----------
@@ -32,8 +32,8 @@ problem at all. In others, it is a huge setback, probably even
 preventing deployment of syslog solutions. Thankfully, there are easy
 ways to encrypt syslog communication. 
 
-The traditional approach involves `running a wrapper like stunnel around
-the syslog session <rsyslog_stunnel.html>`_. This works quite well and
+The traditional approach involves running a wrapper like stunnel around
+the syslog session. This works quite well and
 is in widespread use. However, it is not tightly coupled with the main
 syslogd and some, even severe, problems can result from this (follow a
 mailing list thread that describes `total loss of syslog messages due to
@@ -42,7 +42,7 @@ mode <http://lists.adiscon.net/pipermail/rsyslog/2008-March/000580.html>`_
 and the `unreliability of TCP
 syslog <https://rainer.gerhards.net/2008/04/on-unreliability-of-plain-tcp-syslog.html>`_).
 
-`Rsyslog supports syslog via GSSAP <gssapi.html>`_\ I since long to
+:doc:`Rsyslog supports syslog via GSSAPI </configuration/modules/imgssapi>` since long to
 overcome these limitations. However, syslog via GSSAPI is a
 rsyslog-exclusive transfer mode and it requires a proper Kerberos
 environment. As such, it isn't a really universal solution. The

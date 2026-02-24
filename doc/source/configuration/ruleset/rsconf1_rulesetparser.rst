@@ -53,7 +53,7 @@ is
 -  bind the listener to the ruleset with the required parser
 
 Note that it may be cumbersome to add all rules to all rulesets. To
-avoid this, you can either use $Include or `omruleset <omruleset.html>`_
+avoid this, you can either use $Include or :doc:`omruleset </configuration/modules/omruleset>`
 (what probably provides the best solution).
 
 More information about rulesets in general can be found in
@@ -119,9 +119,8 @@ parsed once any parser properly processed it).
 
 For an example of how multiple parser can be chained (and an actual use
 case), please see the example section on the
-`pmlastmsg <pmlastmsg.html>`_ parser module.
+:doc:`pmlastmsg </configuration/modules/pmlastmsg>` parser module.
 
 Note the positions of the directives. With the current config language,
 **sequence of statements is very important**. This is ugly, but
 unfortunately the way it currently works.
-
