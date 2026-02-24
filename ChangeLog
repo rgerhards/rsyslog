@@ -1,5 +1,39 @@
 --------------------------------------------------------------------------------------
 Scheduled Release 8.2604.0 (aka 2026.04) 2026-04-??
+- 2025-02-24: rsyslogd: send systemd watchdog keepalive pings
+  Some deployments rely on systemd watchdog restarts when the daemon
+  becomes unresponsive. rsyslogd announced readiness but never sent
+  watchdog heartbeats.
+  When WatchdogSec is configured, rsyslogd now sends periodic
+  WATCHDOG=1 notifications while running.
+- 2025-02-23: queue: further harden diskqueue recovery and shutdown race handling
+  This combines two related hardening steps for disk queue reliability:
+  - robust corruption detection/recovery handling in disk queue state/file validation
+  - worker startup cancellation-race closure that could lead to shutdown wait loops
+  Impact:
+  - disk queue scan now rejects out-of-range segment sequence numbers early and
+    reports corruption deterministically.
+  - worker startup no longer exposes a cancellation window before cleanup
+    registration.
+  - test/CI diagnostics preserve timeout backtraces (gdb) in ARM jobs and print
+    them to stdout for post-mortem debugging.
+  - test script cleanup removes redundant operations and uses a macOS-friendlier
+    segment enumeration path.
+- 2025-02-23: runtime: close worker-start cancellation race
+  Worker shutdown cancellation can race with worker startup. In wtpWorker(),
+  state was published as WRKTHRD_RUNNING before the cancellation cleanup
+  handler was registered. If pthread_cancel() hit in that window, cleanup could
+  be skipped and the worker remained visible as RUNNING.
+  Impact:
+  Prevents shutdown hangs where wtiCancelThrd() loops waiting for a worker that
+  was canceled before its cleanup path could transition state to WAIT_JOIN.
+- 2025-02-22: ci: enable core dumps in ASAN builds
+  AddressSanitizer by default sets disable_coredump=1, which prevents
+  core file generation even when abort() is called. This commit adds
+  disable_coredump=0 to ASAN_OPTIONS in both macOS and ARM64 workflows
+  to ensure core dumps are generated on crashes.
+  This allows diag.sh to find and analyze core files for better
+  debugging of test failures in ASAN-enabled CI jobs.
 - 2025-02-18: build: fix linking issue with libyaml
   When building rsyslogd with libyaml support, the library was not being
   explicitly linked. This implementation adds $(LIBYAML_LIBS) to
