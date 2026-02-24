@@ -30,6 +30,14 @@ monitoring stack including:
 
 :doc:`Get started with ROSI Collector <rosi_collector/index>`
 
+For the beginner-level ROSI rationale (freedom of choice and avoiding
+vendor lock-in), see :doc:`../getting_started/rosi_for_beginners`.
+
+For audience-specific ROSI follow-up guidance:
+
+- :doc:`rosi_for_platform_teams` for architecture and adoption patterns
+- :doc:`rosi_for_decision_makers` for strategic operations framing
+
 Deployment Comparison
 ---------------------
 
@@ -77,3 +85,5 @@ When to Use Each Option
    :caption: Deployment Guides
 
    rosi_collector/index
+   rosi_for_platform_teams
+   rosi_for_decision_makers

@@ -19,6 +19,7 @@ It includes:
    :maxdepth: 1
 
    beginner_tutorials/index
+   rosi_for_beginners
    ai-assistants
    installation
    basic_configuration
