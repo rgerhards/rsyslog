@@ -12,6 +12,11 @@ ROSI Collector (Rsyslog Operations Stack Initiative):
 
 :doc:`../deployments/rosi_collector/index`
 
+For the beginner-level ROSI concepts (open approach, freedom of choice, and
+vendor lock-in guardrails), see:
+
+:doc:`rosi_for_beginners`
+
 ROSI Collector provides:
 
 - Centralized log aggregation from multiple hosts

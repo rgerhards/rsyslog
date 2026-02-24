@@ -297,6 +297,8 @@ EXTRA_DIST = \
     source/containers/user_images.rst \
     source/dataflow.png \
     source/deployments/index.rst \
+    source/deployments/rosi_for_decision_makers.rst \
+    source/deployments/rosi_for_platform_teams.rst \
     source/deployments/rosi_collector/architecture.rst \
     source/deployments/rosi_collector/client_setup.rst \
     source/deployments/rosi_collector/grafana_dashboards.rst \
@@ -357,6 +359,7 @@ EXTRA_DIST = \
     source/getting_started/index.rst \
     source/getting_started/installation.rst \
     source/getting_started/next_steps.rst \
+    source/getting_started/rosi_for_beginners.rst \
     source/getting_started/understanding_default_config.rst \
     source/gssapi.png \
     source/historical/high_performance.rst \
