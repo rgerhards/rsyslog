@@ -43,6 +43,7 @@ if $msg contains "msgnum:" then
 # Write logrotate config file
 echo '"./'$RSYSLOG_DYNNAME'.input.*.log"
 {
+	su '"$(id -un)"' '"$(id -gn)"'
 	rotate 7
 	create
 	daily
