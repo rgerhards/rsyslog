@@ -187,7 +187,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'rsyslog'
-copyright = u'2008-2022, Rainer Gerhards and Others'
+copyright = u'2008-2026, Rainer Gerhards and Others'
 author = u'Rainer Gerhards and Others'
 
 
