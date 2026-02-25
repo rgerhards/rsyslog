@@ -155,4 +155,5 @@ See Also
 
 - :doc:`../../containers/collector` - The base collector container image
 - :doc:`../../tutorials/reliable_forwarding` - Reliable log forwarding concepts
+- :doc:`../../tutorials/rosi_hetzner` - Step-by-step Hetzner Cloud deployment
 - :doc:`../../configuration/index` - rsyslog configuration reference
