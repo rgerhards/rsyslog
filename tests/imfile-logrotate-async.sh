@@ -13,6 +13,7 @@ export RETRIES=50
 # Write logrotate config file
 echo '"./'$RSYSLOG_DYNNAME'.input*.log"
 {
+    su '"$(id -un)"' '"$(id -gn)"'
     #daily
     rotate 60
     missingok

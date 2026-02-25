@@ -34,6 +34,7 @@ if $msg contains "msgnum:" then
 # Write logrotate config file
 echo '"./'$RSYSLOG_DYNNAME'.input"
 {
+	su '"$(id -un)"' '"$(id -gn)"'
 	create
 	daily
 	missingok
