@@ -6,8 +6,10 @@ RUN echo "* soft nofile 1024000" >> /etc/security/limits.conf && \
     echo "session required pam_limits.so" >> /etc/pam.d/common-session && \
     echo "ulimit -n 1024000" >> /etc/profile.d/ulimit.sh
 # Install packages
-RUN	dnf -y update
-RUN	dnf -y install wget mock git sudo mc vim screen rsync createrepo rpm-sign yum crypto-policies-scripts.noarch
+# hadolint ignore=DL3041
+RUN	dnf -y update && dnf clean all
+# hadolint ignore=DL3041
+RUN	dnf -y install wget mock git sudo mc vim screen rsync createrepo rpm-sign yum crypto-policies-scripts.noarch && dnf clean all
 RUN	update-crypto-policies --set LEGACY
 RUN	mkdir /private-files
 VOLUME	/private-files
@@ -37,7 +39,9 @@ RUN	chmod +x ./sync_remote.sh
 RUN	chmod +x ./sync_remote_delete.sh
 RUN	chmod +x ./cleanup_repo.sh
 #COPY	extra/adisconextra.repo /etc/yum.repos.d/
-RUN	dnf -y update
+# hadolint ignore=DL3041
+RUN	dnf -y update && dnf clean all
+# hadolint ignore=DL3041
 RUN	dnf -y install \
 	autoconf \
 	autoconf-archive \
@@ -56,4 +60,12 @@ RUN	dnf -y install \
 	libuuid-devel \
 	libgcrypt-devel \
 	libcurl-devel \
-	subscription-manager
+	protobuf-c \
+	protobuf-c-devel \
+	protobuf-c-compiler \
+	snappy-devel \
+	subscription-manager \
+	&& dnf clean all
+# Show image build date on bash login
+RUN	date -Iseconds > /etc/image-build-date && \
+	echo 'echo "Image built: $(cat /etc/image-build-date)"' > /etc/profile.d/image-build-date.sh
