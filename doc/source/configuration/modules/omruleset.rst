@@ -12,7 +12,7 @@ omruleset: ruleset output/including module (DEPRECATED)
    **THIS MODULE IS DEPRECATED AND SHOULD NOT BE USED.**
 
    It is outdated and inefficient. It has been replaced by the much more
-   efficient `"call" RainerScript statement <../rainerscript/rainerscript_call.html>`_.
+   efficient :doc:`"call" RainerScript statement </rainerscript/rainerscript_call>`.
 
    The documentation below is provided to help you **identify and migrate** legacy configurations.
 

@@ -1,3 +1,16 @@
+.. _rsconf1_generateconfiggraph:
+
+.. meta::
+   :description: Legacy rsyslog global parameter $GenerateConfigGraph for generating configuration graph data.
+   :keywords: rsyslog, global option, GenerateConfigGraph, Graphviz, configuration graph
+
+.. summary-start
+
+``$GenerateConfigGraph`` is a legacy global parameter that can emit Graphviz
+dot data for visualizing rsyslog configuration flow. It is currently disabled.
+
+.. summary-end
+
 $GenerateConfigGraph
 --------------------
 
@@ -130,7 +143,7 @@ is does not have standard form (the same happened to the node named
 are executed synchronously.
 
 Configuration graphs are useful for documenting a setup, but are also a
-great `troubleshooting <troubleshoot.html>`_ resource. It is important
+great :doc:`troubleshooting </troubleshooting/troubleshoot>` resource. It is important
 to remember that **these graphs are generated from rsyslogd's in-memory
 action processing structures**. You can not get closer to understanding
 on how rsyslog interpreted its configuration files. So if the graph does

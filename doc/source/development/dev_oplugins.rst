@@ -37,7 +37,7 @@ points need to be provided and thus reading the code comments in the
 files mentioned is highly suggested.
 
 For testing, you need rsyslog's debugging support. Some useful
-information is given in "`troubleshooting rsyslog <troubleshoot.html>`_
+information is given in :doc:`troubleshooting rsyslog </troubleshooting/troubleshoot>`
 from the doc set.
 
 Special Topics

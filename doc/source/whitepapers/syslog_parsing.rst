@@ -251,8 +251,8 @@ Is available with rsyslog 5.3.4 and above. Here, we can define so-called
 custom parsers. These are plugin modules, written in C and adapted to a
 specific message format need. The big plus of custom parsers is that
 they offer excellent performance and unlimited possibilities - far
-better than any work-around could do. Custom parsers can be `bound to
-specific rule sets <rsconf1_rulesetparser.html>`_ (and thus listening)
+better than any work-around could do. Custom parsers can be :doc:`bound to
+specific rule sets </configuration/ruleset/rsconf1_rulesetparser>` (and thus listening)
 ports with relative ease. The only con is that they must be written.
 However, if you are lucky, a parser for your device may already exist.
 If not, you can opt to write it yourself, what is not too hard if you
@@ -275,8 +275,8 @@ well-formed messages. If that is not possible, you can work around these
 issues with rsyslog's property replacer and template system. Or you can
 use a suitable message parser or write one for your needs.
 
-I hope this is a useful guide. You may also have a look at the `rsyslog
-troubleshooting guide <troubleshoot.html>`_ for further help and places
+I hope this is a useful guide. You may also have a look at the :doc:`rsyslog
+troubleshooting guide </troubleshooting/troubleshoot>` for further help and places
 where to ask questions.
 
 
@@ -291,4 +291,3 @@ Conceptual model
 - rsyslog exposes internal properties (e.g., fromhost, timegenerated, rawmsg) to rebuild structured output when parsing fails.
 - Custom C parsers can be bound per ruleset to normalize proprietary formats efficiently, avoiding heavy regex-based workarounds.
 - The safest path is to configure senders to emit well-formed messages, reducing guesswork and preserving semantic fidelity.
-

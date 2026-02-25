@@ -97,10 +97,10 @@ True Global Directives
    :ref:`reverse_dns_cache` for controlling cache refresh.
 -  **$WorkDirectory** <name> (directory for spool and other work files. Do
    **not** use trailing slashes)
--  `$PrivDropToGroup <droppriv.html>`_
--  `$PrivDropToGroupID <droppriv.html>`_
--  `$PrivDropToUser <droppriv.html>`_
--  `$PrivDropToUserID <droppriv.html>`_
+-  :doc:`$PrivDropToGroup </configuration/droppriv>`
+-  :doc:`$PrivDropToGroupID </configuration/droppriv>`
+-  :doc:`$PrivDropToUser </configuration/droppriv>`
+-  :doc:`$PrivDropToUserID </configuration/droppriv>`
 -  **$Sleep** <seconds> - puts the rsyslog main thread to sleep for the
    specified number of seconds immediately when the directive is
    encountered. You should have a good reason for using this directive!

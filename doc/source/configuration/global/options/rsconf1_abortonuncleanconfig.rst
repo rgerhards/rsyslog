@@ -1,4 +1,4 @@
-`rsyslog.conf configuration parameter <rsyslog_conf_global.html>`_
+:doc:`rsyslog.conf configuration parameter </configuration/global/index>`
 
 $AbortOnUncleanConfig
 ----------------------
@@ -37,4 +37,3 @@ such scenarios. As such, it is strongly recommended not to turn on this
 parameter.
 
 [`rsyslog site <http://www.rsyslog.com/>`_\ ]
-

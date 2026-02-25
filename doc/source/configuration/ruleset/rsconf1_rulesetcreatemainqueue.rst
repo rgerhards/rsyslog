@@ -1,4 +1,4 @@
-`rsyslog.conf configuration directive <rsyslog_conf_global.html>`_
+:doc:`rsyslog.conf configuration directive </configuration/global/index>`
 
 $RulesetCreateMainQueue
 -----------------------
@@ -31,7 +31,7 @@ Note that the final set of ruleset configuration directives specifies
 the parameters for the default main message queue.
 
 To learn more about this feature, please be sure to read about
-`multi-ruleset support in rsyslog <multi_ruleset.html>`_.
+:doc:`multi-ruleset support in rsyslog </concepts/multi_ruleset>`.
 
 **Caveats:**
 
@@ -88,4 +88,3 @@ position is very important. It is highly suggested to use
 the *ruleset()* object in RainerScript config language if you intend
 to use ruleset queues. The configuration is much more straightforward in
 that language and less error-prone.
-

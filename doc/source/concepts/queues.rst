@@ -263,7 +263,7 @@ recommended to use a disk-assisted linked list in-memory queue in front
 of each database and "send via tcp" action. Doing so makes these actions
 reliable and de-couples their potential low execution speed from the
 rest of your rules (e.g. the local file writes). There is a howto on
-`massive database inserts <rsyslog_high_database_rate.html>`_ which
+:doc:`massive database inserts </tutorials/high_database_rate>` which
 nicely describes this use case. It may even be a good read if you do not
 intend to use databases.
 

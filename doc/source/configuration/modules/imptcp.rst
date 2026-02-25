@@ -15,7 +15,7 @@ Provides the ability to receive syslog messages via plain TCP syslog.
 This is a specialized input plugin tailored for high performance on
 Linux. It will probably not run on any other platform. Also, it does not
 provide TLS services. Encryption can be provided by using
-`stunnel <rsyslog_stunnel.html>`_.
+external wrappers such as stunnel.
 
 This module has no limit on the number of listeners and sessions that
 can be used.

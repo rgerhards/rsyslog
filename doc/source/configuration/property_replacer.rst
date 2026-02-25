@@ -297,13 +297,13 @@ options are defined:
   the 3-digit decimal value of the control character. For example, a
   tabulator would be replaced by "#009".
   Note: using this option requires that
-  `$EscapeControlCharactersOnReceive <rsconf1_escapecontrolcharactersonreceive.html>`_
+  :doc:`$EscapeControlCharactersOnReceive </configuration/input_directives/rsconf1_escapecontrolcharactersonreceive>`
   is set to off.
 
 **space-cc**
   replace control characters by spaces
   Note: using this option requires that
-  `$EscapeControlCharactersOnReceive <rsconf1_escapecontrolcharactersonreceive.html>`_
+  :doc:`$EscapeControlCharactersOnReceive </configuration/input_directives/rsconf1_escapecontrolcharactersonreceive>`
   is set to off.
 
 **drop-cc**
@@ -311,7 +311,7 @@ options are defined:
   control characters, escape sequences nor any other replacement character
   like space.
   Note: using this option requires that
-  `$EscapeControlCharactersOnReceive <rsconf1_escapecontrolcharactersonreceive.html>`_
+  :doc:`$EscapeControlCharactersOnReceive </configuration/input_directives/rsconf1_escapecontrolcharactersonreceive>`
   is set to off.
 
 **compressspace**
@@ -365,7 +365,7 @@ Further Links
 -  Article on ":doc:`Recording the Priority of Syslog
    Messages <../tutorials/recording_pri>`" (describes use of
    templates to record severity and facility of a message)
--  `Configuration file syntax <rsyslog_conf.html>`_, this is where you
+-  :doc:`Configuration file syntax </configuration/basic_structure>`, this is where you
    actually use the property replacer.
 
 .. toctree::

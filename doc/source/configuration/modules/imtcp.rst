@@ -13,8 +13,8 @@ Purpose
 
 Provides the ability to receive syslog messages via TCP. Encryption is
 natively provided by selecting the appropriate network stream driver
-and can also be provided by using `stunnel <rsyslog_stunnel.html>`_ (an
-alternative is the use the `imgssapi <imgssapi.html>`_ module).
+and can also be provided by using external wrappers such as stunnel (an
+alternative is the use the :doc:`imgssapi </configuration/modules/imgssapi>` module).
 
 .. note::
    Reverse DNS lookups for remote senders are cached. To control refresh
@@ -495,7 +495,7 @@ Caveats/Known Bugs
 ==================
 
 -  module always binds to all interfaces
--  can not be loaded together with `imgssapi <imgssapi.html>`_ (which
+-  can not be loaded together with :doc:`imgssapi </configuration/modules/imgssapi>` (which
    includes the functionality of imtcp)
 
 

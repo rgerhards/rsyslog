@@ -92,8 +92,8 @@ of the syslog world. A wealth of different formats is. Unfortunately,
 many real-world implementations violate the relevant standards in one
 way or another. That makes it often very hard to extract meaningful
 information from a message or to process messages from different sources
-by the same rules. In my article `syslog parsing in
-rsyslog <syslog_parsing.html>`_ I have elaborated on all the real-world
+by the same rules. In my article :doc:`syslog parsing in
+rsyslog </whitepapers/syslog_parsing>` I have elaborated on all the real-world
 evil that you can usually see. So I won't repeat that here. But in
 short, the real problem is not the framing, but how to make malformed
 messages well-looking.
@@ -231,9 +231,10 @@ specific rulesets. As parser chains "reside" in rulesets, binding to a
 ruleset also binds to the parser chain that is bound to that ruleset. As
 a number one prerequisite, the input module must support binding to
 different rulesets. Not all do, but their number is growing. For
-example, the important `imudp <imudp.html>`_ and `imtcp <imtcp.html>`_
+example, the important :doc:`imudp </configuration/modules/imudp>` and
+:doc:`imtcp </configuration/modules/imtcp>`
 input modules support that functionality. Those that do not (for example
-`im3195 <im3195>`_) can only utilize the default ruleset and thus the
+:doc:`im3195 </configuration/modules/im3195>`) can only utilize the default ruleset and thus the
 parser chain defined in that ruleset.
 
 If you do not know if the input module in question supports ruleset

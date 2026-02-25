@@ -46,7 +46,7 @@ In its current form, output channels primarily provide the ability to
 size-limit an output file. To do so, specify a maximum size. When this
 size is reached, rsyslogd will execute the action-on-max-size command
 and then reopen the file and retry. The command should be something like
-a `log rotation script <log_rotation_fix_size.html>`_ or a similar
+a :doc:`log rotation script </tutorials/log_rotation_fix_size>` or a similar
 thing.
 
 If there is no action-on-max-size command or the command did not resolve
@@ -58,4 +58,3 @@ writing to a single file. Meanwhile, rsyslogd has been fixed to support
 files larger 2gb, but obviously only on file systems and operating
 system versions that do so. So it can still make sense to enforce a 2gb
 file size limit.
-
