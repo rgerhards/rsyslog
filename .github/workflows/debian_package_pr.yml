@@ -47,7 +47,9 @@ jobs:
             fakeroot \
             flex \
             git \
+            libsnappy-dev \
             libtool \
+            libprotobuf-c-dev \
             pkgconf \
             protobuf-c-compiler \
             quilt \
