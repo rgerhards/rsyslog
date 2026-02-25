@@ -1,5 +1,8 @@
 --------------------------------------------------------------------------------------
 Scheduled Release 8.2604.0 (aka 2026.04) 2026-04-??
+- 2025-02-25: CI: improve doc correctness checks (deterministic)
+- 2025-02-25: doc: fixed doc link issues
+  Some hyperlinks were invalidly generated and resulted in 404 errors
 - 2025-02-24: rsyslogd: send systemd watchdog keepalive pings
   Some deployments rely on systemd watchdog restarts when the daemon
   becomes unresponsive. rsyslogd announced readiness but never sent
