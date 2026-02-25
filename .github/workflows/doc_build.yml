@@ -36,6 +36,7 @@ jobs:
         with:
           files: |
             doc/**/*.rst
+            doc/tools/check-html-links.py
 
       # we build from tarball to ensure no missing files!
       - name: setup make dist build env
@@ -142,6 +143,16 @@ jobs:
              --disable-omrabbitmq --disable-journal-tests --disable-mmdarwin \
              --disable-helgrind --disable-uuid --disable-fmhttp
           make -C doc html SPHINXOPTS="-j8 -W -q --keep-going"
+
+      - name: Validate generated HTML links
+        if: >-
+          ${{ github.event_name != 'pull_request' ||
+          steps.doc_changes.outputs.any_changed == 'true' }}
+        run: |
+          python3 doc/tools/check-html-links.py \
+            doc-builder/doc/build/html \
+            --check-root-absolute \
+            --check-anchors
 
       - name: Build RAG Knowledge Base
         if: >-
@@ -321,4 +332,3 @@ jobs:
                 body: commentBody,
               });
             }
-
