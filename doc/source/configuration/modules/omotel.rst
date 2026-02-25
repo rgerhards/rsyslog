@@ -6,41 +6,47 @@
 
 .. summary-start
 
-Phase 1 of the omotel output plugin streams OpenTelemetry logs over
-OTLP/HTTP JSON with configurable batching, gzip compression, retry/backoff
-controls, TLS/mTLS support for secure HTTPS connections, and HTTP proxy
-support for corporate networks and firewalled environments.
+The omotel output plugin streams OpenTelemetry logs over OTLP/HTTP with
+support for both JSON (``http/json``) and protobuf (``http/protobuf``)
+encoding, configurable batching, gzip compression, retry/backoff controls,
+TLS/mTLS support for secure HTTPS connections, and HTTP proxy support for
+corporate networks and firewalled environments.
 
 .. summary-end
 
-omotel: OpenTelemetry output module (preview)
-=============================================
+omotel: OpenTelemetry output module
+====================================
 
-.. warning::
+.. note::
 
-   The OTLP/HTTP JSON transport is ready for preview deployments. The optional
-   OTLP/gRPC façade and HTTP/protobuf fast-path remain under development, so
-   keep action queues enabled and plan future upgrades accordingly.
+   Both ``http/json`` and ``http/protobuf`` transports are available.
+   The protobuf path produces compact ``ExportLogsServiceRequest`` payloads
+   using the official OTLP proto schema. Select the encoding via the
+   ``protocol`` parameter.
 
 Overview
 --------
 
-``omotel`` prepares rsyslog for native :abbr:`OTLP (OpenTelemetry Log Protocol)`
-exports. Phase 1 focuses on the OTLP/HTTP JSON transport path: the module maps
-rsyslog metadata into the canonical OTLP JSON structure, joins the configured
-endpoint and path, and posts batches of rendered payloads via ``libcurl`` using
-``application/json`` semantics. Batching thresholds, gzip compression, retry and
-backoff policies, custom headers, TLS/mTLS authentication, and HTTP proxy support
-are all configurable. Subsequent phases will extend the module with the gRPC
-façade and, optionally, HTTP/protobuf support.
+``omotel`` provides native :abbr:`OTLP (OpenTelemetry Log Protocol)` exports
+from rsyslog. The module maps rsyslog metadata into the canonical OTLP
+structure, joins the configured endpoint and path, and posts batches of
+rendered payloads via ``libcurl``. Two encoding formats are supported:
+
+- **http/json** (default) -- ``application/json`` semantics per OTLP/HTTP JSON.
+- **http/protobuf** -- ``application/x-protobuf`` encoding using the official
+  OTLP proto schema via ``protobuf-c``.
+
+Batching thresholds, gzip compression, retry and backoff policies, custom
+headers, TLS/mTLS authentication, and HTTP proxy support are all configurable.
 
 Availability
 ------------
 
 The module is built only when ``./configure`` is invoked with
-``--enable-omotel=yes`` and both ``libcurl`` and ``libfastjson`` are present.
+``--enable-omotel=yes``. The build requires ``libcurl``, ``libfastjson``,
+and ``libprotobuf-c >= 1.0.0`` (plus the ``protoc-c`` compiler at build time).
 The default ``--enable-omotel`` setting is ``no``, so you must opt in
-explicitly. The HTTP transport depends on ``libcurl`` at runtime.
+explicitly.
 
 Configuration
 -------------
@@ -55,7 +61,7 @@ parameters are optional and fall back to sensible defaults inspired by the
 
    "endpoint", "string", "http://127.0.0.1:4318", "Base OTLP collector URL"
    "path", "string", "/v1/logs", "Request path appended to the endpoint"
-   "protocol", "word", "http/json", "Transport variant"
+   "protocol", "word", "http/json", "Transport encoding: ``http/json`` or ``http/protobuf``"
    "template", "word", "RSYSLOG_FileFormat", "Message template used for the log body"
    "timeout.ms", "integer", "10000", "HTTP request timeout in milliseconds"
    "compression", "word", "none", "Request payload compression (``none`` or ``gzip``)"
@@ -136,6 +142,27 @@ other non-success responses discard the message and log an error.
      headers='{ "X-OTel-Tenant": "blue" }'
      bearer_token="${env:OTEL_TOKEN}"
    )
+
+Protobuf Encoding Example
+--------------------------
+
+To use the more compact protobuf encoding instead of JSON:
+
+.. code-block:: none
+
+   module(load="omotel")
+   action(
+     type="omotel"
+     endpoint="https://otel-collector:4318"
+     path="/v1/logs"
+     protocol="http/protobuf"
+     compression="gzip"
+   )
+
+The protobuf path serializes the same ``ExportLogsServiceRequest`` message
+using the official OTLP proto schema. The ``Content-Type`` header is
+automatically set to ``application/x-protobuf``. All other parameters
+(batching, retry, TLS, proxy) work identically with both encodings.
 
 .. note::
 
@@ -365,8 +392,11 @@ but do not cause message processing to fail.
 OTLP Payload Structure
 ----------------------
 
-The module generates OTLP/HTTP JSON payloads conforming to the OpenTelemetry
-log data model. Each batch wraps log records in the following hierarchy:
+The module generates OTLP/HTTP payloads conforming to the OpenTelemetry
+log data model. When ``protocol`` is ``http/json``, the payload is a JSON
+``ExportLogsServiceRequest``; when ``http/protobuf``, it is the same message
+serialized as a protobuf binary. Each batch wraps log records in the
+following hierarchy:
 
 **Resource attributes** (per-batch, automatically populated):
 
