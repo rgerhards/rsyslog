@@ -36,12 +36,20 @@ jobs:
           set -eux
           apt-get update
           apt-get install --yes --no-install-recommends \
+            autoconf \
+            automake \
+            bison \
+            build-essential \
             ca-certificates \
             devscripts \
             dpkg-dev \
             equivs \
             fakeroot \
+            flex \
             git \
+            libtool \
+            pkgconf \
+            protobuf-c-compiler \
             quilt \
             rsync
 
