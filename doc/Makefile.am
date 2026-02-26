@@ -1088,6 +1088,7 @@ EXTRA_DIST = \
     source/reference/parameters/omudpspoof-sourcetemplate.rst \
     source/reference/parameters/omudpspoof-target.rst \
     source/reference/parameters/omudpspoof-template.rst \
+    source/reference/parameters/omusrmsg-ratelimit-name.rst \
     source/reference/parameters/omuxsock-abstract.rst \
     source/reference/parameters/omuxsock-networknamespace.rst \
     source/reference/parameters/omuxsock-socketname.rst \

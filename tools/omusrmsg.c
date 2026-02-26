@@ -88,6 +88,7 @@
 #include "omusrmsg.h"
 #include "module-template.h"
 #include "errmsg.h"
+#include "ratelimit.h"
 
 
 /* portability: */
@@ -118,11 +119,21 @@ typedef struct _instanceData {
     int bIsWall; /* 1- is wall, 0 - individual users */
     char uname[MAXUNAMES][UNAMESZ + 1];
     uchar *tplName;
+    int ratelimitInterval;
+    int ratelimitBurst;
+    uchar *pszRatelimitName;
+    ratelimit_t *ratelimiter;
 } instanceData;
 
 typedef struct wrkrInstanceData {
     instanceData *pData;
 } wrkrInstanceData_t;
+
+struct modConfData_s {
+    rsconf_t *pConf;
+};
+static modConfData_t *loadModConf = NULL;
+static modConfData_t *runModConf = NULL;
 
 typedef struct configSettings_s {
     EMPTY_STRUCT
@@ -133,12 +144,44 @@ static configSettings_t __attribute__((unused)) cs;
 /* tables for interfacing with the v6 config system */
 /* action (instance) parameters */
 static struct cnfparamdescr actpdescr[] = {{"users", eCmdHdlrString, CNFPARAM_REQUIRED},
-                                           {"template", eCmdHdlrGetWord, 0}};
+                                           {"template", eCmdHdlrGetWord, 0},
+                                           {"ratelimit.interval", eCmdHdlrInt, 0},
+                                           {"ratelimit.burst", eCmdHdlrInt, 0},
+                                           {"ratelimit.name", eCmdHdlrString, 0}};
 static struct cnfparamblk actpblk = {CNFPARAMBLK_VERSION, sizeof(actpdescr) / sizeof(struct cnfparamdescr), actpdescr};
 
 BEGINinitConfVars /* (re)set config variables to default values */
     CODESTARTinitConfVars;
 ENDinitConfVars
+
+
+BEGINbeginCnfLoad
+    CODESTARTbeginCnfLoad;
+    loadModConf = pModConf;
+    pModConf->pConf = pConf;
+ENDbeginCnfLoad
+
+
+BEGINendCnfLoad
+    CODESTARTendCnfLoad;
+    loadModConf = NULL;
+ENDendCnfLoad
+
+
+BEGINcheckCnf
+    CODESTARTcheckCnf;
+ENDcheckCnf
+
+
+BEGINactivateCnf
+    CODESTARTactivateCnf;
+    runModConf = pModConf;
+ENDactivateCnf
+
+
+BEGINfreeCnf
+    CODESTARTfreeCnf;
+ENDfreeCnf
 
 
 BEGINcreateInstance
@@ -160,6 +203,11 @@ ENDisCompatibleWithFeature
 BEGINfreeInstance
     CODESTARTfreeInstance;
     free(pData->tplName);
+    free(pData->pszRatelimitName);
+    if (pData->ratelimiter != NULL) {
+        ratelimitDestruct(pData->ratelimiter);
+        pData->ratelimiter = NULL;
+    }
 ENDfreeInstance
 
 
@@ -404,7 +452,10 @@ ENDtryResume
 BEGINdoAction
     CODESTARTdoAction;
     dbgprintf("\n");
-    iRet = wallmsg(ppString[0], pWrkrData->pData);
+    if (pWrkrData->pData->ratelimiter == NULL ||
+        ratelimitMsgCount(pWrkrData->pData->ratelimiter, 0, "omusrmsg") != RS_RET_DISCARDMSG) {
+        iRet = wallmsg(ppString[0], pWrkrData->pData);
+    }
 ENDdoAction
 
 
@@ -470,6 +521,10 @@ populateUsers(instanceData *pData, es_str_t *usrs)
 static inline void setInstParamDefaults(instanceData *pData) {
     pData->bIsWall = 0;
     pData->tplName = NULL;
+    pData->ratelimiter = NULL;
+    pData->ratelimitInterval = -1;
+    pData->ratelimitBurst = -1;
+    pData->pszRatelimitName = NULL;
 }
 
 BEGINnewActInst
@@ -494,6 +549,12 @@ BEGINnewActInst
             }
         } else if (!strcmp(actpblk.descr[i].name, "template")) {
             pData->tplName = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
+        } else if (!strcmp(actpblk.descr[i].name, "ratelimit.interval")) {
+            pData->ratelimitInterval = (int)pvals[i].val.d.n;
+        } else if (!strcmp(actpblk.descr[i].name, "ratelimit.burst")) {
+            pData->ratelimitBurst = (int)pvals[i].val.d.n;
+        } else if (!strcmp(actpblk.descr[i].name, "ratelimit.name")) {
+            pData->pszRatelimitName = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
         } else {
             dbgprintf(
                 "omusrmsg: program error, non-handled "
@@ -502,12 +563,36 @@ BEGINnewActInst
         }
     }
 
+    if (pData->pszRatelimitName != NULL) {
+        if (pData->ratelimitInterval != -1 || pData->ratelimitBurst != -1) {
+            LogError(0, RS_RET_INVALID_PARAMS,
+                     "omusrmsg: ratelimit.name is mutually exclusive with "
+                     "ratelimit.interval and ratelimit.burst - using ratelimit.name");
+        }
+        pData->ratelimitInterval = 0;
+        pData->ratelimitBurst = 0;
+    } else {
+        if (pData->ratelimitInterval == -1) pData->ratelimitInterval = 0;
+        if (pData->ratelimitBurst == -1) pData->ratelimitBurst = 200;
+    }
+
     if (pData->tplName == NULL) {
         CHKiRet(OMSRsetEntry(*ppOMSR, 0, (uchar *)strdup(pData->bIsWall ? " WallFmt" : " StdUsrMsgFmt"),
                              OMSR_NO_RQD_TPL_OPTS));
     } else {
         CHKiRet(OMSRsetEntry(*ppOMSR, 0, (uchar *)strdup((char *)pData->tplName), OMSR_NO_RQD_TPL_OPTS));
     }
+
+    if (pData->pszRatelimitName != NULL) {
+        CHKiRet(ratelimitNewFromConfig(&pData->ratelimiter, loadModConf->pConf, (char *)pData->pszRatelimitName,
+                                       "omusrmsg", NULL));
+        ratelimitSetNoTimeCache(pData->ratelimiter);
+    } else if (pData->ratelimitInterval > 0) {
+        CHKiRet(ratelimitNew(&pData->ratelimiter, "omusrmsg", NULL));
+        ratelimitSetLinuxLike(pData->ratelimiter, (unsigned)pData->ratelimitInterval, (unsigned)pData->ratelimitBurst);
+        ratelimitSetNoTimeCache(pData->ratelimiter);
+    }
+
     CODE_STD_FINALIZERnewActInst;
     cnfparamvalsDestruct(pvals, &actpblk);
 ENDnewActInst
@@ -568,6 +653,7 @@ BEGINqueryEtryPt
     CODESTARTqueryEtryPt;
     CODEqueryEtryPt_STD_OMOD_QUERIES;
     CODEqueryEtryPt_STD_OMOD8_QUERIES;
+    CODEqueryEtryPt_STD_CONF2_QUERIES;
     CODEqueryEtryPt_STD_CONF2_OMOD_QUERIES;
 ENDqueryEtryPt
 
