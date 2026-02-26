@@ -1,25 +1,35 @@
 --------------------------------------------------------------------------------------
 Scheduled Release 8.2604.0 (aka 2026.04) 2026-04-??
-- 2025-02-26: omotel: add native protobuf encoding (http/protobuf)
+- 2026-02-26: omkafka: add poll thread; fix races and deprecated usleep
+  When statistics.interval.ms is enabled, librdkafka queues stats
+  callbacks until rd_kafka_poll() is called. Idle actions can go
+  long periods without polling, causing queue buildup and memory
+  growth. Additionally, the stop flag for the new thread lacked
+  synchronization, and a poller startup failure could leave bIsOpen
+  in an inconsistent state.
+  Stats callbacks are now drained continuously even when no new
+  messages arrive. Thread shutdown is race-free. Action startup
+  succeeds even when the optional poll thread cannot start.
+  Deprecated usleep() is replaced by rsyslog's srSleep() wrapper.
+- 2026-02-26: omotel: add native protobuf encoding (http/protobuf)
   The omotel module only supported JSON encoding for OTLP/HTTP
   exports. Native protobuf encoding produces smaller payloads with
   lower serialization overhead, which is the preferred transport for
   high-volume OpenTelemetry deployments.
-
   Users can now set protocol="http/protobuf" to use binary
   protobuf encoding. The default remains "http/json". A pre-existing
   bug in JSON timestamp encoding (timeUnixNano/observedTimeUnixNano
   emitted as integers instead of strings) is also fixed.
-- 2025-02-25: CI: improve doc correctness checks (deterministic)
-- 2025-02-25: doc: fixed doc link issues
+- 2026-02-25: CI: improve doc correctness checks (deterministic)
+- 2026-02-25: doc: fixed doc link issues
   Some hyperlinks were invalidly generated and resulted in 404 errors
-- 2025-02-24: rsyslogd: send systemd watchdog keepalive pings
+- 2026-02-24: rsyslogd: send systemd watchdog keepalive pings
   Some deployments rely on systemd watchdog restarts when the daemon
   becomes unresponsive. rsyslogd announced readiness but never sent
   watchdog heartbeats.
   When WatchdogSec is configured, rsyslogd now sends periodic
   WATCHDOG=1 notifications while running.
-- 2025-02-23: queue: further harden diskqueue recovery and shutdown race handling
+- 2026-02-23: queue: further harden diskqueue recovery and shutdown race handling
   This combines two related hardening steps for disk queue reliability:
   - robust corruption detection/recovery handling in disk queue state/file validation
   - worker startup cancellation-race closure that could lead to shutdown wait loops
@@ -32,7 +42,7 @@ Scheduled Release 8.2604.0 (aka 2026.04) 2026-04-??
     them to stdout for post-mortem debugging.
   - test script cleanup removes redundant operations and uses a macOS-friendlier
     segment enumeration path.
-- 2025-02-23: runtime: close worker-start cancellation race
+- 2026-02-23: runtime: close worker-start cancellation race
   Worker shutdown cancellation can race with worker startup. In wtpWorker(),
   state was published as WRKTHRD_RUNNING before the cancellation cleanup
   handler was registered. If pthread_cancel() hit in that window, cleanup could
@@ -40,21 +50,21 @@ Scheduled Release 8.2604.0 (aka 2026.04) 2026-04-??
   Impact:
   Prevents shutdown hangs where wtiCancelThrd() loops waiting for a worker that
   was canceled before its cleanup path could transition state to WAIT_JOIN.
-- 2025-02-22: ci: enable core dumps in ASAN builds
+- 2026-02-22: ci: enable core dumps in ASAN builds
   AddressSanitizer by default sets disable_coredump=1, which prevents
   core file generation even when abort() is called. This commit adds
   disable_coredump=0 to ASAN_OPTIONS in both macOS and ARM64 workflows
   to ensure core dumps are generated on crashes.
   This allows diag.sh to find and analyze core files for better
   debugging of test failures in ASAN-enabled CI jobs.
-- 2025-02-18: build: fix linking issue with libyaml
+- 2026-02-18: build: fix linking issue with libyaml
   When building rsyslogd with libyaml support, the library was not being
   explicitly linked. This implementation adds $(LIBYAML_LIBS) to
   rsyslogd_LDADD to resolve undefined references during linking,
   particularly in static or cross-compilation scenarios.
   Thanks to Rudi Heitbaum for bringing up this isuse and suggesting the fix.
  Fixes https://github.com/rsyslog/rsyslog/issues/6563
-- 2025-02-18: doc: add support for optionally using Google Analytics
+- 2026-02-18: doc: add support for optionally using Google Analytics
 --------------------------------------------------------------------------------------
 Scheduled Release 8.2602.0 (aka 2026.02) 2026-02-17
 - NEW DEPENDENCES: names vary by distribution
