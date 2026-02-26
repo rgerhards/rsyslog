@@ -28,6 +28,7 @@
 
 #include "otlp_json.h"
 
+#include <inttypes.h>
 #include <json.h>
 #include <stdlib.h>
 #include <string.h>
@@ -409,10 +410,16 @@ rsRetVal omotel_json_build_export(const omotel_log_record_t *records,
             ABORT_FINALIZE(RS_RET_INTERNAL_ERROR);
         }
 
-        fjson_object_object_add(log_record, "timeUnixNano", json_object_new_int64((long long)record->time_unix_nano));
+        /* OTLP JSON uses proto3 JSON mapping: fixed64 fields are strings */
+        {
+            char ts_buf[21]; /* max uint64 = 20 digits + NUL */
+            snprintf(ts_buf, sizeof(ts_buf), "%" PRIu64, record->time_unix_nano);
+            fjson_object_object_add(log_record, "timeUnixNano", fjson_object_new_string(ts_buf));
+        }
         if (record->observed_time_unix_nano != 0) {
-            fjson_object_object_add(log_record, "observedTimeUnixNano",
-                                    json_object_new_int64((long long)record->observed_time_unix_nano));
+            char ts_buf[21];
+            snprintf(ts_buf, sizeof(ts_buf), "%" PRIu64, record->observed_time_unix_nano);
+            fjson_object_object_add(log_record, "observedTimeUnixNano", fjson_object_new_string(ts_buf));
         }
         fjson_object_object_add(log_record, "severityNumber", json_object_new_int((int)record->severity_number));
         if (record->severity_text != NULL) {

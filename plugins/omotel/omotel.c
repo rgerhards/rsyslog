@@ -59,6 +59,7 @@
 
 #include "otlp_json.h"
 #include "omotel_http.h"
+#include "otlp_protobuf.h"
 
 MODULE_TYPE_OUTPUT;
 MODULE_TYPE_NOKEEP;
@@ -412,8 +413,11 @@ static rsRetVal validateProtocol(instanceData *pData) {
         goto finalize_it;
     }
 
-    LogError(0, RS_RET_NOT_IMPLEMENTED, "omotel: protocol '%s' is not supported by the scaffolding build",
-             pData->protocol);
+    if (!strcmp((char *)pData->protocol, "http/protobuf")) {
+        goto finalize_it;
+    }
+
+    LogError(0, RS_RET_NOT_IMPLEMENTED, "omotel: protocol '%s' is not supported", pData->protocol);
     ABORT_FINALIZE(RS_RET_NOT_IMPLEMENTED);
 
 finalize_it:
@@ -1751,6 +1755,8 @@ finalize_it:
 static rsRetVal omotel_flush_batch_locked(wrkrInstanceData_t *pWrkrData, omotel_batch_state_t *batch) {
     omotel_log_record_t *records = NULL;
     char *payload = NULL;
+    uint8_t *pb_payload = NULL;
+    size_t pb_payload_len = 0u;
     uint8_t *compressed = NULL;
     const uint8_t *to_send;
     size_t send_len = 0u;
@@ -1760,6 +1766,7 @@ static rsRetVal omotel_flush_batch_locked(wrkrInstanceData_t *pWrkrData, omotel_
     long latency_ms = 0;
     size_t record_count = 0u;
     omotel_resource_attrs_t resource_attrs;
+    int use_protobuf = 0;
 
     DEFiRet;
 
@@ -1788,7 +1795,7 @@ static rsRetVal omotel_flush_batch_locked(wrkrInstanceData_t *pWrkrData, omotel_
         records[i] = batch->entries[i].record;
     }
 
-    DBGPRINTF("omotel: omotel_flush_batch: building JSON export for %zu records", batch->count);
+    DBGPRINTF("omotel: omotel_flush_batch: building export for %zu records", batch->count);
     resource_attrs = (omotel_resource_attrs_t){
         .service_instance_id = pWrkrData->pData->resourceServiceInstanceId
                                    ? (const char *)pWrkrData->pData->resourceServiceInstanceId
@@ -1799,20 +1806,28 @@ static rsRetVal omotel_flush_batch_locked(wrkrInstanceData_t *pWrkrData, omotel_
         .custom_attributes = pWrkrData->pData->resourceJsonParsed,
     };
 
-    CHKiRet(
-        omotel_json_build_export(records, batch->count, &resource_attrs, &pWrkrData->pData->attributeMap, &payload));
+    use_protobuf = pWrkrData->pData->protocol != NULL && !strcmp((char *)pWrkrData->pData->protocol, "http/protobuf");
 
-    if (payload != NULL) {
-        payload_len = strlen(payload);
-        DBGPRINTF("omotel: omotel_flush_batch: JSON payload length=%zu", payload_len);
+    if (use_protobuf) {
+        CHKiRet(omotel_protobuf_build_export(records, batch->count, &resource_attrs, &pWrkrData->pData->attributeMap,
+                                             &pb_payload, &pb_payload_len));
+        to_send = pb_payload;
+        send_len = pb_payload_len;
+        DBGPRINTF("omotel: omotel_flush_batch: protobuf payload length=%zu", pb_payload_len);
+    } else {
+        CHKiRet(omotel_json_build_export(records, batch->count, &resource_attrs, &pWrkrData->pData->attributeMap,
+                                         &payload));
+        if (payload != NULL) {
+            payload_len = strlen(payload);
+            DBGPRINTF("omotel: omotel_flush_batch: JSON payload length=%zu", payload_len);
+        }
+        to_send = (const uint8_t *)payload;
+        send_len = payload_len;
     }
-
-    to_send = (const uint8_t *)payload;
-    send_len = payload_len;
 
     if (pWrkrData->pData->compression_mode == OMOTEL_COMPRESSION_GZIP) {
         DBGPRINTF("omotel: omotel_flush_batch: compressing payload");
-        CHKiRet(gzip_compress_buffer((const uint8_t *)payload, payload_len, &compressed, &send_len));
+        CHKiRet(gzip_compress_buffer(to_send, send_len, &compressed, &send_len));
         to_send = compressed;
         DBGPRINTF("omotel: omotel_flush_batch: compressed size=%zu", send_len);
     }
@@ -1893,6 +1908,7 @@ static rsRetVal omotel_flush_batch_locked(wrkrInstanceData_t *pWrkrData, omotel_
 finalize_it:
     free(records);
     free(payload);
+    free(pb_payload);
     free(compressed);
     RETiRet;
 }
@@ -2259,6 +2275,13 @@ BEGINcreateWrkrInstance
     http_cfg.proxy_url = (const char *)pData->proxyUrl;
     http_cfg.proxy_user = (const char *)pData->proxyUser;
     http_cfg.proxy_password = (const char *)pData->proxyPassword;
+
+    /* Content-Type based on protocol */
+    if (pData->protocol != NULL && !strcmp((char *)pData->protocol, "http/protobuf")) {
+        http_cfg.content_type = "application/x-protobuf";
+    } else {
+        http_cfg.content_type = "application/json";
+    }
 
     iRet = omotel_http_client_create(&http_cfg, &pWrkrData->http_client);
     if (iRet != RS_RET_OK) {

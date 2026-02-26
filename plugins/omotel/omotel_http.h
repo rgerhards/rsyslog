@@ -60,6 +60,7 @@ typedef struct omotel_http_client_config_s {
     const char *proxy_url; /**< Proxy URL (http://, https://, socks4://, or socks5://) */
     const char *proxy_user; /**< Proxy username for authentication */
     const char *proxy_password; /**< Proxy password for authentication */
+    const char *content_type; /**< Content-Type header value (default: application/json) */
 } omotel_http_client_config_t;
 
 /** @brief Opaque HTTP client handle */

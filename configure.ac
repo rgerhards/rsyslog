@@ -2718,11 +2718,21 @@ AC_ARG_ENABLE(omotel,
 )
 OMOTEL_HTTP_CFLAGS=""
 OMOTEL_HTTP_LIBS=""
+OMOTEL_PROTOBUF_CFLAGS=""
+OMOTEL_PROTOBUF_LIBS=""
 if test "x$enable_omotel" = "xyes"; then
         PKG_CHECK_MODULES([OMOTEL_HTTP], [libcurl libfastjson])
+        PKG_CHECK_MODULES([OMOTEL_PROTOBUF], [libprotobuf-c >= 1.0.0])
+        AC_CHECK_PROG([PROTOC_C], [protoc-c], [protoc-c])
+        if test "x$PROTOC_C" = "x"; then
+                AC_MSG_ERROR([protoc-c is required for omotel protobuf support])
+        fi
+        AC_DEFINE([ENABLE_OMOTEL_PROTOBUF], [1], [Enable protobuf encoding in omotel module])
 fi
 AC_SUBST([OMOTEL_HTTP_CFLAGS])
 AC_SUBST([OMOTEL_HTTP_LIBS])
+AC_SUBST([OMOTEL_PROTOBUF_CFLAGS])
+AC_SUBST([OMOTEL_PROTOBUF_LIBS])
 AM_CONDITIONAL(ENABLE_OMOTEL, test x$enable_omotel = xyes)
 
 # support for kafka input output

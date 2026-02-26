@@ -856,6 +856,7 @@ TESTS_OMOTEL = \
         omotel-basic.sh \
         omotel-batch.sh \
         omotel-compression.sh \
+        omotel-protobuf-basic.sh \
         omotel-proxy.sh \
         omotel-tls.sh \
         omotel-trace-correlation.sh
