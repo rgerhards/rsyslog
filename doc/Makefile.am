@@ -625,6 +625,7 @@ EXTRA_DIST = \
     source/reference/parameters/imrelp-name.rst \
     source/reference/parameters/imrelp-oversizemode.rst \
     source/reference/parameters/imrelp-port.rst \
+    source/reference/parameters/imrelp-ratelimit-name.rst \
     source/reference/parameters/imrelp-ruleset-input.rst \
     source/reference/parameters/imrelp-ruleset.rst \
     source/reference/parameters/imrelp-tls-authmode.rst \
