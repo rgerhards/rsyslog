@@ -1,5 +1,15 @@
 --------------------------------------------------------------------------------------
 Scheduled Release 8.2604.0 (aka 2026.04) 2026-04-??
+- 2025-02-26: omotel: add native protobuf encoding (http/protobuf)
+  The omotel module only supported JSON encoding for OTLP/HTTP
+  exports. Native protobuf encoding produces smaller payloads with
+  lower serialization overhead, which is the preferred transport for
+  high-volume OpenTelemetry deployments.
+
+  Users can now set protocol="http/protobuf" to use binary
+  protobuf encoding. The default remains "http/json". A pre-existing
+  bug in JSON timestamp encoding (timeUnixNano/observedTimeUnixNano
+  emitted as integers instead of strings) is also fixed.
 - 2025-02-25: CI: improve doc correctness checks (deterministic)
 - 2025-02-25: doc: fixed doc link issues
   Some hyperlinks were invalidly generated and resulted in 404 errors
