@@ -1,5 +1,37 @@
 --------------------------------------------------------------------------------------
 Scheduled Release 8.2604.0 (aka 2026.04) 2026-04-??
+- 2026-02-27: ratelimit: wire ratelimit.name into remaining modules
+  Why: Commit 3ee31a8d0 added shared named ratelimit support
+  (ratelimit.name + ratelimitNewFromConfig) but only wired it
+  into imtcp, imptcp, and imudp. Seven modules with existing
+  ratelimit.interval/ratelimit.burst support were left without
+  the ability to reference shared ratelimit() objects.
+  Impact: Adds ratelimit.name parameter to omfwd,
+  omelasticsearch, omhttp, imhttp, imjournal, imklog, and
+  imuxsock. Existing configurations remain unchanged.
+  Before: These seven modules could only use inline
+  ratelimit.interval/ratelimit.burst parameters.
+  After: All modules can now reference shared ratelimit()
+  configuration objects via ratelimit.name.
+  Technical Overview:
+  For each module, the same pattern from the imudp reference
+  implementation is applied:
+  - Add uchar *pszRatelimitName to config struct
+  - Add ratelimit.name to cnfparamdescr
+  - Change interval/burst defaults to -1 (sentinel)
+  - Parse ratelimit.name in config handler
+  - Add mutual-exclusivity check (name vs interval/burst)
+  - Branch ratelimiter creation on pszRatelimitName:
+  if set, call ratelimitNewFromConfig(); else legacy path
+  - Free pszRatelimitName in destructor
+  imuxsock is the most complex: it supports both per-socket
+  ratelimit.name and syssock.ratelimit.name, with the
+  per-source hashtable ratelimiter path also updated.
+  imklog uses legacy parameter names (ratelimitinterval,
+  ratelimitburst) but the new parameter uses the dotted
+  form (ratelimit.name) for consistency.
+  Each module receives a parameter doc page, module doc
+  update, and a config-validation test.
 - 2026-02-27: omusrmsg: add ratelimit support
   Add ratelimit.interval, ratelimit.burst, and ratelimit.name parameters
   to omusrmsg. This prevents scenarios where emergency message floods
