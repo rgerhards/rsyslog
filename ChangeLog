@@ -1,5 +1,11 @@
 --------------------------------------------------------------------------------------
 Scheduled Release 8.2604.0 (aka 2026.04) 2026-04-??
+- 2026-02-27: imrelp: add ratelimit support (interval, burst, name)
+  Wire ratelimit.interval, ratelimit.burst, and ratelimit.name into imrelp,
+  following the established pattern from imtcp/imptcp/imudp. When
+  ratelimit.name is set, the listener uses a shared named rate limiter
+  (with per-source support). Local interval/burst and named rate limiters
+  are mutually exclusive.
 - 2026-02-26: omkafka: add poll thread; fix races and deprecated usleep
   When statistics.interval.ms is enabled, librdkafka queues stats
   callbacks until rd_kafka_poll() is called. Idle actions can go
