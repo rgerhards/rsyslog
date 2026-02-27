@@ -1,5 +1,10 @@
 --------------------------------------------------------------------------------------
 Scheduled Release 8.2604.0 (aka 2026.04) 2026-04-??
+- 2026-02-27: omusrmsg: add ratelimit support
+  Add ratelimit.interval, ratelimit.burst, and ratelimit.name parameters
+  to omusrmsg. This prevents scenarios where emergency message floods
+  can overwhelm user terminals.
+  closes: https://github.com/rsyslog/rsyslog/issues/4547
 - 2026-02-27: imrelp: add ratelimit support (interval, burst, name)
   Wire ratelimit.interval, ratelimit.burst, and ratelimit.name into imrelp,
   following the established pattern from imtcp/imptcp/imudp. When
