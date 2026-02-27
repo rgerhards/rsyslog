@@ -160,6 +160,18 @@ Input Parameters
      - .. include:: ../../reference/parameters/imrelp-flowcontrol.rst
         :start-after: .. summary-start
         :end-before: .. summary-end
+   * - RateLimit.Interval
+     - The rate-limiting interval in seconds. A value of 0 (the default) turns
+       off rate-limiting. Set it together with ``ratelimit.burst`` to control
+       how many messages can be forwarded per interval.
+   * - RateLimit.Burst
+     - Maximum number of messages that can be emitted within the
+       ``ratelimit.interval``. Default is 10000. Only relevant when
+       ``ratelimit.interval`` is not 0.
+   * - :ref:`param-imrelp-ratelimit-name`
+     - .. include:: ../../reference/parameters/imrelp-ratelimit-name.rst
+        :start-after: .. summary-start
+        :end-before: .. summary-end
 
 
 About Chained Certificates
@@ -265,4 +277,5 @@ actual deployments. For details, see parameter descriptions.
    ../../reference/parameters/imrelp-keepalive-time
    ../../reference/parameters/imrelp-oversizemode
    ../../reference/parameters/imrelp-flowcontrol
+   ../../reference/parameters/imrelp-ratelimit-name
 

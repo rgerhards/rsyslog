@@ -50,6 +50,7 @@
 #include "statsobj.h"
 #include "srUtils.h"
 #include "parserif.h"
+#include "ratelimit.h"
 
 MODULE_TYPE_INPUT;
 MODULE_TYPE_NOKEEP;
@@ -98,6 +99,9 @@ struct instanceConf_s {
     int iKeepAliveIntvl;
     int iKeepAliveProbes;
     int iKeepAliveTime;
+    int ratelimitInterval;
+    int ratelimitBurst;
+    uchar *pszRatelimitName;
     flowControl_t flowCtlType;
     struct {
         int nmemb;
@@ -115,6 +119,7 @@ struct instanceConf_s {
     struct {
         statsobj_t *stats; /* listener stats */
         STATSCOUNTER_DEF(ctrSubmit, mutCtrSubmit)
+        ratelimit_t *ratelimiter;
     } data;
 };
 
@@ -145,6 +150,9 @@ static struct cnfparamdescr inppdescr[] = {{"port", eCmdHdlrString, CNFPARAM_REQ
                                            {"maxdatasize", eCmdHdlrSize, 0},
                                            {"oversizemode", eCmdHdlrString, 0},
                                            {"flowcontrol", eCmdHdlrGetWord, 0},
+                                           {"ratelimit.interval", eCmdHdlrInt, 0},
+                                           {"ratelimit.burst", eCmdHdlrInt, 0},
+                                           {"ratelimit.name", eCmdHdlrString, 0},
                                            {"tls", eCmdHdlrBinary, 0},
                                            {"tls.permittedpeer", eCmdHdlrArray, 0},
                                            {"tls.authmode", eCmdHdlrString, 0},
@@ -232,7 +240,11 @@ static relpRetVal onSyslogRcv(void *pUsr, uchar *pHostname, uchar *pIP, uchar *m
     CHKiRet(prop.Destruct(&pProp));
     CHKiRet(MsgSetRcvFromIPStr(pMsg, pIP, ustrlen(pIP), &pProp));
     CHKiRet(prop.Destruct(&pProp));
-    CHKiRet(submitMsg2(pMsg));
+    if (inst->data.ratelimiter != NULL) {
+        CHKiRet(ratelimitAddMsg(inst->data.ratelimiter, NULL, pMsg));
+    } else {
+        CHKiRet(submitMsg2(pMsg));
+    }
     STATSCOUNTER_INC(inst->data.ctrSubmit, inst->data.mutCtrSubmit);
 
 finalize_it:
@@ -261,6 +273,9 @@ static rsRetVal createInstance(instanceConf_t **pinst) {
     inst->iKeepAliveIntvl = 0;
     inst->iKeepAliveProbes = 0;
     inst->iKeepAliveTime = 0;
+    inst->ratelimitInterval = -1;
+    inst->ratelimitBurst = -1;
+    inst->pszRatelimitName = NULL;
     inst->bEnableTLS = 0;
     inst->bEnableTLSZip = 0;
     inst->bEnableLstn = 0;
@@ -395,6 +410,19 @@ static rsRetVal addListner(modConfData_t __attribute__((unused)) * modConf, inst
                                 &(inst->data.ctrSubmit)));
     CHKiRet(statsobj.ConstructFinalize(inst->data.stats));
     /* end stats counters */
+    /* set up ratelimiter */
+    inst->data.ratelimiter = NULL;
+    if (inst->pszRatelimitName != NULL) {
+        CHKiRet(ratelimitNewFromConfig(&inst->data.ratelimiter, runModConf->pConf, (char *)inst->pszRatelimitName,
+                                       "imrelp", (char *)inst->pszBindPort));
+    } else if (inst->ratelimitInterval > 0) {
+        CHKiRet(ratelimitNew(&inst->data.ratelimiter, "imrelp", (char *)inst->pszBindPort));
+        ratelimitSetLinuxLike(inst->data.ratelimiter, (unsigned)inst->ratelimitInterval,
+                              (unsigned)inst->ratelimitBurst);
+    }
+    if (inst->data.ratelimiter != NULL) {
+        ratelimitSetThreadSafe(inst->data.ratelimiter);
+    }
     relpSrvSetUsrPtr(pSrv, inst);
     relpSrvSetKeepAlive(pSrv, inst->bKeepAlive, inst->iKeepAliveIntvl, inst->iKeepAliveProbes, inst->iKeepAliveTime);
     if (inst->bEnableTLS) {
@@ -552,6 +580,12 @@ BEGINnewInpInst
             inst->iKeepAliveTime = (int)pvals[i].val.d.n;
         } else if (!strcmp(inppblk.descr[i].name, "keepalive.interval")) {
             inst->iKeepAliveIntvl = (int)pvals[i].val.d.n;
+        } else if (!strcmp(inppblk.descr[i].name, "ratelimit.interval")) {
+            inst->ratelimitInterval = (int)pvals[i].val.d.n;
+        } else if (!strcmp(inppblk.descr[i].name, "ratelimit.burst")) {
+            inst->ratelimitBurst = (int)pvals[i].val.d.n;
+        } else if (!strcmp(inppblk.descr[i].name, "ratelimit.name")) {
+            inst->pszRatelimitName = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
         } else if (!strcmp(inppblk.descr[i].name, "tls")) {
             inst->bEnableTLS = (unsigned)pvals[i].val.d.n;
         } else if (!strcmp(inppblk.descr[i].name, "tls.dhbits")) {
@@ -622,6 +656,19 @@ BEGINnewInpInst
                  "imrelp: private key file given but no corresponding "
                  "certificate file - this is invalid, listener cannot be started");
         ABORT_FINALIZE(RS_RET_ERR);
+    }
+
+    if (inst->pszRatelimitName != NULL) {
+        if (inst->ratelimitInterval != -1 || inst->ratelimitBurst != -1) {
+            LogError(0, RS_RET_INVALID_PARAMS,
+                     "imrelp: ratelimit.name is mutually exclusive with "
+                     "ratelimit.interval and ratelimit.burst - using ratelimit.name");
+        }
+        inst->ratelimitInterval = 0;
+        inst->ratelimitBurst = 0;
+    } else {
+        if (inst->ratelimitInterval == -1) inst->ratelimitInterval = 0;
+        if (inst->ratelimitBurst == -1) inst->ratelimitBurst = 10000;
     }
 
     inst->bEnableLstn = -1; /* all ok, ready to start up */
@@ -788,7 +835,9 @@ BEGINfreeCnf
         if (inst->bEnableLstn) {
             prop.Destruct(&inst->pInputName);
             statsobj.Destruct(&(inst->data.stats));
+            if (inst->data.ratelimiter != NULL) ratelimitDestruct(inst->data.ratelimiter);
         }
+        free(inst->pszRatelimitName);
         del = inst;
         inst = inst->next;
         free(del);

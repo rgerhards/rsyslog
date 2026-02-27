@@ -1409,6 +1409,7 @@ TESTS_RELP = \
 	 imrelp-oversizeMode-accept.sh \
 	 imrelp-invld-tlslib.sh \
 	 imrelp-bigmessage.sh \
+	 imrelp_ratelimit_name.sh \
 	 omrelp-invld-tlslib.sh \
 	 sndrcv_relp_dflt_pt.sh \
 	 glbl-oversizeMsg-log.sh \
