@@ -1,0 +1,19 @@
+{
+  "allowed_patch_skips": [],
+  "supplemental_build_deps": [
+    {
+      "package": "protobuf-c-compiler",
+      "reason": "Needed by upstream build flow before Debian packaging catches up."
+    },
+    {
+      "package": "libprotobuf-c-dev",
+      "reason": "Needed by upstream build flow before Debian packaging catches up."
+    }
+  ],
+  "not_installed_paths": [
+    {
+      "path": "usr/lib/${DEB_HOST_MULTIARCH}/rsyslog/mmleefparse.so",
+      "reason": "Temporary Debian packaging compatibility workaround until packaging metadata is updated."
+    }
+  ]
+}
