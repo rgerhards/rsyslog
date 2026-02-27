@@ -53,6 +53,44 @@ Template to user for the message. Default is WallFmt when parameter users is
 "*" and StdUsrMsgFmt otherwise.
 
 
+RateLimit.Interval
+^^^^^^^^^^^^^^^^^^
+
+.. csv-table::
+   :header: "type", "default", "mandatory", "|FmtObsoleteName| directive"
+   :widths: auto
+   :class: parameter-table
+
+   "integer", "0", "no", "none"
+
+The rate-limiting interval in seconds. A value of 0 turns off rate-limiting.
+Set it together with ``ratelimit.burst`` to control how many messages can be
+forwarded per interval.
+
+
+RateLimit.Burst
+^^^^^^^^^^^^^^^
+
+.. csv-table::
+   :header: "type", "default", "mandatory", "|FmtObsoleteName| directive"
+   :widths: auto
+   :class: parameter-table
+
+   "integer", "200", "no", "none"
+
+Maximum number of messages that can be emitted within the
+``ratelimit.interval``. This setting is only relevant if
+``ratelimit.interval`` is not 0.
+
+
+RateLimit.Name
+^^^^^^^^^^^^^^
+
+.. include:: ../../reference/parameters/omusrmsg-ratelimit-name.rst
+   :start-after: .. summary-start
+   :end-before: .. summary-end
+
+
 Examples
 ========
 

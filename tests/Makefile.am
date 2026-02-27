@@ -133,6 +133,7 @@ TESTS_DEFAULT = \
 	omfile-subtree-jsonf.sh \
 	omusrmsg-errmsg-no-params.sh \
 	omusrmsg-noabort.sh \
+	omusrmsg_ratelimit_name.sh \
 	omfile-module-params.sh \
 	omfile-read-only-errmsg.sh \
 	omfile-null-filename.sh \
