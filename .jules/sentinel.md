@@ -1,0 +1,4 @@
+## 2024-05-22 - [Buffer Overflow in mmdblookup]
+**Vulnerability:** Found a Variable Length Array (VLA) `char tempbuf[strlen(buf)]` in `plugins/mmdblookup/mmdblookup.c`. This is a stack-based buffer overflow risk if the input string is large. Also, `str_split` logic expands the string (e.g., `}` becomes `},`) without bounds checking, leading to potential stack overflow and heap overflow in `membuf`. Additionally, `open_memstream` buffer was accessed while stream was open and `str_split` reallocating it could lead to use-after-free/double-free on `fclose`.
+**Learning:** `open_memstream` buffers are owned by the stream until `fclose`. Modifying the buffer pointer (realloc) while stream is open is unsafe. VLAs are dangerous and should be replaced by heap allocation.
+**Prevention:** Always use `malloc`/`calloc` for variable-sized buffers. Ensure `fclose` is called before taking ownership of `open_memstream` buffers. Use `chk_malloc` or check return values.

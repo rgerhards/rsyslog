@@ -327,8 +327,14 @@ ENDtryResume
 void str_split(char **membuf) {
     int in_quotes = 0;
     char *buf = *membuf;
-    char tempbuf[strlen(buf)];
-    memset(tempbuf, 0, strlen(buf));
+    size_t input_len = strlen(buf);
+    size_t alloc_size = input_len * 2 + 10;
+    char *tempbuf = (char*)malloc(alloc_size);
+    if (tempbuf == NULL) {
+        LogError(0, RS_RET_OUT_OF_MEMORY, "mmdblookup: malloc failed in str_split");
+        return;
+    }
+    memset(tempbuf, 0, alloc_size);
 
     while (*buf++ != '\0') {
         if (in_quotes) {
@@ -357,7 +363,18 @@ void str_split(char **membuf) {
         }
     }
 
-    memcpy(*membuf, tempbuf, strlen(tempbuf) + 1);
+    size_t new_len = strlen(tempbuf);
+    if (new_len > input_len) {
+        char *new_membuf = realloc(*membuf, new_len + 1);
+        if (new_membuf == NULL) {
+            LogError(0, RS_RET_OUT_OF_MEMORY, "mmdblookup: realloc failed in str_split");
+            free(tempbuf);
+            return;
+        }
+        *membuf = new_membuf;
+    }
+    strcpy(*membuf, tempbuf);
+    free(tempbuf);
 }
 
 
@@ -431,13 +448,19 @@ BEGINdoAction_NoStrings
 
     if (entry_data_list != NULL && memstream != NULL) {
         MMDB_dump_entry_data_list(memstream, entry_data_list, 2);
-        fflush(memstream);
+    }
+
+    if (memstream != NULL) {
+        fclose(memstream);
+        memstream = NULL;
+    }
+
+    if (entry_data_list != NULL) {
         str_split(&membuf);
     }
 
     DBGPRINTF("maxmindb returns: '%s'\n", membuf);
     total_json = json_tokener_parse(membuf);
-    fclose(memstream);
     free(membuf);
 
     /* extract and amend fields (to message) as configured */
