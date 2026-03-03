@@ -1053,7 +1053,7 @@ static rsRetVal ATTR_NONNULL(1, 2) processDataRcvd(ptcpsess_t *const __restrict_
     }
 
     if (pThis->inputState == eAtStrtFram) {
-        if (pThis->bSuppOctetFram && isdigit((int)c)) {
+        if (pThis->bSuppOctetFram && isdigit((unsigned char)c)) {
             pThis->inputState = eInOctetCnt;
             pThis->iOctetsRemain = 0;
             pThis->eFraming = TCP_FRAMING_OCTET_COUNTING;
@@ -1075,7 +1075,7 @@ static rsRetVal ATTR_NONNULL(1, 2) processDataRcvd(ptcpsess_t *const __restrict_
         int lenPeerName = 0;
         uchar *propPeerIP = NULL;
         int lenPeerIP = 0;
-        if (isdigit(c)) {
+        if (isdigit((unsigned char)c)) {
             if (pThis->iOctetsRemain <= 200000000) {
                 pThis->iOctetsRemain = pThis->iOctetsRemain * 10 + c - '0';
             }
