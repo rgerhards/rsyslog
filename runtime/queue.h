@@ -278,8 +278,6 @@ PROTOTYPEpropSetMeth(qqueue, iMinDeqBatchSize, int);
 PROTOTYPEpropSetMeth(qqueue, iSmpInterval, int);
 #define qqueueGetID(pThis) ((unsigned long)pThis)
 
-#ifdef ENABLE_IMDIAG
 extern unsigned int iOverallQueueSize;
-#endif
 
 #endif /* #ifndef QUEUE_H_INCLUDED */
