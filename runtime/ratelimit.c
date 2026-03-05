@@ -26,6 +26,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <ctype.h>
+#include <stdint.h>
 
 #include "rsyslog.h"
 #include "errmsg.h"
@@ -40,6 +41,8 @@
 #include "statsobj.h"
 #include "template.h"
 #include "hashtable_itr.h"
+#include "queue.h"
+#include "srUtils.h"
 #ifdef HAVE_LIBYAML
     #include <yaml.h>
 #endif
@@ -119,6 +122,9 @@ static void ratelimitFreeShared(void *ptr) {
     ratelimit_shared_t *shared = (ratelimit_shared_t *)ptr;
     if (shared == NULL) return;
     pthread_mutex_destroy(&shared->mut);
+    if (shared->stats != NULL) {
+        statsobj.Destruct(&shared->stats);
+    }
     free(shared->policy_file);
     if (shared->per_source_overrides != NULL) {
         hashtable_destroy(shared->per_source_overrides, 1);
@@ -169,6 +175,9 @@ void ratelimit_cfgsDestruct(ratelimit_cfgs_t *cfgs) {
 
 #define RATELIMIT_PERSOURCE_DEFAULT_MAX_STATES 10000U
 #define RATELIMIT_PERSOURCE_DEFAULT_TOPN 10U
+#define RATELIMIT_DELAY_QUEUE_FILL_PCT_DFLT 80U
+#define RATELIMIT_DELAY_SLEEP_USEC_DFLT 10000U
+#define RATELIMIT_DELAY_WARN_USEC 5000000U
 
 struct ratelimit_ps_override_s {
     char *key;
@@ -201,6 +210,49 @@ struct ratelimit_ps_policy_s {
 
 typedef struct ratelimit_ps_policy_s ratelimit_ps_policy_t;
 
+
+static void ratelimitDelayExceeded(ratelimit_t *ratelimit) {
+    const unsigned int usec = ratelimit->pShared->delay_sleep_usec;
+
+    STATSCOUNTER_INC(ratelimit->pShared->ctrExceedDelayed, ratelimit->pShared->mutCtrExceedDelayed);
+    srSleep((int)(usec / 1000000U), (int)(usec % 1000000U));
+}
+
+static sbool ratelimitQueueHasHeadroom(const ratelimit_t *ratelimit) {
+    const unsigned int mainq_size = (runConf != NULL) ? (unsigned int)runConf->globals.mainQ.iMainMsgQueueSize : 0;
+    const unsigned int threshold = ratelimit->pShared->delay_queue_fill_pct;
+    const unsigned int qsz = PREFER_FETCH_32BIT(iOverallQueueSize);
+    unsigned int fill_pct;
+
+    if (mainq_size == 0 || threshold == 0) {
+        return 0;
+    }
+
+    fill_pct = (qsz >= mainq_size) ? 100U : (unsigned int)(((uint64_t)qsz * 100U) / mainq_size);
+    return fill_pct < threshold;
+}
+
+static sbool ratelimitShouldDelay(ratelimit_t *ratelimit) {
+    return ratelimit->pShared->exceed_action == RATELIMIT_EXCEED_DELAY && ratelimitQueueHasHeadroom(ratelimit);
+}
+
+static void ratelimitSanitizeForLog(char *dst, size_t dstsz, const char *src) {
+    size_t i = 0;
+
+    if (dstsz == 0) {
+        return;
+    }
+    if (src == NULL) {
+        dst[0] = '\0';
+        return;
+    }
+
+    while (*src != '\0' && i + 1 < dstsz) {
+        const unsigned char c = (unsigned char)*src++;
+        dst[i++] = iscntrl(c) ? '?' : (char)c;
+    }
+    dst[i] = '\0';
+}
 
 static rsRetVal parsePolicyFile(const char *policy_file
 #ifdef HAVE_LIBYAML
@@ -776,6 +828,7 @@ static rsRetVal ratelimitPerSourceCheck(ratelimit_t *ratelimit, const char *key,
     unsigned int max;
     unsigned int window;
     sbool must_drop = 0;
+    sbool must_delay = 0;
     DEFiRet;
 
     if (ratelimit == NULL || ratelimit->pShared == NULL || key == NULL || key_len == 0) {
@@ -852,13 +905,19 @@ static rsRetVal ratelimitPerSourceCheck(ratelimit_t *ratelimit, const char *key,
             state->count++;
             state->allowed++;
         } else {
-            state->dropped++;
-            must_drop = 1;
+            if (ratelimitShouldDelay(ratelimit)) {
+                state->allowed++;
+                must_delay = 1;
+            } else {
+                state->dropped++;
+                must_drop = 1;
+            }
         }
     }
     state->last_seen = tt;
     if (must_drop) {
         STATSCOUNTER_INC(shared->ctrPerSourceDropped, shared->mutCtrPerSourceDropped);
+        STATSCOUNTER_INC(shared->ctrExceedDropped, shared->mutCtrExceedDropped);
     } else {
         STATSCOUNTER_INC(shared->ctrPerSourceAllowed, shared->mutCtrPerSourceAllowed);
     }
@@ -866,6 +925,9 @@ static rsRetVal ratelimitPerSourceCheck(ratelimit_t *ratelimit, const char *key,
 
     if (must_drop) {
         ABORT_FINALIZE(RS_RET_DISCARDMSG);
+    }
+    if (must_delay) {
+        ratelimitDelayExceeded(ratelimit);
     }
 
 finalize_it:
@@ -877,6 +939,9 @@ rsRetVal ratelimitAddConfig(rsconf_t *conf,
                             unsigned int interval,
                             unsigned int burst,
                             intTiny severity,
+                            int exceed_action,
+                            unsigned int delay_queue_fill_pct,
+                            unsigned int delay_sleep_usec,
                             const char *policy_file,
                             sbool per_source_enabled,
                             const char *per_source_policy_file,
@@ -943,10 +1008,35 @@ rsRetVal ratelimitAddConfig(rsconf_t *conf,
     shared->interval = interval;
     shared->burst = burst;
     shared->severity = severity;
+    shared->exceed_action = (enum ratelimit_exceed_action_e)exceed_action;
+    shared->delay_queue_fill_pct = delay_queue_fill_pct;
+    shared->delay_sleep_usec = delay_sleep_usec;
     if (policy_file) {
         CHKmalloc(shared->policy_file = strdup(policy_file));
     }
     pthread_mutex_init(&shared->mut, NULL);
+    if (delay_sleep_usec > RATELIMIT_DELAY_WARN_USEC) {
+        LogError(0, RS_RET_OK,
+                 "ratelimit: delayUsec=%u for '%s' is very high and may stall senders for extended periods",
+                 delay_sleep_usec, name);
+    }
+
+    STATSCOUNTER_INIT(shared->ctrExceedDropped, shared->mutCtrExceedDropped);
+    STATSCOUNTER_INIT(shared->ctrExceedDelayed, shared->mutCtrExceedDelayed);
+    CHKiRet(statsobj.Construct(&shared->stats));
+    {
+        char statname[256];
+        snprintf(statname, sizeof(statname), "ratelimit.%s", shared->name);
+        statname[sizeof(statname) - 1] = '\0';
+        CHKiRet(statsobj.SetName(shared->stats, (uchar *)statname));
+    }
+    CHKiRet(statsobj.SetOrigin(shared->stats, (uchar *)"ratelimit"));
+    CHKiRet(statsobj.AddCounter(shared->stats, UCHAR_CONSTANT("exceeded_dropped"), ctrType_IntCtr, CTR_FLAG_RESETTABLE,
+                                &shared->ctrExceedDropped));
+    CHKiRet(statsobj.AddCounter(shared->stats, UCHAR_CONSTANT("exceeded_delayed"), ctrType_IntCtr, CTR_FLAG_RESETTABLE,
+                                &shared->ctrExceedDelayed));
+    CHKiRet(statsobj.ConstructFinalize(shared->stats));
+
     if (per_source_enabled) {
         iRet = ratelimitInitPerSourceShared(shared, per_source_policy, per_source_policy_file, per_source_max_states,
                                             per_source_topn);
@@ -998,6 +1088,9 @@ finalize_it:
     if (shared != NULL) {
         /* If we are here, shared was allocated but NOT inserted (error case before insert) */
         free(shared->name); /* key was assigned to name */
+        if (shared->stats != NULL) {
+            statsobj.Destruct(&shared->stats);
+        }
         free(shared->policy_file);
         if (shared->per_source_overrides != NULL) {
             hashtable_destroy(shared->per_source_overrides, 1);
@@ -1148,7 +1241,9 @@ static void tellLostCnt(ratelimit_t *ratelimit) {
 static int ATTR_NONNULL()
     withinRatelimit(ratelimit_t *__restrict__ const ratelimit, time_t tt, const char *const appname) {
     int ret;
+    sbool must_delay = 0;
     uchar msgbuf[1024];
+    char appname_sanitized[512];
 
     if (ratelimit->bThreadSafe) {
         pthread_mutex_lock(&ratelimit->mut);
@@ -1190,18 +1285,29 @@ static int ATTR_NONNULL()
         ratelimit->done++;
         ret = 1;
     } else {
-        ratelimit->missed++;
-        if (ratelimit->missed == 1) {
-            snprintf((char *)msgbuf, sizeof(msgbuf), "%s from <%s>: begin to drop messages due to rate-limiting",
-                     ratelimit->name, appname);
-            logmsgInternal(RS_RET_RATE_LIMITED, LOG_SYSLOG | LOG_INFO, msgbuf, 0);
+        if (ratelimitShouldDelay(ratelimit)) {
+            must_delay = 1;
+            ret = 1;
+        } else {
+            STATSCOUNTER_INC(ratelimit->pShared->ctrExceedDropped, ratelimit->pShared->mutCtrExceedDropped);
+            ratelimit->missed++;
+            if (ratelimit->missed == 1) {
+                ratelimitSanitizeForLog(appname_sanitized, sizeof(appname_sanitized), appname);
+                snprintf((char *)msgbuf, sizeof(msgbuf), "%s from <%s>: begin to drop messages due to rate-limiting",
+                         ratelimit->name, appname_sanitized);
+                logmsgInternal(RS_RET_RATE_LIMITED, LOG_SYSLOG | LOG_INFO, msgbuf, 0);
+            }
+            ret = 0;
         }
-        ret = 0;
     }
 
 finalize_it:
     if (ratelimit->bThreadSafe) {
         pthread_mutex_unlock(&ratelimit->mut);
+    }
+
+    if (must_delay) {
+        ratelimitDelayExceeded(ratelimit);
     }
 
     return ret;
@@ -1413,6 +1519,11 @@ rsRetVal ratelimitNew(ratelimit_t **ppThis, const char *modname, const char *dyn
     CHKmalloc(pThis->pShared = calloc(1, sizeof(ratelimit_shared_t)));
     pThis->bOwnsShared = 1;
     pthread_mutex_init(&pThis->pShared->mut, NULL);
+    STATSCOUNTER_INIT(pThis->pShared->ctrExceedDropped, pThis->pShared->mutCtrExceedDropped);
+    STATSCOUNTER_INIT(pThis->pShared->ctrExceedDelayed, pThis->pShared->mutCtrExceedDelayed);
+    pThis->pShared->exceed_action = RATELIMIT_EXCEED_DROP;
+    pThis->pShared->delay_queue_fill_pct = RATELIMIT_DELAY_QUEUE_FILL_PCT_DFLT;
+    pThis->pShared->delay_sleep_usec = RATELIMIT_DELAY_SLEEP_USEC_DFLT;
 
     DBGPRINTF("ratelimit:%s:new ratelimiter\n", pThis->name);
     *ppThis = pThis;
