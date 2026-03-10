@@ -140,10 +140,13 @@ All external access goes through Traefik, which handles TLS termination.
 Documentation Contents
 ----------------------
 
+If you want the fastest end-to-end path, start with :doc:`setup_walkthrough`.
+
 .. toctree::
    :maxdepth: 1
    :caption: ROSI Collector Guide
 
+   setup_walkthrough
    architecture
    installation
    client_setup

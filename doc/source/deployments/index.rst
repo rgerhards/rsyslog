@@ -30,6 +30,9 @@ monitoring stack including:
 
 :doc:`Get started with ROSI Collector <rosi_collector/index>`
 
+For the shortest operator path from fresh host to first client, use
+:doc:`ROSI Collector Setup Walkthrough <rosi_collector/setup_walkthrough>`.
+
 For the beginner-level ROSI rationale (freedom of choice and avoiding
 vendor lock-in), see :doc:`../getting_started/rosi_for_beginners`.
 
