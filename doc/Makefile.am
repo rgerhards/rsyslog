@@ -81,6 +81,8 @@ EXTRA_DIST = \
     source/_static/dashboard-node.png \
     source/_static/docker-logs.png \
     source/_static/rosi-overview.png \
+    source/_static/rosi-setup-docker-compose.png \
+    source/_static/rosi-setup-grafana.png \
     source/_static/rsyslog.css \
     source/_static/vendor/README.md \
     source/_static/vendor/d3/d3.min.js \

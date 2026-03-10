@@ -94,6 +94,25 @@ installs helper tools such as ``rosi-monitor`` and ``prometheus-target``, and
 can optionally configure the collector host to forward its own logs. Record the
 Grafana admin password shown at the end of the run.
 
+The most important prompts during initialization are:
+
+- Install directory, usually ``/opt/rosi-collector``
+- ``TRAEFIK_DOMAIN`` for the public hostname or IP
+- ``TRAEFIK_EMAIL`` for Let's Encrypt notifications
+- Grafana admin password, either generated or supplied
+- Syslog TLS enablement and auth mode
+- Whether the collector should forward its own local logs
+
+If you need to automate the setup, rerun the script with environment variables
+instead of answering interactively:
+
+.. code-block:: bash
+
+   sudo TRAEFIK_DOMAIN=logs.example.com \
+        TRAEFIK_EMAIL=admin@example.com \
+        SERVER_SYSLOG_FORWARDING=true \
+        ./scripts/init.sh
+
 Step 2: Start and Verify the Stack
 ----------------------------------
 
@@ -116,11 +135,36 @@ You are looking for a stable state where rsyslog, Loki, Grafana, Prometheus,
 and Traefik are all up, and Loki returns ``ready``. If a service does not come
 up cleanly, stop here and use :doc:`troubleshooting` before onboarding clients.
 
-.. figure:: /_static/dashboard-explorer.png
-   :alt: Grafana Syslog Explorer dashboard in ROSI Collector
+On the first run, Docker also has to pull images and create the persistent
+volumes, so ``docker compose up -d`` takes noticeably longer than later starts.
+
+.. figure:: /_static/rosi-setup-docker-compose.png
+   :alt: First ROSI Collector start with docker compose up -d
    :align: center
 
-   After client onboarding, Syslog Explorer is the fastest validation view.
+   First stack start after initialization.
+
+If any service fails, the most useful immediate checks are:
+
+.. code-block:: bash
+
+   sudo docker compose logs rsyslog
+   sudo docker compose logs grafana
+   sudo docker compose logs loki
+   sudo docker compose logs -f
+
+Before you continue, open the required firewall rules on the collector. For a
+host firewall managed with UFW, the minimum rule set is:
+
+.. code-block:: bash
+
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+   sudo ufw allow 10514/tcp
+   sudo ufw allow 6514/tcp
+
+If your environment also uses a provider firewall or security group, mirror the
+same access there.
 
 Step 3: Enroll the First Client
 -------------------------------
@@ -154,6 +198,16 @@ The ``add-client`` helper is the best default because it registers both node
 metrics and impstats sidecar metrics when present. If you only want basic host
 metrics, use ``prometheus-target add CLIENT_IP:9100 ...`` instead.
 
+If the client firewall is enabled, allow the collector to scrape metrics:
+
+.. code-block:: bash
+
+   sudo ufw allow from 198.51.100.10 to any port 9100 proto tcp
+   sudo ufw allow from 198.51.100.10 to any port 9898 proto tcp
+
+Replace ``198.51.100.10`` with the collector IP. Port ``9898`` is only needed
+when the impstats sidecar is in use.
+
 Step 4: Validate End-to-End Flow
 --------------------------------
 
@@ -169,6 +223,27 @@ Then validate from the collector side and the Grafana UI:
 2. Open **Syslog Explorer** and narrow the time range to the last 15 minutes.
 3. Filter by the client hostname and confirm the test event appears.
 4. Open **Host Metrics Overview** and confirm that the client is visible.
+
+If you did not save the generated admin password, retrieve it from the
+collector host:
+
+.. code-block:: bash
+
+   grep GRAFANA_ADMIN_PASSWORD /opt/rosi-collector/.env
+
+.. figure:: /_static/rosi-setup-grafana.png
+   :alt: Grafana with ROSI Collector dashboards
+   :align: center
+
+   Grafana after the stack and first client are working.
+
+For a quick log query in Grafana Explore, these are good first checks:
+
+.. code-block:: text
+
+   {host="web-01"}
+   {host=~".+"} |= "error"
+   {facility="auth"}
 
 If logs arrive but metrics do not, the most common cause is that port
 ``9100/tcp`` is not reachable from the collector. If neither logs nor metrics
