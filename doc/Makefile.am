@@ -305,6 +305,7 @@ EXTRA_DIST = \
     source/deployments/rosi_collector/index.rst \
     source/deployments/rosi_collector/installation.rst \
     source/deployments/rosi_collector/rosi-architecture.svg \
+    source/deployments/rosi_collector/setup_walkthrough.rst \
     source/deployments/rosi_collector/troubleshooting.rst \
     source/development/architecture.rst \
     source/development/coding_practices.rst \
