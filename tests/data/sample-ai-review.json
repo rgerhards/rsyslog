@@ -1,0 +1,35 @@
+{
+  "summary": "The patch mostly follows repository guidance, but it shows a moderate mismatch with local style and appears to change behavior without sufficient test coverage.",
+  "findings": [
+    {
+      "rule_id": "tests-for-behavior-change",
+      "status": "fail",
+      "confidence": "medium",
+      "file": "tests/README",
+      "line": 1,
+      "message": "Behavioral changes are visible in the patch, but no corresponding automated test updates were found."
+    },
+    {
+      "rule_id": "fit-local-style",
+      "status": "partial",
+      "confidence": "high",
+      "file": "runtime/example.c",
+      "line": 142,
+      "message": "The new control flow and naming style differ from nearby code patterns in the touched area."
+    },
+    {
+      "rule_id": "comments-add-value",
+      "status": "partial",
+      "confidence": "medium",
+      "file": "runtime/example.c",
+      "line": 155,
+      "message": "A newly added comment restates the obvious behavior of the following code."
+    }
+  ],
+  "score": {
+    "policy_score": 64,
+    "style_fit_score": 70,
+    "overall_score": 66,
+    "rating": "mixed"
+  }
+}

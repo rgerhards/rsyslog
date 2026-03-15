@@ -1,0 +1,21 @@
+version: 1
+rules:
+  - id: preserve-iret-localret
+    weight: 10
+    description: Preserve idiomatic variables "iRet" and "localRet" where they already exist.
+
+  - id: avoid-new-hungarian
+    weight: 6
+    description: New identifiers should generally avoid unnecessary Hungarian notation.
+
+  - id: comments-add-value
+    weight: 7
+    description: Comments should add real value and should not narrate obvious code.
+
+  - id: tests-for-behavior-change
+    weight: 10
+    description: Behavioral changes should normally come with tests or an explicit reason why tests are not applicable.
+
+  - id: fit-local-style
+    weight: 8
+    description: The patch should fit the surrounding local file or module style and structure.

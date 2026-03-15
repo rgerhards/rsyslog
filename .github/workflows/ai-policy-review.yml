@@ -1,0 +1,85 @@
+# Copyright 2026 Rainer Gerhards and Others
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+
+---
+name: ai patch policy review
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ai-policy-review:
+    name: ai patch policy review
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build review package
+        run: |
+          mkdir -p out
+          python3 scripts/build_ai_review_input.py \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --output out/review-package.json
+
+      - name: Read size class
+        id: package
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          with open("out/review-package.json", "r", encoding="utf-8") as fh:
+              package = json.load(fh)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"size_class={package['size_class']}\n")
+              fh.write(f"patch_line_count={package['patch_line_count']}\n")
+          PY
+
+      - name: Run mock evaluator
+        if: ${{ steps.package.outputs.size_class != 'large' }}
+        run: |
+          python3 scripts/run_ai_policy_eval.py \
+            --input out/review-package.json \
+            --output out/model-output.json
+
+      - name: Score review result
+        run: |
+          if [ "${{ steps.package.outputs.size_class }}" = "large" ]; then
+            python3 scripts/score_ai_review.py \
+              --review-input out/review-package.json \
+              --summary-md out/summary.md \
+              --summary-json out/summary.json
+          else
+            python3 scripts/score_ai_review.py \
+              --review-input out/review-package.json \
+              --model-output out/model-output.json \
+              --summary-md out/summary.md \
+              --summary-json out/summary.json
+          fi
+
+      - name: Publish workflow summary
+        run: cat out/summary.md >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload review artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-policy-review-${{ github.event.pull_request.number }}
+          if-no-files-found: warn
+          path: |
+            out/review-package.json
+            out/summary.json
+            out/summary.md
+            out/model-output.json
