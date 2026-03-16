@@ -4708,15 +4708,32 @@ static rsRetVal jsonMerge(struct json_object *existing, struct json_object *json
     struct json_object_iterator it = json_object_iter_begin(json);
     struct json_object_iterator itEnd = json_object_iter_end(json);
     while (!json_object_iter_equal(&it, &itEnd)) {
-        json_object_object_add(existing, json_object_iter_peek_name(&it),
-                               json_object_get(json_object_iter_peek_value(&it)));
+        struct json_object *val = NULL;
+        if(json_object_object_get_ex(existing, json_object_iter_peek_name(&it), &val)) {
+            struct json_object *newVal = json_object_iter_peek_value(&it);
+            if(val != NULL && newVal != NULL &&
+               json_object_get_type(val) == json_type_object &&
+               json_object_get_type(newVal) == json_type_object) {
+                json_object_get(newVal);
+                CHKiRet(jsonMerge(val, newVal));
+            } else {
+                json_object_object_add(existing, json_object_iter_peek_name(&it),
+                                       json_object_get(newVal));
+            }
+        } else {
+            json_object_object_add(existing, json_object_iter_peek_name(&it),
+                                   json_object_get(json_object_iter_peek_value(&it)));
+        }
         json_object_iter_next(&it);
     }
+finalize_it:
     /* note: json-c does ref counting. We added all descandants refcounts
      * in the loop above. So when we now free(_put) the root object, only
      * root gets freed().
      */
-    json_object_put(json);
+    if (json != NULL) {
+        json_object_put(json);
+    }
     RETiRet;
 }
 
