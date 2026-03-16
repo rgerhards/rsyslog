@@ -3049,7 +3049,7 @@ static rsRetVal ATTR_NONNULL(1, 4) jsonAddVal_escaped(uchar *const pSrc,
     unsigned ni;
     unsigned char nc;
     int j;
-    uchar wrkbuf[100000];
+    uchar wrkbuf[4096];
     size_t dst_realloc_size;
     size_t dst_size;
     uchar *dst_base;

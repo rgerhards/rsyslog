@@ -157,6 +157,7 @@ TESTS_DEFAULT = \
 	privdropabortonidfaillegacy.sh \
 	json-nonstring.sh \
 	json-onempty-at-end.sh \
+	json-long-string.sh \
 	template-json.sh \
         template-pure-json.sh \
         template-jsonf-nested.sh \
