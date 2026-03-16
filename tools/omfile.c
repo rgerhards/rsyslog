@@ -1544,7 +1544,7 @@ BEGINnewActInst
 
     int allWhiteSpace = 1;
     for (const char *p = (const char *)pData->fname; *p; ++p) {
-        if (!isspace(*p)) {
+        if (!isspace((unsigned char)*p)) {
             allWhiteSpace = 0;
             break;
         }
