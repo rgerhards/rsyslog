@@ -224,9 +224,7 @@ DEFobjCurrIf(glbl) DEFobjCurrIf(strm) DEFobjCurrIf(datetime) DEFobjCurrIf(statso
     #pragma GCC diagnostic ignored "-Wcast-function-type"  // TODO: investigate further!
 #endif /* if __GNUC__ >= 8 */
 
-#ifdef ENABLE_IMDIAG
     unsigned int iOverallQueueSize = 0;
-#endif
 
 #define OVERSIZE_QUEUE_WATERMARK 500000 /* when is a queue considered to be "overly large"? */
 #define MAX_DISK_QUEUE_FILES 10000000 /* maximum file number for disk queues */

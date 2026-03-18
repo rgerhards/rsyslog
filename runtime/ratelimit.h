@@ -35,8 +35,14 @@ typedef struct ratelimit_shared_s {
     unsigned int interval;
     unsigned int burst;
     intTiny severity;
+    enum ratelimit_exceed_action_e { RATELIMIT_EXCEED_DROP = 0, RATELIMIT_EXCEED_DELAY } exceed_action;
+    unsigned int delay_queue_fill_pct;
+    unsigned int delay_sleep_usec;
     char *policy_file;
     pthread_mutex_t mut;
+    statsobj_t *stats;
+    STATSCOUNTER_DEF(ctrExceedDropped, mutCtrExceedDropped);
+    STATSCOUNTER_DEF(ctrExceedDelayed, mutCtrExceedDelayed);
     sbool per_source_enabled;
     char *per_source_policy_file;
     unsigned int per_source_default_max;
@@ -98,6 +104,9 @@ rsRetVal ratelimitAddConfig(rsconf_t *conf,
                             unsigned int interval,
                             unsigned int burst,
                             intTiny severity,
+                            int exceed_action,
+                            unsigned int delay_queue_fill_pct,
+                            unsigned int delay_sleep_usec,
                             const char *policy_file,
                             sbool per_source_enabled,
                             const char *per_source_policy_file,

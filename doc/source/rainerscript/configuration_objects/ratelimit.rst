@@ -51,6 +51,69 @@ burst
 
 The maximum number of messages allowed within the ``interval``.
 
+
+.. _ratelimit_exceedaction:
+
+exceedAction
+^^^^^^^^^^^^
+
+.. csv-table::
+   :header: "type", "required", "default"
+   :widths: 20, 10, 20
+
+   "string", "no", "drop"
+
+Select how rsyslog reacts when ``interval``/``burst`` or per-source limits are exceeded.
+Valid values are ``drop`` and ``delay``.
+
+- ``drop`` discards messages beyond the configured burst.
+- ``delay`` applies short sleeps (back-pressure) while the main queue still has headroom.
+
+.. _ratelimit_delayqueuefillpercent:
+
+delayQueueFillPercent
+^^^^^^^^^^^^^^^^^^^^^
+
+.. csv-table::
+   :header: "type", "required", "default"
+   :widths: 20, 10, 20
+
+   "integer", "no", "80"
+
+Only used with ``exceedAction="delay"``.
+If main queue fill level is below this percentage, rsyslog delays instead of dropping.
+If queue fill reaches or exceeds this threshold, rsyslog falls back to dropping.
+
+.. _ratelimit_delayusec:
+
+delayUsec
+^^^^^^^^^
+
+.. csv-table::
+   :header: "type", "required", "default"
+   :widths: 20, 10, 20
+
+   "integer", "no", "10000"
+
+Only used with ``exceedAction="delay"``.
+Sleep duration in microseconds that is applied for each exceeded event when queue headroom allows delaying.
+Very large values can significantly stall senders.
+
+.. warning::
+
+   ``exceedAction="delay"`` uses sleeps in the input processing path.
+   This can reduce throughput and increase tail latency under sustained burst
+   conditions.
+
+   In high-performance environments, carefully evaluate ``delayUsec``,
+   ``delayQueueFillPercent``, worker thread counts, and expected burst
+   patterns before enabling delay mode.
+
+   With global ``interval``/``burst`` limits, delay decisions are shared by all
+   senders on the same input listener. Per-source mode limits by key, but still
+   executes delays in worker threads. Validate behavior under realistic peak
+   load before production rollout.
+
 .. _ratelimit_persource:
 
 perSource
@@ -130,6 +193,17 @@ perSourceTopN
 
 Number of per-source drop counters to expose in statistics output (top-N by drops).
 
+
+Statistics
+----------
+
+When ``impstats`` is enabled, each configured rate limiter emits:
+
+- ``ratelimit.<name>: exceeded_dropped``
+- ``ratelimit.<name>: exceeded_delayed``
+
+Per-source configurations keep emitting ``ratelimit.<name>.per_source`` counters.
+
 Example
 -------
 
@@ -137,6 +211,14 @@ Example
 
    # Define a strict rate limit for public facing ports
    ratelimit(name="strict" interval="1" burst="50")
+
+   # Delay (instead of drop) while main queue has headroom
+   ratelimit(name="backpressure"
+             interval="1"
+             burst="100"
+             exceedAction="delay"
+             delayQueueFillPercent="80"
+             delayUsec="10000")
 
    # Define per-source policy for TCP inputs
    ratelimit(name="per_source"
