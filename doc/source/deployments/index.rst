@@ -30,7 +30,7 @@ monitoring stack including:
 
 :doc:`Get started with ROSI Collector <rosi_collector/index>`
 
-For the beginner-level ROSI rationale (freedom of choice and avoiding
+For the beginner-level :doc:`ROSI <rosi_for_decision_makers>` rationale (freedom of choice and avoiding
 vendor lock-in), see :doc:`../getting_started/rosi_for_beginners`.
 
 For audience-specific ROSI follow-up guidance:
