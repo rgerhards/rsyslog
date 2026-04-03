@@ -1396,7 +1396,7 @@ static void rsyslogdDebugSwitch(void) {
     struct tm tp;
 
     datetime.GetTime(&tTime);
-    localtime_r(&tTime, &tp);
+    datetime.sys_localtime_r(&tTime, &tp);
     if (debugging_on == 0) {
         debugging_on = 1;
         dbgprintf("\n");
@@ -1604,7 +1604,7 @@ static void initAll(int argc, char **argv) {
                     time_t tTime;
                     struct tm tp;
                     datetime.GetTime(&tTime);
-                    localtime_r(&tTime, &tp);
+                    datetime.sys_localtime_r(&tTime, &tp);
                     fprintf(fp_rs_full_conf_output,
                             "## full conf created by rsyslog version %s at "
                             "%4.4d-%2.2d-%2.2d %2.2d:%2.2d:%2.2d ##\n",
@@ -2096,6 +2096,8 @@ static rsRetVal wait_timeout(const sigset_t *sigmask) {
     DEFiRet;
 
     tvSelectTimeout.tv_sec = runConf->globals.janitorInterval * 60; /* interval is in minutes! */
+    if (tvSelectTimeout.tv_sec > 300)
+        tvSelectTimeout.tv_sec = 300; /* we want to check for TZ updates at least every 5 minutes */
     tvSelectTimeout.tv_nsec = 0;
 #ifdef HAVE_LIBSYSTEMD
     if (systemdWatchdogEnabled && systemdWatchdogUsec > 0) {
@@ -2238,6 +2240,7 @@ static void reapChild(void) {
  */
 static void mainloop(void) {
     time_t tTime;
+    time_t lastTzUpdate = 0;
     sigset_t origmask;
     sigset_t sigblockset;
     int need_free_mutex;
@@ -2293,6 +2296,10 @@ static void mainloop(void) {
 
         assert(datetime.GetTime != NULL); /* This is only to keep clang static analyzer happy */
         datetime.GetTime(&tTime);
+        if (tTime - lastTzUpdate > 300) {
+            datetime.updateTimezone();
+            lastTzUpdate = tTime;
+        }
         checkGoneAwaySenders(tTime);
 
     } while (!bFinished); /* end do ... while() */
