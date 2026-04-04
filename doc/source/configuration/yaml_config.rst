@@ -98,6 +98,10 @@ RainerScript fragments and vice versa.
 Schema Overview
 ---------------
 
+A formal JSON Schema definition is available in the rsyslog source repository
+at ``doc/rsyslog-yaml-schema.json``. This schema can be used in editors like VSCode or
+IntelliJ to provide auto-completion and validation for your rsyslog YAML configurations.
+
 A YAML config file is a single YAML mapping (dictionary) whose top-level
 keys correspond to rsyslog configuration object types:
 
