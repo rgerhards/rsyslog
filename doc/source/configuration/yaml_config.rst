@@ -102,6 +102,12 @@ A formal JSON Schema definition is available in the rsyslog source repository
 at ``doc/rsyslog-yaml-schema.json``. This schema can be used in editors like VSCode or
 IntelliJ to provide auto-completion and validation for your rsyslog YAML configurations.
 
+To use it in VS Code, you can add a language server comment to the top of your ``.yaml`` file:
+
+.. code-block:: yaml
+
+   # yaml-language-server: $schema=https://raw.githubusercontent.com/rsyslog/rsyslog/master/doc/rsyslog-yaml-schema.json
+
 A YAML config file is a single YAML mapping (dictionary) whose top-level
 keys correspond to rsyslog configuration object types:
 
