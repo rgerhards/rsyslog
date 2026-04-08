@@ -159,6 +159,9 @@ static struct cnfparamdescr ratelimitpdescr[] = {{"name", eCmdHdlrString, CNFPAR
                                                  {"burst", eCmdHdlrInt, 0},
                                                  {"severity", eCmdHdlrSeverity, 0},
                                                  {"policy", eCmdHdlrString, 0},
+                                                 {"exceedAction", eCmdHdlrString, 0},
+                                                 {"delayQueueFillPercent", eCmdHdlrInt, 0},
+                                                 {"delayUsec", eCmdHdlrInt, 0},
                                                  {"perSource", eCmdHdlrBinary, 0},
                                                  {"perSourcePolicy", eCmdHdlrString, 0},
                                                  {"perSourceKeyTpl", eCmdHdlrString, 0},
@@ -491,8 +494,12 @@ static rsRetVal initFunc_ratelimit(struct cnfobj *o) {
     uchar *name = NULL;
     int interval = 0;
     int burst = 10000;
-    int severity = -1; /* -1 means not set/all */
+    int severity = 0; /* default to all severities (0..7) */
     uchar *policy = NULL;
+    uchar *exceed_action = NULL;
+    int exceed_action_mode = RATELIMIT_EXCEED_DROP;
+    int delay_queue_fill_pct = 80;
+    int delay_usec = 10000;
     int per_source_enabled = 0;
     uchar *per_source_policy = NULL;
     uchar *per_source_key_tpl = NULL;
@@ -517,6 +524,12 @@ static rsRetVal initFunc_ratelimit(struct cnfobj *o) {
             severity = (int)pvals[i].val.d.n;
         } else if (!strcmp(ratelimitpblk.descr[i].name, "policy")) {
             policy = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
+        } else if (!strcmp(ratelimitpblk.descr[i].name, "exceedAction")) {
+            exceed_action = (uchar *)es_str2cstr(pvals[i].val.d.estr, NULL);
+        } else if (!strcmp(ratelimitpblk.descr[i].name, "delayQueueFillPercent")) {
+            delay_queue_fill_pct = (int)pvals[i].val.d.n;
+        } else if (!strcmp(ratelimitpblk.descr[i].name, "delayUsec")) {
+            delay_usec = (int)pvals[i].val.d.n;
         } else if (!strcmp(ratelimitpblk.descr[i].name, "perSource")) {
             per_source_enabled = (int)pvals[i].val.d.n;
         } else if (!strcmp(ratelimitpblk.descr[i].name, "perSourcePolicy")) {
@@ -546,14 +559,34 @@ static rsRetVal initFunc_ratelimit(struct cnfobj *o) {
         LogError(0, RS_RET_CONFIG_ERROR, "ratelimit: burst must be >= 0 for '%s'", name);
         ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
     }
+    if (delay_queue_fill_pct < 1 || delay_queue_fill_pct > 100) {
+        LogError(0, RS_RET_CONFIG_ERROR, "ratelimit: delayQueueFillPercent must be between 1 and 100 for '%s'", name);
+        ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
+    }
+    if (delay_usec < 0) {
+        LogError(0, RS_RET_CONFIG_ERROR, "ratelimit: delayUsec must be >= 0 for '%s'", name);
+        ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
+    }
+    if (exceed_action != NULL) {
+        if (!strcasecmp((char *)exceed_action, "drop")) {
+            exceed_action_mode = RATELIMIT_EXCEED_DROP;
+        } else if (!strcasecmp((char *)exceed_action, "delay")) {
+            exceed_action_mode = RATELIMIT_EXCEED_DELAY;
+        } else {
+            LogError(0, RS_RET_CONFIG_ERROR, "ratelimit: exceedAction must be 'drop' or 'delay' for '%s'", name);
+            ABORT_FINALIZE(RS_RET_CONFIG_ERROR);
+        }
+    }
 
     CHKiRet(ratelimitAddConfig(loadConf, (char *)name, (unsigned)interval, (unsigned)burst, (intTiny)severity,
-                               (char *)policy, per_source_enabled, (char *)per_source_policy,
-                               (char *)per_source_key_tpl, (unsigned)per_source_max_states, (unsigned)per_source_topn));
+                               exceed_action_mode, (unsigned)delay_queue_fill_pct, (unsigned)delay_usec, (char *)policy,
+                               per_source_enabled, (char *)per_source_policy, (char *)per_source_key_tpl,
+                               (unsigned)per_source_max_states, (unsigned)per_source_topn));
 
 finalize_it:
     free(name);
     free(policy);
+    free(exceed_action);
     free(per_source_policy);
     free(per_source_key_tpl);
     cnfparamvalsDestruct(pvals, &ratelimitpblk);
