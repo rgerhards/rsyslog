@@ -1604,6 +1604,17 @@ AC_ARG_ENABLE(imdiag,
         [enable_imdiag=no]
 )
 
+# imbeats support
+AC_ARG_ENABLE(imbeats,
+        [AS_HELP_STRING([--enable-imbeats],[Enable Beats/Lumberjack v2 input module @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_imbeats="yes" ;;
+          no) enable_imbeats="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-imbeats) ;;
+         esac],
+        [enable_imbeats=no]
+)
+
 
 # mmnormalize
 AC_ARG_ENABLE(mmnormalize,
@@ -2505,6 +2516,7 @@ if test "x$enable_imdiag" = "xyes"; then
 	AC_DEFINE([ENABLE_IMDIAG], [1], [Indicator that IMDIAG is present])
 fi
 AM_CONDITIONAL(ENABLE_IMDIAG, test x$enable_imdiag = xyes)
+AM_CONDITIONAL(ENABLE_IMBEATS, test x$enable_imbeats = xyes)
 AM_CONDITIONAL(ENABLE_OMSTDOUT, test x$enable_omstdout = xyes)
 AM_CONDITIONAL(ENABLE_IMPSTATS, test x$enable_impstats = xyes)
 AM_CONDITIONAL(ENABLE_IMPSTATS_PUSH, test x$enable_impstats_push = xyes)
@@ -3470,6 +3482,7 @@ AC_CONFIG_FILES([Makefile \
 		plugins/impstats/Makefile \
 		plugins/imrelp/Makefile \
 		plugins/imdiag/Makefile \
+		plugins/imbeats/Makefile \
 		plugins/imkafka/Makefile \
 		plugins/omtesting/Makefile \
 		plugins/omgssapi/Makefile \

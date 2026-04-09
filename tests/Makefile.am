@@ -988,6 +988,12 @@ TESTS_IMHTTP_VALGRIND = \
 	imhttp-post-payload-compress-vg.sh \
 	imhttp-getrequest-file-vg.sh
 
+TESTS_IMBEATS = \
+	imbeats-basic.sh \
+	imbeats-compressed.sh \
+	imbeats-filebeat-docker.sh \
+	yaml-imbeats-basic.sh
+
 TESTS_OMRABBITMQ = \
 	omrabbitmq_no_params.sh \
 	omrabbitmq_params_missing0.sh \
@@ -1793,6 +1799,7 @@ EXTRA_DIST += $(TESTS_IMDOCKER)
 EXTRA_DIST += $(TESTS_IMDOCKER_VALGRIND)
 EXTRA_DIST += $(TESTS_IMHTTP)
 EXTRA_DIST += $(TESTS_IMHTTP_VALGRIND)
+EXTRA_DIST += $(TESTS_IMBEATS)
 EXTRA_DIST += $(TESTS_OMRABBITMQ)
 EXTRA_DIST += $(TESTS_OMRABBITMQ_VALGRIND)
 EXTRA_DIST += $(TESTS_IMHIREDIS)
@@ -2449,6 +2456,12 @@ if HAVE_VALGRIND
 TESTS += $(TESTS_IMHTTP_VALGRIND)
 endif # HAVE_VALGRIND
 endif # ENABLE_IMHTTP
+
+if ENABLE_IMBEATS
+if ENABLE_TESTBENCH
+TESTS += $(TESTS_IMBEATS)
+endif # ENABLE_TESTBENCH
+endif # ENABLE_IMBEATS
 
 
 
