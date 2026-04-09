@@ -1,5 +1,8 @@
 .. _param-imbeats-streamdriver-cafile:
 
+StreamDriver.CAFile
+===================
+
 .. meta::
    :description: CA file for imbeats TLS validation.
    :keywords: rsyslog, imbeats, streamdriver cafile

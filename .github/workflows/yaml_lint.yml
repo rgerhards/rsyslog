@@ -30,6 +30,9 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -37,45 +40,22 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
 
-      - name: Identify changed YAML files
-        id: changed
-        uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46
-        with:
-          json: "true"
-          separator: "\n"
-          files: |
-            **/*.yml
-            **/*.yaml
-
       - name: Install yamllint
-        if: steps.changed.outputs.any_changed == 'true'
         run: pip install yamllint
 
       - name: Run yamllint
-        if: steps.changed.outputs.any_changed == 'true'
-        env:
-          CHANGED_YAML_FILES_JSON: ${{ steps.changed.outputs.all_changed_files }}
         run: |
-          python3 - <<'PY' > /tmp/changed-yaml-files.txt
-          import json
-          import os
+          mapfile -t changed_yaml_files < <(
+            git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- '*.yml' '*.yaml'
+          )
 
-          raw = os.environ["CHANGED_YAML_FILES_JSON"]
-          try:
-              paths = json.loads(raw)
-          except json.JSONDecodeError:
-              paths = json.loads(raw.encode("utf-8").decode("unicode_escape"))
+          if [ "${#changed_yaml_files[@]}" -eq 0 ]; then
+            echo "No YAML files modified"
+            exit 0
+          fi
 
-          for path in paths:
-              print(path)
-          PY
-          while IFS= read -r file; do
-            [ -n "$file" ] || continue
+          for file in "${changed_yaml_files[@]}"; do
             yamllint \
               -d '{extends: relaxed, rules: {line-length: {max: 120}}}' \
               "$file"
-          done < /tmp/changed-yaml-files.txt
-
-      - name: Skip yamllint, no YAML changes
-        if: steps.changed.outputs.any_changed != 'true'
-        run: echo "No YAML files modified"
+          done

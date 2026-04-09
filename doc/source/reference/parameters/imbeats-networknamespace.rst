@@ -1,5 +1,8 @@
 .. _param-imbeats-networknamespace:
 
+NetworkNamespace
+================
+
 .. meta::
    :description: Network namespace for imbeats listener sockets.
    :keywords: rsyslog, imbeats, network namespace

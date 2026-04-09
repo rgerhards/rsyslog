@@ -1,5 +1,8 @@
 .. _param-imbeats-streamdriver-keyfile:
 
+StreamDriver.KeyFile
+====================
+
 .. meta::
    :description: Private key file for imbeats TLS listeners.
    :keywords: rsyslog, imbeats, streamdriver keyfile

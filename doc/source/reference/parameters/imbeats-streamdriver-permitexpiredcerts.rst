@@ -1,5 +1,8 @@
 .. _param-imbeats-streamdriver-permitexpiredcerts:
 
+StreamDriver.PermitExpiredCerts
+===============================
+
 .. meta::
    :description: Expired certificate policy for imbeats TLS peers.
    :keywords: rsyslog, imbeats, permitexpiredcerts

@@ -1,5 +1,8 @@
 .. _param-imbeats-keepalive:
 
+KeepAlive
+=========
+
 .. meta::
    :description: Enable TCP keepalive for imbeats client sessions.
    :keywords: rsyslog, imbeats, keepalive

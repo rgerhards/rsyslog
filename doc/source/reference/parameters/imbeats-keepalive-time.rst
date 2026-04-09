@@ -1,5 +1,8 @@
 .. _param-imbeats-keepalive-time:
 
+KeepAlive.Time
+==============
+
 .. meta::
    :description: TCP keepalive idle time for imbeats sessions.
    :keywords: rsyslog, imbeats, keepalive time

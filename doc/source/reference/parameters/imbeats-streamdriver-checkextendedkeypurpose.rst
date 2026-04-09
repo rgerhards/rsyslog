@@ -1,5 +1,8 @@
 .. _param-imbeats-streamdriver-checkextendedkeypurpose:
 
+StreamDriver.CheckExtendedKeyPurpose
+====================================
+
 .. meta::
    :description: Extended key usage enforcement for imbeats TLS peers.
    :keywords: rsyslog, imbeats, extended key usage
