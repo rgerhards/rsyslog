@@ -1,5 +1,8 @@
 .. _param-imbeats-keepalive-interval:
 
+KeepAlive.Interval
+==================
+
 .. meta::
    :description: TCP keepalive interval for imbeats sessions.
    :keywords: rsyslog, imbeats, keepalive interval

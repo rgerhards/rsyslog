@@ -1,5 +1,8 @@
 .. _param-imbeats-streamdriver-authmode:
 
+StreamDriver.AuthMode
+=====================
+
 .. meta::
    :description: TLS authentication mode for imbeats.
    :keywords: rsyslog, imbeats, streamdriver authmode

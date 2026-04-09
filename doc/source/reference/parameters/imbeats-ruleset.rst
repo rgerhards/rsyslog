@@ -1,5 +1,8 @@
 .. _param-imbeats-ruleset:
 
+ruleset
+=======
+
 .. meta::
    :description: Ruleset binding for imbeats.
    :keywords: rsyslog, imbeats, ruleset

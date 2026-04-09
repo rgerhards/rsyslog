@@ -1,5 +1,8 @@
 .. _param-imbeats-permittedpeer:
 
+PermittedPeer
+=============
+
 .. meta::
    :description: Allowed TLS peer names for imbeats.
    :keywords: rsyslog, imbeats, permittedpeer

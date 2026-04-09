@@ -1,5 +1,8 @@
 .. _param-imbeats-listenportfilename:
 
+listenPortFileName
+==================
+
 .. meta::
    :description: Port file for dynamic imbeats listeners.
    :keywords: rsyslog, imbeats, listenPortFileName

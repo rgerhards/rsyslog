@@ -1,5 +1,8 @@
 .. _param-imbeats-keepalive-probes:
 
+KeepAlive.Probes
+================
+
 .. meta::
    :description: TCP keepalive probe count for imbeats sessions.
    :keywords: rsyslog, imbeats, keepalive probes

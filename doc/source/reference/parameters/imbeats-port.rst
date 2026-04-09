@@ -1,5 +1,8 @@
 .. _param-imbeats-port:
 
+port
+====
+
 .. meta::
    :description: Listening port for imbeats.
    :keywords: rsyslog, imbeats, port

@@ -1,5 +1,8 @@
 .. _param-imbeats-streamdriver-name:
 
+StreamDriver.Name
+=================
+
 .. meta::
    :description: Stream driver backend for imbeats.
    :keywords: rsyslog, imbeats, streamdriver name

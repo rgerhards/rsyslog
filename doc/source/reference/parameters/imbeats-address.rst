@@ -1,5 +1,8 @@
 .. _param-imbeats-address:
 
+address
+=======
+
 .. meta::
    :description: Bind address for the imbeats listener.
    :keywords: rsyslog, imbeats, address

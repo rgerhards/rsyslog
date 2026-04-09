@@ -1,5 +1,8 @@
 .. _param-imbeats-streamdriver-tlsrevocationcheck:
 
+StreamDriver.TlsRevocationCheck
+===============================
+
 .. meta::
    :description: Revocation checking for imbeats TLS peers.
    :keywords: rsyslog, imbeats, tls revocation check

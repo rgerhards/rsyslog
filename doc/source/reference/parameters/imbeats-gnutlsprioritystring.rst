@@ -1,5 +1,8 @@
 .. _param-imbeats-gnutlsprioritystring:
 
+gnutlsPriorityString
+====================
+
 .. meta::
    :description: GnuTLS priority string for imbeats TLS sessions.
    :keywords: rsyslog, imbeats, gnutlsprioritystring

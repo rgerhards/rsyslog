@@ -1,5 +1,8 @@
 .. _param-imbeats-name:
 
+name
+====
+
 .. meta::
    :description: Input name for imbeats messages.
    :keywords: rsyslog, imbeats, name
