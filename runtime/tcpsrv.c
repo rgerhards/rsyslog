@@ -48,7 +48,6 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <ctype.h>
-#include <limits.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <pthread.h>
@@ -393,12 +392,6 @@ static rsRetVal ATTR_NONNULL() addNewLstnPort(tcpsrv_t *const pThis, tcpLstnPara
 
 #ifdef FEATURE_REGEXP
     if (cnf_params->pszStartRegex != NULL) {
-        if (glbl.GetMaxLine(runConf) > (INT_MAX - 1) / 2) {
-            LogError(0, RS_RET_ERR,
-                     "imtcp: framing.delimiter.regex requires maxMessageSize <= %d to avoid session buffer overflow",
-                     (INT_MAX - 1) / 2);
-            ABORT_FINALIZE(RS_RET_ERR);
-        }
         const int errcode = regexp.regcomp(&pEntry->start_preg, (char *)cnf_params->pszStartRegex, REG_EXTENDED);
         if (errcode != 0) {
             char errbuff[512];
@@ -1008,7 +1001,6 @@ static rsRetVal ATTR_NONNULL(1)
     while (state == RS_READING || state == RS_STARVATION) {
         switch (state) {
             case RS_READING:
-                /* maxReads==0 is intentional and documented: it disables starvation protection. */
                 while (state == RS_READING && (maxReads == 0 || read_calls < maxReads)) {
                     iRet = pThis->pRcvData(pSess, buf, sizeof(buf), &iRcvd, &oserr, &pioDescr->ioDirection);
 

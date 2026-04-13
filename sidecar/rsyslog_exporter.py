@@ -809,8 +809,7 @@ def create_app():
                     detected_workers = int(val)
                     break
                 except ValueError:
-                    # Ignore malformed values and keep probing other sources.
-                    continue
+                    pass
         if detected_workers == 1:
             # parse from GUNICORN_CMD_ARGS like "--workers 4" or "-w 4"
             cmd_args = os.getenv("GUNICORN_CMD_ARGS", "")

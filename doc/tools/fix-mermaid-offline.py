@@ -5,6 +5,7 @@ This script modifies generated HTML files to work with file:// URLs and
 HTTP-served docs (e.g. GitHub Pages PR previews).
 """
 
+import os
 import re
 import sys
 from pathlib import Path

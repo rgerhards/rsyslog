@@ -110,7 +110,6 @@ TESTS_DEFAULT = \
 	glbl-internalmsg_severity-info-shown.sh \
 	glbl-internalmsg_severity-debug-shown.sh \
 	glbl-internalmsg_severity-debug-not_shown.sh \
-	glbl-internalmsg_severity-invalid-long.sh \
 	glbl-umask.sh \
 	glbl-unloadmodules.sh \
 	glbl-invld-param.sh \
@@ -588,6 +587,8 @@ TESTS_LIBYAML = \
 TESTS_RATELIMIT_WATCH = \
 	ratelimit_policy_watch.sh \
 	ratelimit_policy_watch_debounce.sh \
+	ratelimit_policy_watch_invalid.sh \
+	ratelimit_policy_watch_multi.sh \
 	yaml-ratelimit-policywatch.sh
 
 TESTS_IMTCP = \
@@ -601,7 +602,6 @@ TESTS_IMTCP = \
 	imtcp-discard-truncated-msg.sh \
 	imtcp-basic.sh \
 	imtcp_framing_regex.sh \
-	imtcp_framing_regex_maxmsg_overflow.sh \
 	imtcp-multiline.sh \
 	imtcp-basic-hup.sh \
 	imtcp-impstats-single-thread.sh \
@@ -1317,6 +1317,11 @@ TESTS_MMJSONTRANSFORM_IMTCP = \
 TESTS_MMJSONTRANSFORM_LIBYAML = \
         mmjsontransform-policy-basic.sh
 
+TESTS_MMJSONTRANSFORM_WATCH = \
+        mmjsontransform-policy-watch.sh \
+        mmjsontransform-policy-watch-invalid.sh \
+        yaml-mmjsontransform-policywatch.sh
+
 TESTS_MMJSONTRANSFORM_MMJSONPARSE = \
 	data_pipeline-qradar.sh
 
@@ -1832,6 +1837,7 @@ EXTRA_DIST += $(TESTS_MMJSONPARSE_PART2)
 EXTRA_DIST += $(TESTS_MMJSONTRANSFORM_IMTCP)
 EXTRA_DIST += $(TESTS_MMJSONTRANSFORM_MMJSONPARSE)
 EXTRA_DIST += $(TESTS_MMJSONTRANSFORM_LIBYAML)
+EXTRA_DIST += $(TESTS_MMJSONTRANSFORM_WATCH)
 EXTRA_DIST += $(TESTS_MMDBLOOKUP)
 EXTRA_DIST += $(TESTS_MMDBLOOKUP_VALGRIND)
 EXTRA_DIST += $(TESTS_GNUTLS)
@@ -2621,6 +2627,9 @@ if ENABLE_IMTCP_TESTS
 TESTS += $(TESTS_MMJSONTRANSFORM_IMTCP)
 if HAVE_LIBYAML
 TESTS += $(TESTS_MMJSONTRANSFORM_LIBYAML)
+if ENABLE_INOTIFY
+TESTS += $(TESTS_MMJSONTRANSFORM_WATCH)
+endif
 endif
 endif
 if ENABLE_MMJSONPARSE

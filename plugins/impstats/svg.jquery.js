@@ -1046,7 +1046,8 @@ jQuery.Callbacks = function( flags ) {
 			var i,
 				length,
 				elem,
-				type;
+				type,
+				actual;
 			for ( i = 0, length = args.length; i < length; i++ ) {
 				elem = args[ i ];
 				type = jQuery.type( elem );
@@ -1316,6 +1317,7 @@ jQuery.extend({
 			length = args.length,
 			pValues = new Array( length ),
 			count = length,
+			pCount = length,
 			deferred = length <= 1 && firstParam && jQuery.isFunction( firstParam.promise ) ?
 				firstParam :
 				jQuery.Deferred(),
@@ -2666,7 +2668,7 @@ jQuery.event = {
 
 		var elemData, eventHandle, events,
 			t, tns, type, namespaces, handleObj,
-			handleObjIn, handlers, special;
+			handleObjIn, quick, handlers, special;
 
 		// Don't attach events to noData or text/comment nodes (allow plain objects tho)
 		if ( elem.nodeType === 3 || elem.nodeType === 8 || !types || !handler || !(elemData = jQuery._data( elem )) ) {
@@ -3020,7 +3022,7 @@ jQuery.event = {
 			run_all = !event.exclusive && !event.namespace,
 			special = jQuery.event.special[ event.type ] || {},
 			handlerQueue = [],
-			i, j, cur, jqcur, ret, selMatch, matched, matches, handleObj, sel;
+			i, j, cur, jqcur, ret, selMatch, matched, matches, handleObj, sel, related;
 
 		// Use the fix-ed jQuery.Event rather than the (read-only) native event
 		args[0] = event;
@@ -8392,7 +8394,7 @@ jQuery.fn.extend({
 			clearQueue = type;
 			type = undefined;
 		}
-		if ( clearQueue ) {
+		if ( clearQueue && type !== false ) {
 			this.queue( type || "fx", [] );
 		}
 
@@ -8486,10 +8488,10 @@ jQuery.each({
 jQuery.extend({
 	speed: function( speed, easing, fn ) {
 		var opt = speed && typeof speed === "object" ? jQuery.extend( {}, speed ) : {
-			complete: fn || easing ||
+			complete: fn || !fn && easing ||
 				jQuery.isFunction( speed ) && speed,
 			duration: speed,
-			easing: fn ? easing : ( easing && !jQuery.isFunction( easing ) && easing )
+			easing: fn && easing || easing && !jQuery.isFunction( easing ) && easing
 		};
 
 		opt.duration = jQuery.fx.off ? 0 : typeof opt.duration === "number" ? opt.duration :
