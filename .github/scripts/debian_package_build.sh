@@ -251,6 +251,7 @@ resolve_patch_policy() {
 
     local failed_patch
     local failed_patch_name
+    local excluded_key
     failed_patch="$(
       sed -n 's/^Applying patch \(.*\)$/\1/p' /tmp/quilt-push.log | tail -1
     )"
@@ -275,7 +276,8 @@ resolve_patch_policy() {
       return 1
     fi
 
-    if grep -Fxq "$failed_patch_name" "$excluded_file"; then
+    excluded_key="$failed_patch"
+    if grep -Fxq "$excluded_key" "$excluded_file"; then
       echo "ERROR: patch resolution loop detected at '$failed_patch_name'" >&2
       return 1
     fi
@@ -288,7 +290,7 @@ resolve_patch_policy() {
       END {if (!removed) exit 9}
     ' "$series_file" > "$series_file.new"
     mv "$series_file.new" "$series_file"
-    printf '%s\n' "$failed_patch_name" >> "$excluded_file"
+    printf '%s\n' "$excluded_key" >> "$excluded_file"
 
     if [ -n "$findings_dir" ]; then
       local reason
