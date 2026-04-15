@@ -30,6 +30,8 @@ logs to a wide variety of destinations.
 - :doc:`Troubleshooting <troubleshooting/index>`
 - :doc:`Tutorials <tutorials/index>`
 
+.. include:: _ci_nonexistent_doc_regression.rst
+
 .. toctree::
    :maxdepth: 2
 
