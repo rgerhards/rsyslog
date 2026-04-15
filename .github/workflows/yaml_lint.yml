@@ -56,7 +56,13 @@ jobs:
           import json
           import os
 
-          for path in json.loads(os.environ["CHANGED_YAML_FILES_JSON"]):
+          raw = os.environ["CHANGED_YAML_FILES_JSON"]
+          try:
+              paths = json.loads(raw)
+          except json.JSONDecodeError:
+              paths = json.loads(raw.encode("utf-8").decode("unicode_escape"))
+
+          for path in paths:
               print(path)
           PY
           while IFS= read -r file; do
