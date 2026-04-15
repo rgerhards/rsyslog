@@ -307,12 +307,35 @@ resolve_patch_policy() {
   quilt pop -a >/dev/null 2>&1 || true
 }
 
+check_docs_build_log() {
+  local build_log="$1"
+
+  [ -f "$build_log" ] || return 0
+
+  if grep -Eq '(^|/)(doc/source|source)/[^:]+:[0-9]+: (CRITICAL|ERROR):|^Sphinx error:' "$build_log"; then
+    echo "ERROR: Debian docs build emitted fatal Sphinx/docutils diagnostics" >&2
+    return 1
+  fi
+}
+
 build_package() {
   local source_dir="$1"
+  local build_log="${2:-/tmp/dpkg-buildpackage.log}"
+  local rc
 
   cd "$source_dir"
   export DEB_BUILD_OPTIONS="nocheck"
-  dpkg-buildpackage -b -uc -us -j"$(nproc)"
+
+  set +e
+  dpkg-buildpackage -b -uc -us -j"$(nproc)" 2>&1 | tee "$build_log"
+  rc=${PIPESTATUS[0]}
+  set -e
+
+  if [ "$rc" -ne 0 ]; then
+    return "$rc"
+  fi
+
+  check_docs_build_log "$build_log"
 }
 
 verify_docs() {
@@ -370,6 +393,7 @@ case "${1:-}" in
   record_policy_items) shift; record_policy_items "$@" ;;
   apply_not_installed_policy) shift; apply_not_installed_policy "$@" ;;
   resolve_patch_policy) shift; resolve_patch_policy "$@" ;;
+  check_docs_build_log) shift; check_docs_build_log "$@" ;;
   build_package) shift; build_package "$@" ;;
   verify_docs) shift; verify_docs "$@" ;;
   init_findings_dir) shift; init_findings_dir "$@" ;;

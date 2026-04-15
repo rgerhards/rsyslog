@@ -232,6 +232,12 @@ jobs:
           rc=$?
           set -e
           cat /tmp/debian-build.log
+          if ! "$GITHUB_WORKSPACE/$DEBIAN_CI_HELPER" check_docs_build_log /tmp/debian-build.log; then
+            "$GITHUB_WORKSPACE/$DEBIAN_CI_HELPER" append_finding \
+              /tmp/debian-ci-findings.d \
+              docs_test_observations \
+              "- Debian docs build emitted fatal Sphinx/docutils diagnostics even though Debian's default command did not stop immediately."
+          fi
           if [ "$rc" -ne 0 ]; then
             "$GITHUB_WORKSPACE/$DEBIAN_CI_HELPER" append_finding \
               /tmp/debian-ci-findings.d \
