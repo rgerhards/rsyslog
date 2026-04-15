@@ -250,6 +250,7 @@ resolve_patch_policy() {
     fi
 
     local failed_patch
+    local failed_patch_name
     failed_patch="$(
       sed -n 's/^Applying patch \(.*\)$/\1/p' /tmp/quilt-push.log | tail -1
     )"
@@ -257,45 +258,47 @@ resolve_patch_policy() {
       echo "ERROR: could not determine failing patch" >&2
       return 1
     fi
+    failed_patch_name="${failed_patch##*/}"
 
-    if ! grep -Fxq "$failed_patch" "$allowed_tmp"; then
+    if ! grep -Fxq "$failed_patch" "$allowed_tmp" && \
+       ! grep -Fxq "$failed_patch_name" "$allowed_tmp"; then
       if [ "$mode" = "diagnostics" ] && [ -n "$findings_dir" ]; then
         append_finding "$findings_dir" "blocking_gate_failures" \
-          "- Unexpected Debian patch failure: \`$failed_patch\` does not match the allowlist."
+          "- Unexpected Debian patch failure: \`$failed_patch_name\` does not match the allowlist."
         append_finding "$findings_dir" "release_handoff_items" \
-          "- Refresh or drop Debian patch \`$failed_patch\`; CI could not apply it against upstream."
+          "- Refresh or drop Debian patch \`$failed_patch_name\`; CI could not apply it against upstream."
         quilt pop -a >/dev/null 2>&1 || true
         return 0
       fi
 
-      echo "ERROR: unexpected Debian patch failure '$failed_patch'" >&2
+      echo "ERROR: unexpected Debian patch failure '$failed_patch_name'" >&2
       return 1
     fi
 
-    if grep -Fxq "$failed_patch" "$excluded_file"; then
-      echo "ERROR: patch resolution loop detected at '$failed_patch'" >&2
+    if grep -Fxq "$failed_patch_name" "$excluded_file"; then
+      echo "ERROR: patch resolution loop detected at '$failed_patch_name'" >&2
       return 1
     fi
 
-    awk -v p="$failed_patch" '
+    awk -v p="$failed_patch" -v pb="$failed_patch_name" '
       /^#/ {print; next}
       NF == 0 {print; next}
-      $1 == p {removed = 1; next}
+      $1 == p || $1 == pb {removed = 1; next}
       {print}
       END {if (!removed) exit 9}
     ' "$series_file" > "$series_file.new"
     mv "$series_file.new" "$series_file"
-    printf '%s\n' "$failed_patch" >> "$excluded_file"
+    printf '%s\n' "$failed_patch_name" >> "$excluded_file"
 
     if [ -n "$findings_dir" ]; then
       local reason
       reason="$(
-        awk -F '\t' -v p="$failed_patch" '$1 == p {print $2}' "$reasons_file"
+        awk -F '\t' -v p="$failed_patch" -v pb="$failed_patch_name" '$1 == p || $1 == pb {print $2}' "$reasons_file"
       )"
       append_finding "$findings_dir" "allowed_patch_drift" \
-        "- Skipped allowed Debian patch \`$failed_patch\`: ${reason:-No reason recorded.}"
+        "- Skipped allowed Debian patch \`$failed_patch_name\`: ${reason:-No reason recorded.}"
       append_finding "$findings_dir" "release_handoff_items" \
-        "- Refresh or drop Debian patch \`$failed_patch\`: ${reason:-No reason recorded.}"
+        "- Refresh or drop Debian patch \`$failed_patch_name\`: ${reason:-No reason recorded.}"
     fi
   done
 
