@@ -54,6 +54,7 @@ install_prereqs() {
     automake \
     autotools-dev \
     bison \
+    build-essential \
     ca-certificates \
     devscripts \
     dpkg-dev \
@@ -70,19 +71,22 @@ install_prereqs() {
 }
 
 fetch_debian_packaging() {
-  local target_dir="$1"
+  local repo_url="$1"
+  local branch="$2"
+  local target_dir="$3"
+  local clone_dir="/tmp/debian-packaging-clone"
 
-  rm -rf "$target_dir" /tmp/debian-rsyslog
-  git clone --depth=1 --branch debian/master \
-    https://salsa.debian.org/debian/rsyslog.git \
-    /tmp/debian-rsyslog
+  rm -rf "$target_dir" "$clone_dir"
+  git clone --depth=1 --branch "$branch" \
+    "$repo_url" \
+    "$clone_dir"
 
-  if [ ! -d /tmp/debian-rsyslog/debian ]; then
-    echo "ERROR: Could not obtain Debian packaging files" >&2
+  if [ ! -d "$clone_dir/debian" ]; then
+    echo "ERROR: Could not obtain Debian packaging files from $repo_url:$branch" >&2
     return 1
   fi
 
-  cp -r /tmp/debian-rsyslog/debian "$target_dir"
+  cp -r "$clone_dir/debian" "$target_dir"
 }
 
 run_dist_build() {
@@ -323,21 +327,22 @@ render_findings() {
   local findings_dir="$1"
   local output_file="$2"
   local gate_result="${3:-unknown}"
+  local title="${4:-Debian diagnostics findings}"
 
-  cat > "$output_file" <<EOF
-Debian diagnostics findings
+  cat > "$output_file" <<EOF2
+${title}
 ==========================
 
 Required gate result: $gate_result
-EOF
+EOF2
 
-  local section title
-  while IFS='|' read -r section title; do
+  local section title_line
+  while IFS='|' read -r section title_line; do
     if [ -s "$findings_dir/$section.md" ]; then
-      printf '\n%s\n\n' "$title" >> "$output_file"
+      printf '\n%s\n\n' "$title_line" >> "$output_file"
       cat "$findings_dir/$section.md" >> "$output_file"
     fi
-  done <<'EOF'
+  done <<'EOF2'
 blocking_gate_failures|Blocking gate failures
 allowed_patch_drift|Allowed Debian patch drift
 allowed_dependency_drift|Allowed Debian dependency drift
@@ -345,7 +350,7 @@ allowed_packaging_drift|Allowed packaging drift
 unavailable_dependencies|Unavailable Debian 13 dependencies
 docs_test_observations|Debian docs/test observations
 release_handoff_items|Release handoff items
-EOF
+EOF2
 }
 
 case "${1:-}" in
