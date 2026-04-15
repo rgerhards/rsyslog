@@ -154,9 +154,9 @@ install_build_deps() {
       if ! apt-cache show "$pkg" >/dev/null 2>&1; then
         if [ -n "$findings_dir" ]; then
           append_finding "$findings_dir" "unavailable_dependencies" \
-            "- Policy-listed package \`$pkg\` is not available in Debian 13."
+            "- Policy-listed package \`$pkg\` is not available in the Debian experimental baseline environment."
         fi
-        echo "ERROR: policy-listed package '$pkg' is not available in Debian 13" >&2
+        echo "ERROR: policy-listed package '$pkg' is not available in the Debian experimental baseline environment" >&2
         return 1
       fi
     done < "$extra_deps_file"
@@ -352,7 +352,7 @@ blocking_gate_failures|Blocking gate failures
 allowed_patch_drift|Allowed Debian patch drift
 allowed_dependency_drift|Allowed Debian dependency drift
 allowed_packaging_drift|Allowed packaging drift
-unavailable_dependencies|Unavailable Debian 13 dependencies
+unavailable_dependencies|Unavailable Debian experimental baseline dependencies
 docs_test_observations|Debian docs/test observations
 release_handoff_items|Release handoff items
 EOF2
