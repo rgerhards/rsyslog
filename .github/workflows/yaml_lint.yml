@@ -27,37 +27,31 @@ concurrency:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: Identify changed YAML files
-        id: changed
-        uses: tj-actions/changed-files@v46
-        with:
-          separator: "\n"
-          files: |
-            **/*.yml
-            **/*.yaml
-
       - name: Install yamllint
-        if: steps.changed.outputs.any_changed == 'true'
         run: pip install yamllint
 
       - name: Run yamllint
-        if: steps.changed.outputs.any_changed == 'true'
-        env:
-          CHANGED_YAML_FILES: ${{ steps.changed.outputs.all_changed_files }}
         run: |
-          while IFS= read -r file; do
-            [ -n "$file" ] || continue
+          mapfile -t changed_yaml_files < <(
+            git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- '*.yml' '*.yaml'
+          )
+
+          if [ "${#changed_yaml_files[@]}" -eq 0 ]; then
+            echo "No YAML files modified"
+            exit 0
+          fi
+
+          for file in "${changed_yaml_files[@]}"; do
             yamllint \
               -d '{extends: relaxed, rules: {line-length: {max: 120}}}' \
               "$file"
-          done <<< "$CHANGED_YAML_FILES"
-
-      - name: Skip yamllint, no YAML changes
-        if: steps.changed.outputs.any_changed != 'true'
-        run: echo "No YAML files modified"
+          done

@@ -74,3 +74,12 @@ omotel:
   requires_serialization: false
   notes:
     - Transport resources are not yet active; introduce pData locking once they appear.
+
+imbeats:
+  paths: ["plugins/imbeats/"]
+  requires_serialization: true
+  locks:
+    - type: mutex
+      field: instanceConf.mutSessions
+  notes:
+    - Listener threads mutate per-instance session lists under mutSessions.
