@@ -616,6 +616,7 @@ TESTS_IMTCP = \
 	imtcp-msg-truncation-on-number2.sh \
 	imtcp-netns.sh \
 	imtcp-NUL.sh \
+	imtcp-highbit-framing.sh \
 	imtcp-NUL-rawmsg.sh \
 	imtcp_incomplete_frame_at_end.sh \
 	imtcp-multiport.sh \
@@ -1138,6 +1139,7 @@ TESTS_IMPTCP = \
 	imptcp_veryLargeOctateCountedMessages.sh \
 	imptcp-basic-hup.sh \
 	imptcp-NUL.sh \
+	imptcp-highbit-framing.sh \
 	imptcp-NUL-rawmsg.sh \
 	rscript_random.sh \
 	rscript_hash32.sh \
