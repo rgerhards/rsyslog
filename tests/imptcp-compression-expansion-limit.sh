@@ -3,10 +3,11 @@
 . ${srcdir:=.}/diag.sh init
 check_command_available python3
 
+RSYSLOGD_LOG="${RSYSLOG_DYNNAME}.rsyslogd.log"
+
 generate_conf
 add_conf '
 $MaxMessageSize 32m
-global(processInternalMessages="on")
 
 module(load="../plugins/imptcp/.libs/imptcp")
 input(type="imptcp" port="0" listenPortFileName="'$RSYSLOG_DYNNAME'.tcpflood_port" compression.mode="stream:always")
@@ -15,6 +16,8 @@ template(name="outfmt" type="string" string="%msg%\n")
 :msg, contains, "msgnum:" action(type="omfile" file=`echo $RSYSLOG_OUT_LOG` template="outfmt")
 '
 
+: > "$RSYSLOGD_LOG"
+export RS_REDIR=">>\"$RSYSLOGD_LOG\" 2>&1"
 startup
 assign_tcpflood_port $RSYSLOG_DYNNAME.tcpflood_port
 
@@ -35,6 +38,7 @@ PY
 
 shutdown_when_empty
 wait_shutdown
+unset RS_REDIR
 
 if [ -e "$RSYSLOG_OUT_LOG" ] && [ -s "$RSYSLOG_OUT_LOG" ]; then
     echo "unexpected message output for expansion-limited compressed stream"
@@ -42,6 +46,6 @@ if [ -e "$RSYSLOG_OUT_LOG" ] && [ -s "$RSYSLOG_OUT_LOG" ]; then
     exit 1
 fi
 
-content_check 'stream-compressed session from remote peer localhost[127.0.0.1] exceeded 16777216 decompressed bytes in a single recv() call; closing session' "${RSYSLOG_DYNNAME}.started"
-content_check 'error processing data from remote peer localhost[127.0.0.1]; closing session' "${RSYSLOG_DYNNAME}.started"
+content_check 'stream-compressed session from remote peer localhost[127.0.0.1] exceeded 16777216 decompressed bytes in a single recv() call; closing session' "$RSYSLOGD_LOG"
+content_check 'error processing data from remote peer localhost[127.0.0.1]; closing session' "$RSYSLOGD_LOG"
 exit_test
