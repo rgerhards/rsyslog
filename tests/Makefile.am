@@ -1139,6 +1139,8 @@ TESTS_IMPTCP = \
 	imptcp_multi_line.sh \
 	imptcp_spframingfix.sh \
 	imptcp_maxsessions.sh \
+	imptcp_maxsessions_default.sh \
+	imptcp_maxsessions_invalid.sh \
 	imptcp_nonProcessingPoller.sh \
 	imptcp_veryLargeOctateCountedMessages.sh \
 	imptcp-basic-hup.sh \

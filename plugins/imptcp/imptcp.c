@@ -106,6 +106,7 @@ DEFobjCurrIf(glbl) DEFobjCurrIf(net) DEFobjCurrIf(prop) DEFobjCurrIf(datetime) D
 
 #define DFLT_wrkrMax 2
 #define DFLT_inlineDispatchThreshold 1
+#define DFLT_iTCPSessMax 200
 
 #define COMPRESS_NEVER 0
 #define COMPRESS_SINGLE_MSG 1 /* old, single-message compression */
@@ -188,8 +189,9 @@ static modConfData_t *loadModConf = NULL; /* modConf ptr to use for the current 
 static modConfData_t *runModConf = NULL; /* modConf ptr to use for the current load process */
 
 /* module-global parameters */
-static struct cnfparamdescr modpdescr[] = {
-    {"threads", eCmdHdlrPositiveInt, 0}, {"maxsessions", eCmdHdlrInt, 0}, {"processOnPoller", eCmdHdlrBinary, 0}};
+static struct cnfparamdescr modpdescr[] = {{"threads", eCmdHdlrPositiveInt, 0},
+                                           {"maxsessions", eCmdHdlrPositiveInt, 0},
+                                           {"processOnPoller", eCmdHdlrBinary, 0}};
 static struct cnfparamblk modpblk = {CNFPARAMBLK_VERSION, sizeof(modpdescr) / sizeof(struct cnfparamdescr), modpdescr};
 
 /* input instance parameters */
@@ -212,7 +214,7 @@ static struct cnfparamdescr inppdescr[] = {{"port", eCmdHdlrString, 0}, /* legac
                                            {"defaulttz", eCmdHdlrString, 0},
                                            {"supportoctetcountedframing", eCmdHdlrBinary, 0},
                                            {"framingfix.cisco.asa", eCmdHdlrBinary, 0},
-                                           {"maxsessions", eCmdHdlrInt, 0},
+                                           {"maxsessions", eCmdHdlrPositiveInt, 0},
                                            {"notifyonconnectionclose", eCmdHdlrBinary, 0},
                                            {"notifyonconnectionopen", eCmdHdlrBinary, 0},
                                            {"compression.mode", eCmdHdlrGetWord, 0},
@@ -1381,6 +1383,7 @@ static void initConfigSettings(void) {
     cs.bEmitMsgOnClose = 0;
     cs.bEmitMsgOnOpen = 0;
     cs.wrkrMax = DFLT_wrkrMax;
+    cs.iTCPSessMax = DFLT_iTCPSessMax;
     cs.bSuppOctetFram = 1;
     cs.iAddtlFrameDelim = TCPSRV_NO_ADDTL_DELIMITER;
     cs.maxFrameSize = 200000;
@@ -2347,6 +2350,7 @@ BEGINbeginCnfLoad
     pModConf->pConf = pConf;
     /* init our settings */
     loadModConf->wrkrMax = DFLT_wrkrMax;
+    loadModConf->iTCPSessMax = DFLT_iTCPSessMax;
     loadModConf->bProcessOnPoller = 1;
     loadModConf->configSetViaV2Method = 0;
     bLegacyCnfModGlobalsPermitted = 1;
@@ -2404,6 +2408,7 @@ BEGINendCnfLoad
     if (!loadModConf->configSetViaV2Method) {
         /* persist module-specific settings from legacy config system */
         loadModConf->wrkrMax = cs.wrkrMax;
+        loadModConf->iTCPSessMax = cs.iTCPSessMax;
     }
 
     loadModConf = NULL; /* done loading */
@@ -2607,6 +2612,7 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) * pp, void __
     cs.bEmitMsgOnClose = 0;
     cs.bEmitMsgOnOpen = 0;
     cs.wrkrMax = DFLT_wrkrMax;
+    cs.iTCPSessMax = DFLT_iTCPSessMax;
     cs.bKeepAlive = 0;
     cs.iKeepAliveProbes = 0;
     cs.iKeepAliveTime = 0;
