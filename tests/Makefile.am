@@ -1127,6 +1127,9 @@ TESTS_IMPTCP = \
 	imptcp_framing_regex-oversize.sh \
 	imptcp_framing_regex_maxmsg_overflow.sh \
 	imptcp-epoll-add-cleanup.sh \
+	imptcp-compression-invalid-stream.sh \
+	imptcp-compression-expansion-limit.sh \
+	imptcp-compression-stream.sh \
 	imptcp_large.sh \
 	imptcp-connection-msg-disabled.sh \
 	imptcp-connection-msg-received.sh \

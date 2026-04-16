@@ -111,6 +111,11 @@ DEFobjCurrIf(glbl) DEFobjCurrIf(net) DEFobjCurrIf(prop) DEFobjCurrIf(datetime) D
 #define COMPRESS_SINGLE_MSG 1 /* old, single-message compression */
 /* all other settings are for stream-compression */
 #define COMPRESS_STREAM_ALWAYS 2
+/*
+ * Keep stream-compressed receives bounded so a single recv() cannot expand into
+ * unbounded worker-side inflate work before imptcp regains control.
+ */
+#define IMPTCP_MAX_DECOMPRESSED_PER_RECV (16U * 1024U * 1024U)
 
 /* config settings */
 typedef struct configSettings_s {
@@ -1274,6 +1279,21 @@ finalize_it:
     RETiRet;
 }
 
+static void cleanupZipInflate(ptcpsess_t *const pSess) {
+    int zRet;
+
+    if (!pSess->bzInitDone) {
+        return;
+    }
+
+    zRet = inflateEnd(&pSess->zstrm);
+    if (zRet != Z_OK) {
+        DBGPRINTF("imptcp: error %d returned from zlib/inflateEnd()\n", zRet);
+    }
+
+    pSess->bzInitDone = 0;
+}
+
 static rsRetVal DataRcvdCompressed(ptcpsess_t *pThis, char *buf, size_t len) {
     struct syslogTime stTime;
     time_t ttGenTime;
@@ -1309,12 +1329,29 @@ static rsRetVal DataRcvdCompressed(ptcpsess_t *pThis, char *buf, size_t len) {
                   pThis->zstrm.total_in);
         pThis->zstrm.avail_out = sizeof(zipBuf);
         pThis->zstrm.next_out = zipBuf;
-        zRet = inflate(&pThis->zstrm, Z_SYNC_FLUSH); /* no bad return value */
-        // zRet = inflate(&pThis->zstrm, Z_NO_FLUSH);    /* no bad return value */
+        zRet = inflate(&pThis->zstrm, Z_SYNC_FLUSH);
         DBGPRINTF("after inflate, ret %d, avail_out %d\n", zRet, pThis->zstrm.avail_out);
         outavail = sizeof(zipBuf) - pThis->zstrm.avail_out;
+        if (zRet != Z_OK && zRet != Z_STREAM_END &&
+            !(zRet == Z_BUF_ERROR && pThis->zstrm.avail_in == 0 && outavail == 0)) {
+            LogError(0, RS_RET_ZLIB_ERR,
+                     "imptcp: invalid compressed stream from remote peer %s[%s]: inflate() returned %d",
+                     propGetSzStrOrDefault(pThis->peerName, "(hostname unknown)"),
+                     propGetSzStrOrDefault(pThis->peerIP, "(IP unknown)"), zRet);
+            cleanupZipInflate(pThis);
+            ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+        }
         if (outavail != 0) {
             outtotal += outavail;
+            if (outtotal > IMPTCP_MAX_DECOMPRESSED_PER_RECV) {
+                LogError(0, RS_RET_ZLIB_ERR,
+                         "imptcp: stream-compressed session from remote peer %s[%s] exceeded %u "
+                         "decompressed bytes in a single recv() call; closing session",
+                         propGetSzStrOrDefault(pThis->peerName, "(hostname unknown)"),
+                         propGetSzStrOrDefault(pThis->peerIP, "(IP unknown)"), IMPTCP_MAX_DECOMPRESSED_PER_RECV);
+                cleanupZipInflate(pThis);
+                ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+            }
             pThis->pLstn->rcvdDecompressed += outavail;
             CHKiRet(DataRcvdUncompressed(pThis, (char *)zipBuf, outavail, &stTime, ttGenTime));
         }
@@ -1537,6 +1574,7 @@ static rsRetVal doZipFinish(ptcpsess_t *pSess) {
     unsigned outavail;
     struct syslogTime stTime;
     uchar zipBuf[32 * 1024];  // TODO: use "global" one from pSess
+    uint64_t outtotal = 0;
 
     if (!pSess->bzInitDone) goto done;
 
@@ -1547,23 +1585,38 @@ static rsRetVal doZipFinish(ptcpsess_t *pSess) {
                   pSess->zstrm.total_in);
         pSess->zstrm.avail_out = sizeof(zipBuf);
         pSess->zstrm.next_out = zipBuf;
-        zRet = inflate(&pSess->zstrm, Z_FINISH); /* no bad return value */
+        zRet = inflate(&pSess->zstrm, Z_FINISH);
         DBGPRINTF("after inflate, ret %d, avail_out %d\n", zRet, pSess->zstrm.avail_out);
         outavail = sizeof(zipBuf) - pSess->zstrm.avail_out;
         if (outavail != 0) {
+            outtotal += outavail;
+            if (outtotal > IMPTCP_MAX_DECOMPRESSED_PER_RECV) {
+                LogError(0, RS_RET_ZLIB_ERR,
+                         "imptcp: stream-compressed session from remote peer %s[%s] exceeded %u "
+                         "decompressed bytes while finishing a compressed stream; closing session",
+                         propGetSzStrOrDefault(pSess->peerName, "(hostname unknown)"),
+                         propGetSzStrOrDefault(pSess->peerIP, "(IP unknown)"), IMPTCP_MAX_DECOMPRESSED_PER_RECV);
+                ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+            }
             pSess->pLstn->rcvdDecompressed += outavail;
             CHKiRet(DataRcvdUncompressed(pSess, (char *)zipBuf, outavail, &stTime, 0));
             // TODO: query time!
         }
+        if (zRet == Z_STREAM_END) {
+            break;
+        }
+        if (zRet != Z_OK) {
+            LogError(0, RS_RET_ZLIB_ERR,
+                     "imptcp: invalid compressed stream from remote peer %s[%s] while closing session: "
+                     "inflate() returned %d",
+                     propGetSzStrOrDefault(pSess->peerName, "(hostname unknown)"),
+                     propGetSzStrOrDefault(pSess->peerIP, "(IP unknown)"), zRet);
+            ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+        }
     } while (pSess->zstrm.avail_out == 0);
 
 finalize_it:
-    zRet = inflateEnd(&pSess->zstrm);
-    if (zRet != Z_OK) {
-        DBGPRINTF("imptcp: error %d returned from zlib/inflateEnd()\n", zRet);
-    }
-
-    pSess->bzInitDone = 0;
+    cleanupZipInflate(pSess);
 done:
     RETiRet;
 }
@@ -1904,6 +1957,7 @@ static rsRetVal sessActivity(ptcpsess_t *const pSess, int *const continue_pollin
     sbool bEmitOnClose = 0;
     char rcvBuf[128 * 1024];
     int runs = 0;
+    rsRetVal localRet;
     DEFiRet;
 
     DBGPRINTF("imptcp: new activity on session socket %d\n", pSess->sock);
@@ -1915,7 +1969,15 @@ static rsRetVal sessActivity(ptcpsess_t *const pSess, int *const continue_pollin
         if (lenRcv > 0) {
             /* have data, process it */
             DBGPRINTF("imptcp: data(%d) on socket %d: %s\n", lenBuf, pSess->sock, rcvBuf);
-            CHKiRet(DataRcvd(pSess, rcvBuf, lenRcv));
+            localRet = DataRcvd(pSess, rcvBuf, lenRcv);
+            if (localRet != RS_RET_OK) {
+                LogError(0, localRet, "imptcp: error processing data from remote peer %s[%s]; closing session",
+                         propGetSzStrOrDefault(pSess->peerName, "(hostname unknown)"),
+                         propGetSzStrOrDefault(pSess->peerIP, "(IP unknown)"));
+                *continue_polling = 0;
+                CHKiRet(closeSess(pSess));
+                break;
+            }
         } else if (lenRcv == 0) {
             /* session was closed, do clean-up */
             if (pSess->pLstn->pSrv->bEmitMsgOnClose) {
