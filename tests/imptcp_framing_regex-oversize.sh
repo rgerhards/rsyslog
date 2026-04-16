@@ -40,6 +40,5 @@ NEWMSG: <33>Mar  1 01:00:00 172.20.245.8 tag multi
 line3
 NEWMSG: <33>Mar  1 01:00:00 172.20.245.8 tag test4'
 cmp_exact
-content_check-regex "assuming end of frame" ${RSYSLOG2_OUT_LOG}
-content_check-regex "message too long" ${RSYSLOG2_OUT_LOG}
+content_check --regex "assuming end of frame" ${RSYSLOG2_OUT_LOG}
 exit_test

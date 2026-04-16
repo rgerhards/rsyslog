@@ -1125,6 +1125,7 @@ TESTS_IMPTCP = \
 	manyptcp.sh \
 	imptcp_framing_regex.sh \
 	imptcp_framing_regex-oversize.sh \
+	imptcp_framing_regex_maxmsg_overflow.sh \
 	imptcp_large.sh \
 	imptcp-connection-msg-disabled.sh \
 	imptcp-connection-msg-received.sh \

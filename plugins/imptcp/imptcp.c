@@ -289,7 +289,7 @@ struct ptcpsess_s {
     z_stream zstrm; /* zip stream to use for tcp compression */
     uint8_t compressionMode;
     int iMsg; /* index of next char to store in msg */
-    int iCurrLine; /* 2nd char of current line in regex framing mode */
+    int iCurrLine; /* start of current line in regex framing mode */
     int bAtStrtOfFram; /* are we at the very beginning of a new frame? */
     sbool bSuppOctetFram; /**< copy from listener, to speed up access */
     sbool bSPFramingFix;
@@ -1000,10 +1000,7 @@ static rsRetVal ATTR_NONNULL() processDataRcvd_regexFraming(ptcpsess_t *const __
     assert(inst->startRegex != NULL);
     const char c = **buff;
 
-    pThis->pMsg[pThis->iMsg++] = c;
-    pThis->pMsg[pThis->iMsg] = '\0';
-
-    if (pThis->iMsg == 2 * iMaxLine) {
+    if (pThis->iMsg >= 2 * iMaxLine) {
         LogError(0, RS_RET_OVERSIZE_MSG,
                  "imptcp: more then double max message size (%d) "
                  "received without finding frame terminator via regex - assuming "
@@ -1012,25 +1009,30 @@ static rsRetVal ATTR_NONNULL() processDataRcvd_regexFraming(ptcpsess_t *const __
         doSubmitMsg(pThis, stTime, ttGenTime, pMultiSub);
         ++(*pnMsgs);
         pThis->iMsg = 0;
-        pThis->iCurrLine = 1;
+        pThis->iCurrLine = 0;
     }
 
+    pThis->pMsg[pThis->iMsg++] = c;
+    pThis->pMsg[pThis->iMsg] = '\0';
 
     if (c == '\n') {
         pThis->iCurrLine = pThis->iMsg;
     } else {
         const int isMatch = !regexec(&inst->start_preg, (char *)pThis->pMsg + pThis->iCurrLine, 0, NULL, 0);
-        if (isMatch) {
+        if (pThis->iCurrLine > 0 && isMatch) {
             DBGPRINTF("regex match (%d), framing line: %s\n", pThis->iCurrLine, pThis->pMsg);
-            strcpy((char *)pThis->pMsg_save, (char *)pThis->pMsg + pThis->iCurrLine);
+            const size_t len_save = pThis->iMsg - pThis->iCurrLine;
+            memmove(pThis->pMsg_save, pThis->pMsg + pThis->iCurrLine, len_save);
+            pThis->pMsg_save[len_save] = '\0';
+
             pThis->iMsg = pThis->iCurrLine - 1;
 
             doSubmitMsg(pThis, stTime, ttGenTime, pMultiSub);
             ++(*pnMsgs);
 
-            strcpy((char *)pThis->pMsg, (char *)pThis->pMsg_save);
-            pThis->iMsg = ustrlen(pThis->pMsg_save);
-            pThis->iCurrLine = 1;
+            memmove(pThis->pMsg, pThis->pMsg_save, len_save + 1);
+            pThis->iMsg = len_save;
+            pThis->iCurrLine = 0;
         }
     }
 
@@ -1454,7 +1456,7 @@ static rsRetVal addSess(ptcplstn_t *const pLstn, const int sock, prop_t *const p
     DEFiRet;
     ptcpsess_t *pSess = NULL;
     ptcpsrv_t *pSrv = pLstn->pSrv;
-    int pmsg_size_factor;
+    size_t msg_buf_size;
 
     NULL_CHECK(peerName);
     NULL_CHECK(peerIP);
@@ -1462,21 +1464,21 @@ static rsRetVal addSess(ptcplstn_t *const pLstn, const int sock, prop_t *const p
     CHKmalloc(pSess = malloc(sizeof(ptcpsess_t)));
     pSess->next = NULL;
     if (pLstn->pSrv->inst->startRegex == NULL) {
-        pmsg_size_factor = 1;
+        msg_buf_size = (size_t)iMaxLine + 1;
         pSess->pMsg_save = NULL;
     } else {
-        pmsg_size_factor = 2;
+        msg_buf_size = ((size_t)iMaxLine * 2) + 1;
         pSess->pMsg = NULL;
-        CHKmalloc(pSess->pMsg_save = malloc(1 + iMaxLine * pmsg_size_factor));
+        CHKmalloc(pSess->pMsg_save = malloc(msg_buf_size));
     }
-    CHKmalloc(pSess->pMsg = malloc(1 + iMaxLine * pmsg_size_factor));
+    CHKmalloc(pSess->pMsg = malloc(msg_buf_size));
     pSess->pLstn = pLstn;
     pSess->sock = sock;
     pSess->bSuppOctetFram = pLstn->bSuppOctetFram;
     pSess->bSPFramingFix = pLstn->bSPFramingFix;
     pSess->inputState = eAtStrtFram;
     pSess->iMsg = 0;
-    pSess->iCurrLine = 1;
+    pSess->iCurrLine = 0;
     pSess->bzInitDone = 0;
     pSess->bAtStrtOfFram = 1;
     pSess->peerName = peerName;
@@ -2373,6 +2375,12 @@ BEGINactivateCnfPrePrivDrop
 
     runModConf = pModConf;
     for (inst = runModConf->root; inst != NULL; inst = inst->next) {
+        if (inst->startRegex != NULL && iMaxLine > (INT_MAX - 1) / 2) {
+            LogError(0, RS_RET_ERR,
+                     "imptcp: framing.delimiter.regex requires maxMessageSize <= %d to avoid session buffer overflow",
+                     (INT_MAX - 1) / 2);
+            ABORT_FINALIZE(RS_RET_ERR);
+        }
         addListner(pModConf, inst);
     }
     if (pSrvRoot == NULL) {
