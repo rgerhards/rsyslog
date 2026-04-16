@@ -20,7 +20,7 @@ This parameter applies to :doc:`../../configuration/modules/imptcp`.
 :Name: MaxSessions
 :Scope: module, input
 :Type: integer
-:Default: module=0; input=0
+:Default: module=200; input=module parameter
 :Required?: no
 :Introduced: at least 5.x, possibly earlier
 
@@ -29,7 +29,7 @@ Description
 Maximum number of open sessions allowed. When used as a module parameter
 this value becomes the default inherited by each ``input()`` instance but
 is not a global maximum. When set inside an input, it applies to that
-listener. A setting of zero or less than zero means no limit.
+listener. This value must be a positive integer.
 
 Module usage
 ------------

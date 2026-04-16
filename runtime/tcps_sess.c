@@ -728,7 +728,7 @@ static rsRetVal ATTR_NONNULL(1) processDataRcvd(tcps_sess_t *pThis,
         }
     } else {
         assert(pThis->inputState == eInOctetCnt);
-        if (c >= '0' && c <= '9') { /* isdigit() the faster way */
+        if (c >= '0' && c <= '9') {
             if (pThis->iOctetsRemain <= 200000000) {
                 pThis->iOctetsRemain = pThis->iOctetsRemain * 10 + c - '0';
             }

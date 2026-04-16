@@ -475,7 +475,7 @@ static rsRetVal ATTR_NONNULL() configureTCPListen(tcpsrv_t *const pThis, tcpLstn
     /* extract port */
     const uchar *pPort = cnf_params->pszPort;
     i = 0;
-    while (isdigit((int)*pPort)) {
+    while (*pPort >= '0' && *pPort <= '9') {
         i = i * 10 + *pPort++ - '0';
     }
 
