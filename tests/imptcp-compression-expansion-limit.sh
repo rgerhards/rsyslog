@@ -6,6 +6,7 @@ check_command_available python3
 generate_conf
 add_conf '
 $MaxMessageSize 32m
+global(processInternalMessages="on")
 
 module(load="../plugins/imptcp/.libs/imptcp")
 input(type="imptcp" port="0" listenPortFileName="'$RSYSLOG_DYNNAME'.tcpflood_port" compression.mode="stream:always")

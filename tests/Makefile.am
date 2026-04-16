@@ -1126,7 +1126,6 @@ TESTS_IMPTCP = \
 	imptcp_framing_regex.sh \
 	imptcp_framing_regex-oversize.sh \
 	imptcp_framing_regex_maxmsg_overflow.sh \
-	imptcp-epoll-add-cleanup.sh \
 	imptcp-compression-invalid-stream.sh \
 	imptcp-compression-expansion-limit.sh \
 	imptcp-compression-stream.sh \
@@ -1156,6 +1155,9 @@ TESTS_IMPTCP = \
 TESTS_IMPTCP_VALGRIND = \
 	imptcp-octet-framing-too-long-vg.sh \
 	imptcp_conndrop-vg.sh
+
+TESTS_IMPTCP_EPOLL = \
+	imptcp-epoll-add-cleanup.sh
 
 TESTS_IMPTCP_FMHASH_VALGRIND = \
 	rscript_hash32-vg.sh \
@@ -1833,6 +1835,7 @@ EXTRA_DIST += $(TESTS_IMPSTATS_PUSH)
 EXTRA_DIST += $(TESTS_IMPSTATS_VALGRIND)
 EXTRA_DIST += $(TESTS_IMPTCP)
 EXTRA_DIST += $(TESTS_IMPTCP_VALGRIND)
+EXTRA_DIST += $(TESTS_IMPTCP_EPOLL)
 EXTRA_DIST += $(TESTS_IMPTCP_FMHASH_VALGRIND)
 EXTRA_DIST += $(TESTS_IMPTCP_FMUNFLATTEN)
 EXTRA_DIST += $(TESTS_IMPTCP_FMUNFLATTEN_VALGRIND)
@@ -1945,10 +1948,14 @@ liboverride_getaddrinfo_la_SOURCES = override_getaddrinfo.c
 liboverride_getaddrinfo_la_CFLAGS =
 liboverride_getaddrinfo_la_LDFLAGS = -avoid-version -shared
 
-pkglib_LTLIBRARIES += liboverride_epoll_ctl.la
+noinst_LTLIBRARIES =
+
+if ENABLE_IMPTCP_EPOLL
+noinst_LTLIBRARIES += liboverride_epoll_ctl.la
 liboverride_epoll_ctl_la_SOURCES = override_epoll_ctl.c
 liboverride_epoll_ctl_la_CFLAGS =
 liboverride_epoll_ctl_la_LDFLAGS = -avoid-version -shared
+endif # ENABLE_IMPTCP_EPOLL
 
 # TODO: reenable TESTRUNS = rt_init rscript
 check_PROGRAMS = runtime_unit_linkedlist runtime_unit_stringbuf
@@ -2560,6 +2567,9 @@ if ENABLE_IMPTCP
 # note that some tests simply USE imptcp, but they also
 # need to be disabled if we do not have this module
 TESTS += $(TESTS_IMPTCP)
+if ENABLE_IMPTCP_EPOLL
+TESTS += $(TESTS_IMPTCP_EPOLL)
+endif # ENABLE_IMPTCP_EPOLL
 if HAVE_VALGRIND
 TESTS += $(TESTS_IMPTCP_VALGRIND)
 if ENABLE_FMHASH
