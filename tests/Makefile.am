@@ -1126,6 +1126,7 @@ TESTS_IMPTCP = \
 	imptcp_framing_regex.sh \
 	imptcp_framing_regex-oversize.sh \
 	imptcp_framing_regex_maxmsg_overflow.sh \
+	imptcp-epoll-add-cleanup.sh \
 	imptcp_large.sh \
 	imptcp-connection-msg-disabled.sh \
 	imptcp-connection-msg-received.sh \
@@ -1940,6 +1941,11 @@ pkglib_LTLIBRARIES += liboverride_getaddrinfo.la
 liboverride_getaddrinfo_la_SOURCES = override_getaddrinfo.c
 liboverride_getaddrinfo_la_CFLAGS =
 liboverride_getaddrinfo_la_LDFLAGS = -avoid-version -shared
+
+pkglib_LTLIBRARIES += liboverride_epoll_ctl.la
+liboverride_epoll_ctl_la_SOURCES = override_epoll_ctl.c
+liboverride_epoll_ctl_la_CFLAGS =
+liboverride_epoll_ctl_la_LDFLAGS = -avoid-version -shared
 
 # TODO: reenable TESTRUNS = rt_init rscript
 check_PROGRAMS = runtime_unit_linkedlist runtime_unit_stringbuf
