@@ -106,11 +106,17 @@ DEFobjCurrIf(glbl) DEFobjCurrIf(net) DEFobjCurrIf(prop) DEFobjCurrIf(datetime) D
 
 #define DFLT_wrkrMax 2
 #define DFLT_inlineDispatchThreshold 1
+#define DFLT_iTCPSessMax 200
 
 #define COMPRESS_NEVER 0
 #define COMPRESS_SINGLE_MSG 1 /* old, single-message compression */
 /* all other settings are for stream-compression */
 #define COMPRESS_STREAM_ALWAYS 2
+/*
+ * Keep stream-compressed receives bounded so a single recv() cannot expand into
+ * unbounded worker-side inflate work before imptcp regains control.
+ */
+#define IMPTCP_MAX_DECOMPRESSED_PER_RECV (16U * 1024U * 1024U)
 
 /* config settings */
 typedef struct configSettings_s {
@@ -183,8 +189,9 @@ static modConfData_t *loadModConf = NULL; /* modConf ptr to use for the current 
 static modConfData_t *runModConf = NULL; /* modConf ptr to use for the current load process */
 
 /* module-global parameters */
-static struct cnfparamdescr modpdescr[] = {
-    {"threads", eCmdHdlrPositiveInt, 0}, {"maxsessions", eCmdHdlrInt, 0}, {"processOnPoller", eCmdHdlrBinary, 0}};
+static struct cnfparamdescr modpdescr[] = {{"threads", eCmdHdlrPositiveInt, 0},
+                                           {"maxsessions", eCmdHdlrPositiveInt, 0},
+                                           {"processOnPoller", eCmdHdlrBinary, 0}};
 static struct cnfparamblk modpblk = {CNFPARAMBLK_VERSION, sizeof(modpdescr) / sizeof(struct cnfparamdescr), modpdescr};
 
 /* input instance parameters */
@@ -207,7 +214,7 @@ static struct cnfparamdescr inppdescr[] = {{"port", eCmdHdlrString, 0}, /* legac
                                            {"defaulttz", eCmdHdlrString, 0},
                                            {"supportoctetcountedframing", eCmdHdlrBinary, 0},
                                            {"framingfix.cisco.asa", eCmdHdlrBinary, 0},
-                                           {"maxsessions", eCmdHdlrInt, 0},
+                                           {"maxsessions", eCmdHdlrPositiveInt, 0},
                                            {"notifyonconnectionclose", eCmdHdlrBinary, 0},
                                            {"notifyonconnectionopen", eCmdHdlrBinary, 0},
                                            {"compression.mode", eCmdHdlrGetWord, 0},
@@ -289,7 +296,7 @@ struct ptcpsess_s {
     z_stream zstrm; /* zip stream to use for tcp compression */
     uint8_t compressionMode;
     int iMsg; /* index of next char to store in msg */
-    int iCurrLine; /* 2nd char of current line in regex framing mode */
+    int iCurrLine; /* start of current line in regex framing mode */
     int bAtStrtOfFram; /* are we at the very beginning of a new frame? */
     sbool bSuppOctetFram; /**< copy from listener, to speed up access */
     sbool bSPFramingFix;
@@ -1000,10 +1007,7 @@ static rsRetVal ATTR_NONNULL() processDataRcvd_regexFraming(ptcpsess_t *const __
     assert(inst->startRegex != NULL);
     const char c = **buff;
 
-    pThis->pMsg[pThis->iMsg++] = c;
-    pThis->pMsg[pThis->iMsg] = '\0';
-
-    if (pThis->iMsg == 2 * iMaxLine) {
+    if (pThis->iMsg >= 2 * iMaxLine) {
         LogError(0, RS_RET_OVERSIZE_MSG,
                  "imptcp: more then double max message size (%d) "
                  "received without finding frame terminator via regex - assuming "
@@ -1012,25 +1016,30 @@ static rsRetVal ATTR_NONNULL() processDataRcvd_regexFraming(ptcpsess_t *const __
         doSubmitMsg(pThis, stTime, ttGenTime, pMultiSub);
         ++(*pnMsgs);
         pThis->iMsg = 0;
-        pThis->iCurrLine = 1;
+        pThis->iCurrLine = 0;
     }
 
+    pThis->pMsg[pThis->iMsg++] = c;
+    pThis->pMsg[pThis->iMsg] = '\0';
 
     if (c == '\n') {
         pThis->iCurrLine = pThis->iMsg;
     } else {
         const int isMatch = !regexec(&inst->start_preg, (char *)pThis->pMsg + pThis->iCurrLine, 0, NULL, 0);
-        if (isMatch) {
+        if (pThis->iCurrLine > 0 && isMatch) {
             DBGPRINTF("regex match (%d), framing line: %s\n", pThis->iCurrLine, pThis->pMsg);
-            strcpy((char *)pThis->pMsg_save, (char *)pThis->pMsg + pThis->iCurrLine);
+            const size_t len_save = pThis->iMsg - pThis->iCurrLine;
+            memmove(pThis->pMsg_save, pThis->pMsg + pThis->iCurrLine, len_save);
+            pThis->pMsg_save[len_save] = '\0';
+
             pThis->iMsg = pThis->iCurrLine - 1;
 
             doSubmitMsg(pThis, stTime, ttGenTime, pMultiSub);
             ++(*pnMsgs);
 
-            strcpy((char *)pThis->pMsg, (char *)pThis->pMsg_save);
-            pThis->iMsg = ustrlen(pThis->pMsg_save);
-            pThis->iCurrLine = 1;
+            memmove(pThis->pMsg, pThis->pMsg_save, len_save + 1);
+            pThis->iMsg = len_save;
+            pThis->iCurrLine = 0;
         }
     }
 
@@ -1062,7 +1071,7 @@ static rsRetVal ATTR_NONNULL(1, 2) processDataRcvd(ptcpsess_t *const __restrict_
     }
 
     if (pThis->inputState == eAtStrtFram) {
-        if (pThis->bSuppOctetFram && isdigit((int)c)) {
+        if (pThis->bSuppOctetFram && c >= '0' && c <= '9') {
             pThis->inputState = eInOctetCnt;
             pThis->iOctetsRemain = 0;
             pThis->eFraming = TCP_FRAMING_OCTET_COUNTING;
@@ -1084,7 +1093,7 @@ static rsRetVal ATTR_NONNULL(1, 2) processDataRcvd(ptcpsess_t *const __restrict_
         int lenPeerName = 0;
         uchar *propPeerIP = NULL;
         int lenPeerIP = 0;
-        if (isdigit(c)) {
+        if (c >= '0' && c <= '9') {
             if (pThis->iOctetsRemain <= 200000000) {
                 pThis->iOctetsRemain = pThis->iOctetsRemain * 10 + c - '0';
             }
@@ -1272,6 +1281,21 @@ finalize_it:
     RETiRet;
 }
 
+static void cleanupZipInflate(ptcpsess_t *const pSess) {
+    int zRet;
+
+    if (!pSess->bzInitDone) {
+        return;
+    }
+
+    zRet = inflateEnd(&pSess->zstrm);
+    if (zRet != Z_OK) {
+        DBGPRINTF("imptcp: error %d returned from zlib/inflateEnd()\n", zRet);
+    }
+
+    pSess->bzInitDone = 0;
+}
+
 static rsRetVal DataRcvdCompressed(ptcpsess_t *pThis, char *buf, size_t len) {
     struct syslogTime stTime;
     time_t ttGenTime;
@@ -1307,12 +1331,29 @@ static rsRetVal DataRcvdCompressed(ptcpsess_t *pThis, char *buf, size_t len) {
                   pThis->zstrm.total_in);
         pThis->zstrm.avail_out = sizeof(zipBuf);
         pThis->zstrm.next_out = zipBuf;
-        zRet = inflate(&pThis->zstrm, Z_SYNC_FLUSH); /* no bad return value */
-        // zRet = inflate(&pThis->zstrm, Z_NO_FLUSH);    /* no bad return value */
+        zRet = inflate(&pThis->zstrm, Z_SYNC_FLUSH);
         DBGPRINTF("after inflate, ret %d, avail_out %d\n", zRet, pThis->zstrm.avail_out);
         outavail = sizeof(zipBuf) - pThis->zstrm.avail_out;
+        if (zRet != Z_OK && zRet != Z_STREAM_END &&
+            !(zRet == Z_BUF_ERROR && pThis->zstrm.avail_in == 0 && outavail == 0)) {
+            LogError(0, RS_RET_ZLIB_ERR,
+                     "imptcp: invalid compressed stream from remote peer %s[%s]: inflate() returned %d",
+                     propGetSzStrOrDefault(pThis->peerName, "(hostname unknown)"),
+                     propGetSzStrOrDefault(pThis->peerIP, "(IP unknown)"), zRet);
+            cleanupZipInflate(pThis);
+            ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+        }
         if (outavail != 0) {
             outtotal += outavail;
+            if (outtotal > IMPTCP_MAX_DECOMPRESSED_PER_RECV) {
+                LogError(0, RS_RET_ZLIB_ERR,
+                         "imptcp: stream-compressed session from remote peer %s[%s] exceeded %u "
+                         "decompressed bytes in a single recv() call; closing session",
+                         propGetSzStrOrDefault(pThis->peerName, "(hostname unknown)"),
+                         propGetSzStrOrDefault(pThis->peerIP, "(IP unknown)"), IMPTCP_MAX_DECOMPRESSED_PER_RECV);
+                cleanupZipInflate(pThis);
+                ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+            }
             pThis->pLstn->rcvdDecompressed += outavail;
             CHKiRet(DataRcvdUncompressed(pThis, (char *)zipBuf, outavail, &stTime, ttGenTime));
         }
@@ -1342,6 +1383,7 @@ static void initConfigSettings(void) {
     cs.bEmitMsgOnClose = 0;
     cs.bEmitMsgOnOpen = 0;
     cs.wrkrMax = DFLT_wrkrMax;
+    cs.iTCPSessMax = DFLT_iTCPSessMax;
     cs.bSuppOctetFram = 1;
     cs.iAddtlFrameDelim = TCPSRV_NO_ADDTL_DELIMITER;
     cs.maxFrameSize = 200000;
@@ -1454,7 +1496,8 @@ static rsRetVal addSess(ptcplstn_t *const pLstn, const int sock, prop_t *const p
     DEFiRet;
     ptcpsess_t *pSess = NULL;
     ptcpsrv_t *pSrv = pLstn->pSrv;
-    int pmsg_size_factor;
+    size_t msg_buf_size;
+    sbool bLinked = 0;
 
     NULL_CHECK(peerName);
     NULL_CHECK(peerIP);
@@ -1462,21 +1505,21 @@ static rsRetVal addSess(ptcplstn_t *const pLstn, const int sock, prop_t *const p
     CHKmalloc(pSess = malloc(sizeof(ptcpsess_t)));
     pSess->next = NULL;
     if (pLstn->pSrv->inst->startRegex == NULL) {
-        pmsg_size_factor = 1;
+        msg_buf_size = (size_t)iMaxLine + 1;
         pSess->pMsg_save = NULL;
     } else {
-        pmsg_size_factor = 2;
+        msg_buf_size = ((size_t)iMaxLine * 2) + 1;
         pSess->pMsg = NULL;
-        CHKmalloc(pSess->pMsg_save = malloc(1 + iMaxLine * pmsg_size_factor));
+        CHKmalloc(pSess->pMsg_save = malloc(msg_buf_size));
     }
-    CHKmalloc(pSess->pMsg = malloc(1 + iMaxLine * pmsg_size_factor));
+    CHKmalloc(pSess->pMsg = malloc(msg_buf_size));
     pSess->pLstn = pLstn;
     pSess->sock = sock;
     pSess->bSuppOctetFram = pLstn->bSuppOctetFram;
     pSess->bSPFramingFix = pLstn->bSPFramingFix;
     pSess->inputState = eAtStrtFram;
     pSess->iMsg = 0;
-    pSess->iCurrLine = 1;
+    pSess->iCurrLine = 0;
     pSess->bzInitDone = 0;
     pSess->bAtStrtOfFram = 1;
     pSess->peerName = peerName;
@@ -1500,6 +1543,7 @@ static rsRetVal addSess(ptcplstn_t *const pLstn, const int sock, prop_t *const p
     pSess->next = pSrv->pSess;
     if (pSrv->pSess != NULL) pSrv->pSess->prev = pSess;
     pSrv->pSess = pSess;
+    bLinked = 1;
     pthread_mutex_unlock(&pSrv->mutSessLst);
 
     CHKiRet(addEPollSock(epolld_sess, pSess, sock, &pSess->epd));
@@ -1512,7 +1556,7 @@ finalize_it:
                  "connect, like during a security or health check port probe.",
                  propGetSzStrOrDefault(peerName, "(hostname unknown)"), propGetSzStrOrDefault(peerIP, "(IP unknown)"));
         if (pSess != NULL) {
-            if (pSess->next != NULL) {
+            if (bLinked) {
                 unlinkSess(pSess);
             }
             free(pSess->pMsg_save);
@@ -1533,6 +1577,7 @@ static rsRetVal doZipFinish(ptcpsess_t *pSess) {
     unsigned outavail;
     struct syslogTime stTime;
     uchar zipBuf[32 * 1024];  // TODO: use "global" one from pSess
+    uint64_t outtotal = 0;
 
     if (!pSess->bzInitDone) goto done;
 
@@ -1543,23 +1588,38 @@ static rsRetVal doZipFinish(ptcpsess_t *pSess) {
                   pSess->zstrm.total_in);
         pSess->zstrm.avail_out = sizeof(zipBuf);
         pSess->zstrm.next_out = zipBuf;
-        zRet = inflate(&pSess->zstrm, Z_FINISH); /* no bad return value */
+        zRet = inflate(&pSess->zstrm, Z_FINISH);
         DBGPRINTF("after inflate, ret %d, avail_out %d\n", zRet, pSess->zstrm.avail_out);
         outavail = sizeof(zipBuf) - pSess->zstrm.avail_out;
         if (outavail != 0) {
+            outtotal += outavail;
+            if (outtotal > IMPTCP_MAX_DECOMPRESSED_PER_RECV) {
+                LogError(0, RS_RET_ZLIB_ERR,
+                         "imptcp: stream-compressed session from remote peer %s[%s] exceeded %u "
+                         "decompressed bytes while finishing a compressed stream; closing session",
+                         propGetSzStrOrDefault(pSess->peerName, "(hostname unknown)"),
+                         propGetSzStrOrDefault(pSess->peerIP, "(IP unknown)"), IMPTCP_MAX_DECOMPRESSED_PER_RECV);
+                ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+            }
             pSess->pLstn->rcvdDecompressed += outavail;
             CHKiRet(DataRcvdUncompressed(pSess, (char *)zipBuf, outavail, &stTime, 0));
             // TODO: query time!
         }
+        if (zRet == Z_STREAM_END) {
+            break;
+        }
+        if (zRet != Z_OK) {
+            LogError(0, RS_RET_ZLIB_ERR,
+                     "imptcp: invalid compressed stream from remote peer %s[%s] while closing session: "
+                     "inflate() returned %d",
+                     propGetSzStrOrDefault(pSess->peerName, "(hostname unknown)"),
+                     propGetSzStrOrDefault(pSess->peerIP, "(IP unknown)"), zRet);
+            ABORT_FINALIZE(RS_RET_ZLIB_ERR);
+        }
     } while (pSess->zstrm.avail_out == 0);
 
 finalize_it:
-    zRet = inflateEnd(&pSess->zstrm);
-    if (zRet != Z_OK) {
-        DBGPRINTF("imptcp: error %d returned from zlib/inflateEnd()\n", zRet);
-    }
-
-    pSess->bzInitDone = 0;
+    cleanupZipInflate(pSess);
 done:
     RETiRet;
 }
@@ -1900,6 +1960,7 @@ static rsRetVal sessActivity(ptcpsess_t *const pSess, int *const continue_pollin
     sbool bEmitOnClose = 0;
     char rcvBuf[128 * 1024];
     int runs = 0;
+    rsRetVal localRet;
     DEFiRet;
 
     DBGPRINTF("imptcp: new activity on session socket %d\n", pSess->sock);
@@ -1911,7 +1972,15 @@ static rsRetVal sessActivity(ptcpsess_t *const pSess, int *const continue_pollin
         if (lenRcv > 0) {
             /* have data, process it */
             DBGPRINTF("imptcp: data(%d) on socket %d: %s\n", lenBuf, pSess->sock, rcvBuf);
-            CHKiRet(DataRcvd(pSess, rcvBuf, lenRcv));
+            localRet = DataRcvd(pSess, rcvBuf, lenRcv);
+            if (localRet != RS_RET_OK) {
+                LogError(0, localRet, "imptcp: error processing data from remote peer %s[%s]; closing session",
+                         propGetSzStrOrDefault(pSess->peerName, "(hostname unknown)"),
+                         propGetSzStrOrDefault(pSess->peerIP, "(IP unknown)"));
+                *continue_polling = 0;
+                CHKiRet(closeSess(pSess));
+                break;
+            }
         } else if (lenRcv == 0) {
             /* session was closed, do clean-up */
             if (pSess->pLstn->pSrv->bEmitMsgOnClose) {
@@ -2281,6 +2350,7 @@ BEGINbeginCnfLoad
     pModConf->pConf = pConf;
     /* init our settings */
     loadModConf->wrkrMax = DFLT_wrkrMax;
+    loadModConf->iTCPSessMax = DFLT_iTCPSessMax;
     loadModConf->bProcessOnPoller = 1;
     loadModConf->configSetViaV2Method = 0;
     bLegacyCnfModGlobalsPermitted = 1;
@@ -2338,6 +2408,7 @@ BEGINendCnfLoad
     if (!loadModConf->configSetViaV2Method) {
         /* persist module-specific settings from legacy config system */
         loadModConf->wrkrMax = cs.wrkrMax;
+        loadModConf->iTCPSessMax = cs.iTCPSessMax;
     }
 
     loadModConf = NULL; /* done loading */
@@ -2373,6 +2444,12 @@ BEGINactivateCnfPrePrivDrop
 
     runModConf = pModConf;
     for (inst = runModConf->root; inst != NULL; inst = inst->next) {
+        if (inst->startRegex != NULL && iMaxLine > (INT_MAX - 1) / 2) {
+            LogError(0, RS_RET_ERR,
+                     "imptcp: framing.delimiter.regex requires maxMessageSize <= %d to avoid session buffer overflow",
+                     (INT_MAX - 1) / 2);
+            ABORT_FINALIZE(RS_RET_ERR);
+        }
         addListner(pModConf, inst);
     }
     if (pSrvRoot == NULL) {
@@ -2535,6 +2612,7 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) * pp, void __
     cs.bEmitMsgOnClose = 0;
     cs.bEmitMsgOnOpen = 0;
     cs.wrkrMax = DFLT_wrkrMax;
+    cs.iTCPSessMax = DFLT_iTCPSessMax;
     cs.bKeepAlive = 0;
     cs.iKeepAliveProbes = 0;
     cs.iKeepAliveTime = 0;
