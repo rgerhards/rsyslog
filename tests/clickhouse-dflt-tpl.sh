@@ -1,24 +1,25 @@
 #!/bin/bash
 # add 2018-12-07 by Pascal Withopf, released under ASL 2.0
 . ${srcdir:=.}/diag.sh init
+clickhouse_require_server
 export NUMMESSAGES=1
 generate_conf
-add_conf '
-module(load="../plugins/omclickhouse/.libs/omclickhouse")
+add_conf "module(load=\"../plugins/omclickhouse/.libs/omclickhouse\")
 
-:syslogtag, contains, "tag" action(type="omclickhouse" server="localhost" port="8443" bulkmode="off"
-					user="default" pwd="")
-'
+:syslogtag, contains, \"tag\" action(type=\"omclickhouse\" $(clickhouse_action_params) bulkmode=\"off\"
+                                        user=\"default\" pwd=\"\")
+"
 
-clickhouse-client --query="CREATE TABLE IF NOT EXISTS rsyslog.SystemEvents ( severity Int8, facility Int8, timestamp DateTime, hostname String, tag String, message String ) ENGINE = MergeTree() PARTITION BY severity order by tuple()"
+clickhouse_query "CREATE TABLE IF NOT EXISTS rsyslog.SystemEvents ( severity Int8, facility Int8, timestamp DateTime, hostname String, tag String, message String ) ENGINE = MergeTree() PARTITION BY severity order by tuple()"
 
 startup
 injectmsg
 shutdown_when_empty
 wait_shutdown
-clickhouse-client --query="SELECT * FROM rsyslog.SystemEvents FORMAT CSV" > $RSYSLOG_OUT_LOG
+clickhouse_query "SELECT * FROM rsyslog.SystemEvents FORMAT CSV" > $RSYSLOG_OUT_LOG
 
-clickhouse-client --query="DROP TABLE rsyslog.SystemEvents"
+clickhouse_query "DROP TABLE rsyslog.SystemEvents"
+## Regex verified with ClickHouse 25.9 CSV output (clickhouse local 25.9.2.1).
 content_check --regex '7,20,"20..-03-01 01:00:00","192.0.2.8","tag"," msgnum:00000000:"'
 
 exit_test
