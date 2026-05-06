@@ -317,6 +317,7 @@ EXTRA_DIST = \
     source/containers/development_images.rst \
     source/containers/dockerlogs.rst \
     source/containers/etl.rst \
+    source/containers/imbeats.rst \
     source/containers/index.rst \
     source/containers/minimal.rst \
     source/containers/standard.rst \

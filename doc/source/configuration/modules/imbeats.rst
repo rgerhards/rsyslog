@@ -3,15 +3,15 @@ imbeats: Beats v2 input module
 ******************************
 
 .. meta::
-   :description: Receive Elastic Beats data in rsyslog via Lumberjack v2 over TCP or TLS.
-   :keywords: rsyslog, imbeats, beats, lumberjack, elastic, input, tcp, tls
+   :description: Receive Elastic Beats and Elastic Agent Logstash output in rsyslog via Lumberjack v2 over TCP or TLS.
+   :keywords: rsyslog, imbeats, beats, elastic agent, filebeat, logstash output, lumberjack, input, tcp, tls
 
 .. summary-start
 
-imbeats receives Elastic Beats events via Lumberjack protocol v2 over TCP or
-TLS, keeps the original JSON payload in ``msg``, maps decoded event fields into
-the top-level structured tree ``$!``, and stores transport/protocol metadata
-under ``$!metadata!imbeats``.
+imbeats receives Elastic Beats and Elastic Agent ``output.logstash`` events via
+Lumberjack protocol v2 over TCP or TLS, keeps the original JSON payload in
+``msg``, maps decoded event fields into the top-level structured tree ``$!``,
+and stores transport/protocol metadata under ``$!metadata!imbeats``.
 
 .. summary-end
 
@@ -25,9 +25,11 @@ under ``$!metadata!imbeats``.
 Purpose
 =======
 
-``imbeats`` accepts Elastic Beats traffic that uses the Logstash-style
-Lumberjack v2 protocol. The module reuses rsyslog's ``netstrm`` transport
-subsystem, so it can listen via plain TCP or the configured TLS stream driver.
+``imbeats`` accepts Elastic Beats and Elastic Agent traffic that uses the
+Logstash-style Lumberjack v2 protocol. Configure Beats or Elastic Agent with
+``output.logstash`` and point it at the rsyslog listener. The module reuses
+rsyslog's ``netstrm`` transport subsystem, so it can listen via plain TCP or
+the configured TLS stream driver.
 
 The first implementation supports:
 
@@ -46,6 +48,97 @@ common Elasticsearch-oriented pipelines:
 
 This default may be revisited later. A user-selectable representation mode is
 not part of the initial release.
+
+
+End-to-end Elastic Agent setup
+==============================
+
+Install rsyslog, ``imbeats``, and a TLS stream-driver package through your
+operating system packages. On Debian or Ubuntu systems using packages that
+ship the GnuTLS stream driver separately, a typical TLS prerequisite is:
+
+.. code-block:: bash
+
+   sudo apt install rsyslog rsyslog-gnutls
+
+If your distribution packages ``imbeats.so`` separately, install that package
+as well. The exact package name depends on the distribution.
+
+The example below listens on the common Beats/Logstash port ``5044`` and uses
+GnuTLS. Replace the certificate paths with files issued for your rsyslog
+receiver host.
+
+.. code-block:: none
+
+   module(load="imbeats")
+
+   input(type="imbeats"
+         port="5044"
+         ruleset="beats_to_file"
+         streamdriver.name="gtls"
+         streamdriver.mode="1"
+         streamdriver.authmode="anon"
+         streamdriver.cafile="/etc/rsyslog.d/tls/ca.pem"
+         streamdriver.certfile="/etc/rsyslog.d/tls/server-cert.pem"
+         streamdriver.keyfile="/etc/rsyslog.d/tls/server-key.pem")
+
+   ruleset(name="beats_to_file") {
+     action(type="omfile" file="/var/log/imbeats.log")
+   }
+
+Configure Elastic Agent or Filebeat to use the Logstash output and point it at
+the rsyslog host:
+
+.. code-block:: yaml
+
+   outputs:
+     default:
+       type: logstash
+       hosts: ["rsyslog.example.net:5044"]
+       compression_level: 9
+       ssl.enabled: true
+       ssl.certificate_authorities:
+         - /etc/elastic-agent/certs/ca.pem
+
+For Filebeat standalone configuration, the same output settings are placed
+under ``output.logstash``:
+
+.. code-block:: yaml
+
+   output.logstash:
+     hosts: ["rsyslog.example.net:5044"]
+     compression_level: 9
+     ssl.enabled: true
+     ssl.certificate_authorities:
+       - /etc/filebeat/certs/ca.pem
+
+Use certificate verification in production. Test-only settings such as
+``ssl.verification_mode: none`` are useful for isolated lab checks but should
+not be used for production ingestion.
+
+The example above lets Elastic Agent or Filebeat validate the rsyslog server
+certificate without requiring the sender to present a client certificate. For
+mutual TLS, also configure the sender with its own client certificate and key,
+then switch the rsyslog listener to the appropriate certificate-validation
+auth mode and permitted peer settings.
+
+
+Troubleshooting Elastic Agent delivery
+======================================
+
+- If rsyslog reports that ``gtls`` or ``ossl`` cannot be loaded, install the
+  matching TLS stream-driver package, such as ``rsyslog-gnutls`` or
+  ``rsyslog-openssl``.
+- If the Beat or Agent logs certificate validation errors, confirm that the
+  sender trusts the CA that issued the rsyslog listener certificate and that
+  the configured host name matches the certificate.
+- If the sender connects but does not deliver events, verify that it is using
+  ``output.logstash`` and not an Elasticsearch or HTTP output.
+- ``imbeats`` accepts compressed Lumberjack v2 frames. Keep compression enabled
+  on the sender unless you are isolating a transport problem.
+- Use the ``events.received``, ``events.submitted``, ``compressed_frames``, and
+  ``protocol_errors`` counters to distinguish traffic, parsing, and protocol
+  failures.
 
 
 Configuration Parameters
@@ -202,7 +295,7 @@ RainerScript
          ruleset="beats_to_es"
          streamdriver.name="gtls"
          streamdriver.mode="1"
-         streamdriver.authmode="x509/name"
+         streamdriver.authmode="anon"
          streamdriver.cafile="/etc/rsyslog.d/ca.pem"
          streamdriver.certfile="/etc/rsyslog.d/server-cert.pem"
          streamdriver.keyfile="/etc/rsyslog.d/server-key.pem")
@@ -226,7 +319,7 @@ YAML
        ruleset: beats_to_es
        streamdriver.name: gtls
        streamdriver.mode: 1
-       streamdriver.authmode: x509/name
+       streamdriver.authmode: anon
        streamdriver.cafile: /etc/rsyslog.d/ca.pem
        streamdriver.certfile: /etc/rsyslog.d/server-cert.pem
        streamdriver.keyfile: /etc/rsyslog.d/server-key.pem
