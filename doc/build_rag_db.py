@@ -99,11 +99,11 @@ def get_syntax_template(attrs):
     clean_item = match.group(1) if match else item.split()[-1]
     
     if scope == "input":
-        return f'input(type="{module}" {clean_item}="...")'
+        return f'RainerScript: input(type="{module}" {clean_item}="...")\nYAML:\ninputs:\n  - type: {module}\n    {clean_item}: "..."'
     elif scope == "action":
-        return f'action(type="{module}" {clean_item}="...")'
+        return f'RainerScript: action(type="{module}" {clean_item}="...")\nYAML:\nactions:\n  - type: {module}\n    {clean_item}: "..."'
     elif scope == "module":
-        return f'module(load="{module}" {clean_item}="...")'
+        return f'RainerScript: module(load="{module}" {clean_item}="...")\nYAML:\nmodules:\n  - load: {module}\n    {clean_item}: "..."'
     return ""
 
 class ExtractorState:
@@ -138,7 +138,7 @@ class ExtractorState:
                     attrs["item"] = words[0]
 
         syntax = get_syntax_template(attrs)
-        syntax_line = f"Syntax: {syntax}\n" if syntax else ""
+        syntax_line = f"Syntax:\n{syntax}\n" if syntax else ""
         
         vector_text = f"rsyslog {attrs['module']} {attrs['scope']} {attrs['item']} {text}"
         llm_text = f"Module: {attrs['module']}\nScope: {attrs['scope']}\n"
