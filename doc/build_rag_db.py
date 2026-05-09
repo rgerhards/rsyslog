@@ -286,6 +286,21 @@ def main():
 
     print(f"Generated {len(all_rag_data)} chunks.")
     
+    schema_path = "rsyslog-yaml-schema.json"
+    if os.path.exists(schema_path):
+        with open(schema_path, "r", encoding="utf-8") as f:
+            schema_content = f.read()
+        all_rag_data.append({
+            "chunk_id": "rsyslog-yaml-schema",
+            "parent_id": None,
+            "type": "schema",
+            "attributes": {"module": "core", "scope": "schema", "item": "yaml"},
+            "vector_text": "rsyslog yaml configuration json schema definition rulesets actions statements inputs modules templates",
+            "llm_text": f"rsyslog YAML Configuration JSON Schema:\n{schema_content}",
+            "source": schema_path
+        })
+        print("Injected rsyslog-yaml-schema.json into RAG DB.")
+    
     output_dir = os.path.dirname(OUTPUT_FILE)
     os.makedirs(output_dir, exist_ok=True)
 

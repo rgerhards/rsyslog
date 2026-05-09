@@ -1,0 +1,351 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Rsyslog YAML Configuration Schema",
+  "description": "Schema for rsyslog YAML configuration files",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": ["integer", "string"],
+      "description": "Optional schema version (e.g., 2)"
+    },
+    "global": {
+      "type": "object",
+      "description": "Global configuration parameters",
+      "additionalProperties": true
+    },
+    "mainqueue": {
+      "type": "object",
+      "description": "Main message queue parameters",
+      "additionalProperties": true
+    },
+    "modules": {
+      "type": "array",
+      "description": "Loaded modules and their parameters",
+      "items": {
+        "type": "object",
+        "required": ["load"],
+        "properties": {
+          "load": {
+            "type": "string",
+            "description": "Name of the module to load (e.g., imtcp)"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Input module instances and parameters",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Input module type (e.g., imtcp)"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "templates": {
+      "type": "array",
+      "description": "Message format templates",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the template"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["string", "subtree", "list", "plugin"]
+          },
+          "string": {
+            "type": "string",
+            "description": "Template format string (for type='string')"
+          },
+          "subtree": {
+            "type": "string",
+            "description": "JSON subtree path (for type='subtree')"
+          },
+          "plugin": {
+            "type": "string",
+            "description": "Plugin name (for type='plugin')"
+          },
+          "elements": {
+            "type": "array",
+            "description": "List of elements (for type='list')",
+            "items": {
+              "type": "object",
+              "properties": {
+                "property": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" }
+                  },
+                  "additionalProperties": true
+                },
+                "constant": {
+                  "type": "object",
+                  "properties": {
+                    "value": { "type": "string" }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "rulesets": {
+      "type": "array",
+      "description": "Rulesets for message processing and routing",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the ruleset"
+          },
+          "filter": {
+            "type": "string",
+            "description": "Priority or property filter (e.g., '*.*' or ':msg, contains, \"error\"')"
+          },
+          "actions": {
+            "type": "array",
+            "description": "List of actions to execute. Mutually exclusive with script/statements.",
+            "items": {
+              "type": "object",
+              "required": ["type"],
+              "properties": {
+                "type": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "statements": {
+            "type": "array",
+            "description": "YAML-native statements for control flow. Mutually exclusive with script/actions.",
+            "items": {
+              "$ref": "#/definitions/statement"
+            }
+          },
+          "script": {
+            "type": "string",
+            "description": "Inline RainerScript block. Mutually exclusive with actions/statements."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "parsers": {
+      "type": "array",
+      "description": "Custom parser chains",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "lookup_tables": {
+      "type": "array",
+      "description": "In-memory lookup tables",
+      "items": {
+        "type": "object",
+        "required": ["name", "filename"],
+        "properties": {
+          "name": { "type": "string" },
+          "filename": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "timezones": {
+      "type": "array",
+      "description": "Named timezone definitions",
+      "items": {
+        "type": "object",
+        "required": ["id", "offset"],
+        "properties": {
+          "id": { "type": "string" },
+          "offset": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "dyn_stats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "perctile_stats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "ratelimits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "include": {
+      "type": "array",
+      "description": "Include other configuration files",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string" },
+          "optional": { "type": ["string", "boolean"] }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "definitions": {
+    "statement": {
+      "type": "object",
+      "oneOf": [
+        {
+          "properties": {
+            "type": { "type": "string" }
+          },
+          "required": ["type"]
+        },
+        {
+          "properties": {
+            "if": { "type": "string" },
+            "action": {
+              "type": "object",
+              "required": ["type"],
+              "properties": {
+                "type": { "type": "string" }
+              },
+              "additionalProperties": true
+            },
+            "else": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/statement" }
+            }
+          },
+          "required": ["if", "action"]
+        },
+        {
+          "properties": {
+            "if": { "type": "string" },
+            "then": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/statement" }
+            },
+            "else": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/statement" }
+            }
+          },
+          "required": ["if", "then"]
+        },
+        {
+          "properties": {
+            "stop": { "type": "boolean" }
+          },
+          "required": ["stop"]
+        },
+        {
+          "properties": {
+            "continue": { "type": "boolean" }
+          },
+          "required": ["continue"]
+        },
+        {
+          "properties": {
+            "call": { "type": "string" }
+          },
+          "required": ["call"]
+        },
+        {
+          "properties": {
+            "set": {
+              "type": "object",
+              "properties": {
+                "var": { "type": "string" },
+                "expr": { "type": "string" }
+              },
+              "required": ["var", "expr"]
+            }
+          },
+          "required": ["set"]
+        },
+        {
+          "properties": {
+            "unset": { "type": "string" }
+          },
+          "required": ["unset"]
+        },
+        {
+          "properties": {
+            "call_indirect": { "type": "string" }
+          },
+          "required": ["call_indirect"]
+        },
+        {
+          "properties": {
+            "foreach": {
+              "type": "object",
+              "properties": {
+                "var": { "type": "string" },
+                "in": { "type": "string" },
+                "do": {
+                  "type": "array",
+                  "items": { "$ref": "#/definitions/statement" }
+                }
+              },
+              "required": ["var", "in", "do"]
+            }
+          },
+          "required": ["foreach"]
+        },
+        {
+          "properties": {
+            "reload_lookup_table": {
+              "type": "object",
+              "properties": {
+                "table": { "type": "string" },
+                "stub_value": { "type": "string" }
+              },
+              "required": ["table", "stub_value"]
+            }
+          },
+          "required": ["reload_lookup_table"]
+        }
+      ]
+    }
+  }
+}
