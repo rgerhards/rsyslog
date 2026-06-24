@@ -1120,7 +1120,8 @@ static int routeAuthHandler(struct mg_connection *conn, void *cbdata) {
 
     if (authCtx->pszBasicAuthFile != NULL && authHeader != NULL && strncasecmp(authHeader, "Basic ", 6) == 0) {
         ret = authorize_basic(conn, authCtx->pszBasicAuthFile);
-    } else if (authCtx->pszApiKeyFile != NULL) {
+    }
+    if (!ret && authCtx->pszApiKeyFile != NULL) {
         ret = authorize_api_key(conn, authCtx->pszApiKeyFile);
     }
 
