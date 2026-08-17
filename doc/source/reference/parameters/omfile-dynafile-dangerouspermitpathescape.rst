@@ -1,4 +1,5 @@
 .. _param-omfile-dynafile-dangerouspermitpathescape:
+.. _omfile.parameter.module.dynafile-dangerouspermitpathescape:
 .. _omfile.parameter.action.dynafile-dangerouspermitpathescape:
 
 dynafile.dangerousPermitPathEscape
@@ -22,9 +23,9 @@ the fixed path prefix configured in the dynafile template.
 This parameter applies to :doc:`../../configuration/modules/omfile`.
 
 :Name: dynafile.dangerousPermitPathEscape
-:Scope: action
+:Scope: module, action
 :Type: boolean
-:Default: off
+:Default: module=off; action=inherits module
 :Required?: no
 :Introduced: not specified
 
@@ -38,9 +39,10 @@ paths below that configured base. Message-derived fields such as
 ``%HOSTNAME%`` must not use ``..`` components to escape that location.
 
 Set this parameter to ``on`` only as a temporary compatibility fallback
-for the one affected action in a trusted legacy configuration. Enabling it allows
-message-derived dynafile names to escape the configured path prefix. If
-untrusted data can reach the dynafile template, rsyslog may create or
+for a trusted legacy configuration. At the module scope, it sets the default
+for all ``omfile`` actions; an action-level setting overrides that default.
+Enabling it allows message-derived dynafile names to escape the configured
+path prefix. If untrusted data can reach the dynafile template, rsyslog may create or
 overwrite any file that the rsyslog process user is allowed to write.
 Only operating-system permissions, mandatory access controls, mount
 options, and similar external controls remain as protection.
@@ -54,6 +56,19 @@ Before enabling this option, reconsider the use case. Prefer changing the
 dynafile template so that untrusted fields cannot select parent
 directories or absolute paths. For network-sourced fields, keep this
 option disabled.
+
+Module usage
+------------
+
+.. _param-omfile-module-dynafile-dangerouspermitpathescape:
+.. _omfile.parameter.module.dynafile-dangerouspermitpathescape-usage:
+.. code-block:: rsyslog
+
+   module(load="builtin:omfile"
+          dynafile.dangerousPermitPathEscape="on")
+
+Use module scope only when every affected action is trusted. Prefer an
+action-level setting when compatibility is needed for one action only.
 
 Action usage
 ------------

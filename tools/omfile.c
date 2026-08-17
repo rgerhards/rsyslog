@@ -231,7 +231,7 @@ typedef struct wrkrInstanceData {
 } wrkrInstanceData_t;
 
 static int pathIsMeaningfulBase(const uchar *const path) {
-    return path != NULL && path[0] != '\0' && ustrcmp(path, (uchar *)".") && ustrcmp(path, (uchar *)"/");
+    return path != NULL && path[0] != '\0' && ustrcmp(path, (uchar *)".");
 }
 
 static int pathStartsWithParentRef(const uchar *const path) {
@@ -349,6 +349,9 @@ finalize_it:
 static int normalizedPathIsBelowBase(const uchar *const normPath, const uchar *const normBase) {
     const size_t lenBase = ustrlen(normBase);
 
+    if (!ustrcmp(normBase, (uchar *)"/")) {
+        return normPath[0] == '/';
+    }
     if (!ustrcmp(normPath, normBase)) {
         return 1;
     }

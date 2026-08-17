@@ -283,6 +283,7 @@ TESTS_DEFAULT = \
 	omfile-dynafile-traversal-list-template.sh \
 	omfile-dynafile-traversal-permit-escape.sh \
 	omfile-dynafile-traversal-repro.sh \
+	omfile-dynafile-traversal-root-base.sh \
 	omfile-dynafile-template-type-invalid.sh \
 	omfile-dynafile-template-type-list-default.sh \
 	omfile-dynafile-template-type-override.sh \
