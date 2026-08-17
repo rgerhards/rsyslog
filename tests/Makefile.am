@@ -279,6 +279,13 @@ TESTS_DEFAULT = \
 	omusrmsg-noabort.sh \
 	omusrmsg_ratelimit_name.sh \
 	omfile-module-params.sh \
+	omfile-dynafile-traversal-default-template.sh \
+	omfile-dynafile-traversal-list-template.sh \
+	omfile-dynafile-traversal-permit-escape.sh \
+	omfile-dynafile-traversal-repro.sh \
+	omfile-dynafile-template-type-invalid.sh \
+	omfile-dynafile-template-type-list-default.sh \
+	omfile-dynafile-template-type-override.sh \
 	omfile-dynafilecachesize-invalid.sh \
 	omfile-dynafile-mmnormalize-property.sh \
 	omfile-read-only-errmsg.sh \
@@ -772,6 +779,7 @@ TESTS_LIBYAML = \
 	ratelimit_hup.sh \
 	yaml-basic.sh \
 	yaml-basic-yamlonly.sh \
+	yaml-omfile-dynafile-traversal-list-template.sh \
 	yaml-omfile-dynafilecachesize-invalid.sh \
 	yaml-include.sh \
 	yaml-ruleset-script.sh \
