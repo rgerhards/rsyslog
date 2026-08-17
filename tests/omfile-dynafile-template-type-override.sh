@@ -14,9 +14,8 @@ if $msg contains "msgnum:" then {
 }
 '
 
-../tools/rsyslogd -C -N1 -M"$RSYSLOG_MODDIR" -f"${TESTCONF_NM}.conf" \
-	>"${RSYSLOG_DYNNAME}.log" 2>&1
-if [ $? -ne 0 ]; then
+if ! ../tools/rsyslogd -C -N1 -M"$RSYSLOG_MODDIR" -f"${TESTCONF_NM}.conf" \
+	>"${RSYSLOG_DYNNAME}.log" 2>&1; then
 	echo "FAIL: dynafile template type override warning rejected the configuration"
 	cat "${RSYSLOG_DYNNAME}.log"
 	error_exit 1

@@ -1,5 +1,7 @@
 #!/bin/bash
-# Check dynafile traversal when omfile uses its default output template.
+# Check dynafile traversal when omfile uses its default output template. The
+# blocked and valid messages share one input batch; the valid line must appear
+# exactly once, proving the action core did not retry it after the drop.
 . ${srcdir:=.}/diag.sh init
 require_plugin imtcp
 
@@ -40,6 +42,13 @@ fi
 
 if [ ! -f "$VALID_OUT" ]; then
 	echo "FAIL: valid dynafile message after blocked traversal did not create: $VALID_OUT"
+	rm -rf "$TRAVERSAL_ROOT"
+	error_exit 1
+fi
+
+if [ "$(grep -Fc 'valid-after-blocked-traversal' "$VALID_OUT")" -ne 1 ]; then
+	echo "FAIL: valid dynafile record was retried after blocked traversal"
+	cat "$VALID_OUT"
 	rm -rf "$TRAVERSAL_ROOT"
 	error_exit 1
 fi

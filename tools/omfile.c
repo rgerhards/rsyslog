@@ -366,7 +366,7 @@ static int normalizedPathIsBelowBase(const uchar *const normPath, const uchar *c
  *
  * @param pData omfile action instance data.
  * @param newFileName Rendered dynafile path.
- * @return RS_RET_OK if the path is acceptable, RS_RET_ERR if it is blocked.
+ * @return RS_RET_OK if the path is acceptable, RS_RET_DISCARDMSG if it is blocked.
  */
 static rsRetVal validateDynaFilePath(instanceData *const pData, const uchar *const newFileName) {
     uchar *normPath = NULL;
@@ -380,11 +380,11 @@ static rsRetVal validateDynaFilePath(instanceData *const pData, const uchar *con
         if (!normalizedPathIsBelowBase(normPath, pData->dynaFileBasePath)) {
             LogError(0, RS_RET_ERR, "omfile: dynafile path traversal blocked: '%s' resolves outside base '%s'",
                      newFileName, pData->dynaFileBasePath);
-            ABORT_FINALIZE(RS_RET_ERR);
+            ABORT_FINALIZE(RS_RET_DISCARDMSG);
         }
     } else if (normPath[0] == '/' || pathStartsWithParentRef(normPath)) {
         LogError(0, RS_RET_ERR, "omfile: dynafile path traversal blocked: '%s'", newFileName);
-        ABORT_FINALIZE(RS_RET_ERR);
+        ABORT_FINALIZE(RS_RET_DISCARDMSG);
     }
 
 finalize_it:
@@ -1080,12 +1080,6 @@ static rsRetVal ATTR_NONNULL()
         ABORT_FINALIZE(RS_RET_ERR);
     }
 
-    /* Compatibility escape hatch: disabled by default because it permits
-     * message-controlled dynafile paths to leave the configured base. */
-    if (!pData->bPermitDynaFilePathEscape) {
-        CHKiRet(validateDynaFilePath(pData, newFileName));
-    }
-
     pCache = pData->dynCache;
 
     /* first check, if we still have the current file */
@@ -1096,6 +1090,12 @@ static rsRetVal ATTR_NONNULL()
         STATSCOUNTER_INC(pData->ctrLevel0, pData->mutCtrLevel0);
         /* LRU needs only a strictly monotonically increasing counter, so such a one could do */
         FINALIZE;
+    }
+
+    /* Cached names were checked before insertion. Validate only paths that
+     * may need a cache lookup or a new file, preserving the level-0 fast path. */
+    if (!pData->bPermitDynaFilePathEscape) {
+        CHKiRet(validateDynaFilePath(pData, newFileName));
     }
 
     /* ok, no luck - current file cannot be re-used */
@@ -1300,7 +1300,14 @@ static rsRetVal writeFile(instanceData *__restrict__ const pData,
      */
     if (pData->bDynamicName) {
         DBGPRINTF("omfile: file to log to: %s\n", actParam(pParam, pData->iNumTpls, iMsg, 1).param);
-        CHKiRet(prepareDynFile(pData, actParam(pParam, pData->iNumTpls, iMsg, 1).param));
+        iRet = prepareDynFile(pData, actParam(pParam, pData->iNumTpls, iMsg, 1).param);
+        if (iRet == RS_RET_DISCARDMSG) {
+            /* A blocked message was not written; keep processing this batch so
+             * successfully written records are not retried by the action core. */
+            iRet = RS_RET_OK;
+            FINALIZE;
+        }
+        CHKiRet(iRet);
     } else { /* "regular", non-dynafile */
         if (pData->pStrm == NULL) {
             CHKiRet(prepareFile(pData, pData->fname, 0));
@@ -1997,6 +2004,13 @@ BEGINparseSelectorAct
     if (!(*p == '$' || *p == '?' || *p == '/' || *p == '.' || *p == '-')) ABORT_FINALIZE(RS_RET_CONFLINE_UNPROCESSED);
 
     CHKiRet(createInstance(&pData));
+
+    /* Legacy selector actions bypass newActInst(), so copy the dynafile
+     * module defaults explicitly when a v6 module block was provided. */
+    if (loadModConf != NULL) {
+        pData->bPermitDynaFilePathEscape = loadModConf->bPermitDynaFilePathEscape;
+        pData->bRestrictDynaFileTplType = loadModConf->bRestrictDynaFileTplType;
+    }
 
     if (*p == '-') {
         pData->bSyncFile = 0;

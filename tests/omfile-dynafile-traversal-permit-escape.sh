@@ -1,5 +1,6 @@
 #!/bin/bash
-# Ensure the dangerous dynafile path escape override is explicit.
+# Ensure the dangerous module-level dynafile path escape override applies to a
+# legacy selector action, while an explicit action-level off setting remains protected.
 . ${srcdir:=.}/diag.sh init
 require_plugin imtcp
 
@@ -12,7 +13,7 @@ mkdir -p "${TRAVERSAL_ROOT}/base" "${TRAVERSAL_ROOT}/base-protected" "${TRAVERSA
 
 generate_conf
 add_conf '
-module(load="builtin:omfile")
+module(load="builtin:omfile" dynafile.dangerousPermitPathEscape="on")
 module(load="../plugins/imtcp/.libs/imtcp")
 input(type="imtcp" port="0" listenPortFileName="'$RSYSLOG_DYNNAME'.tcpflood_port")
 template(name="dynfile" type="string" string="'$TRAVERSAL_ROOT'/base/%HOSTNAME%/%APP-NAME%.log")
@@ -20,15 +21,14 @@ template(name="dynfile_protected" type="string" string="'$TRAVERSAL_ROOT'/base-p
 template(name="outfmt" type="string" string="%msg%\n")
 
 $rulesetparser rsyslog.rfc5424
-local4.debug action(type="omfile" dynafile="dynfile" template="outfmt"
-                    dynafile.dangerousPermitPathEscape="on")
-local4.debug action(type="omfile" dynafile="dynfile_protected" template="outfmt")
+local4.debug ?dynfile;outfmt
+local4.debug action(type="omfile" dynafile="dynfile_protected" template="outfmt"
+                    dynafile.dangerousPermitPathEscape="off")
 '
 
-../tools/rsyslogd -C -N1 -M"$RSYSLOG_MODDIR" -f"${TESTCONF_NM}.conf" \
-	>"${RSYSLOG_DYNNAME}.log" 2>&1
-if [ $? -ne 0 ]; then
-	echo "FAIL: action-level dangerous dynafile path escape warning rejected the configuration"
+if ! ../tools/rsyslogd -C -N1 -M"$RSYSLOG_MODDIR" -f"${TESTCONF_NM}.conf" \
+	>"${RSYSLOG_DYNNAME}.log" 2>&1; then
+	echo "FAIL: module-level dangerous dynafile path escape warning rejected the configuration"
 	cat "${RSYSLOG_DYNNAME}.log"
 	error_exit 1
 fi
