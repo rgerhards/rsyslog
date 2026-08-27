@@ -161,6 +161,7 @@ EXTRA_DIST += unit/imbeats_seq_test.c
 EXTRA_DIST += unit/segdisk_state_test.c
 EXTRA_DIST += unit/omazuredce_utils_test.c
 EXTRA_DIST += unit/imbeats_parser_test.c
+EXTRA_DIST += unit/module_reload_test.c
 
 TESTS_IMPTCP_TABESCAPE = \
 	tabescape_dflt.sh \
@@ -464,6 +465,9 @@ TESTS_DEFAULT = \
 	imdiag-proper-termination-timeoutguard.sh \
 	tcpflood-proper-termination.sh \
 	global-maxopenfiles-rainerscript.sh \
+	global-reloadonhup-off-hup.sh \
+	global-reloadonhup-on-rainerscript.sh \
+	global-reloadonhup-rainerscript.sh \
 	global-systemd-notifyreadydelay-rainerscript.sh \
 	compat-configformat-rainerscript.sh \
 	compat-defaults-secure-dynafile-rainerscript.sh \
@@ -801,6 +805,7 @@ TESTS_LIBYAML = \
 	compat-configformat-yaml.sh \
 	compat-defaults-secure-dynafile-yaml.sh \
 	global-maxopenfiles-yaml.sh \
+	global-reloadonhup-yaml.sh \
 	global-systemd-notifyreadydelay-yaml.sh \
 	action-ratelimit-drop.sh \
 	action-ratelimit-pace.sh \
@@ -1703,6 +1708,9 @@ TESTS_OMSTDOUT = \
 TESTS_LIBYAML_IMTCP = \
 	config-translate-rs-roundtrip.sh \
 	config-translate-yaml-roundtrip.sh \
+	global-reloadonhup-off-yaml.sh \
+	global-reloadonhup-on-yaml.sh \
+	global-reloadonhup-validate-yaml.sh \
 	yaml-include-recursion.sh
 
 TESTS_LIBYAML_IMTCP_OSSL = \
@@ -2669,9 +2677,11 @@ check_LTLIBRARIES =
 
 # TODO: reenable TESTRUNS = rt_init rscript
 check_PROGRAMS = runtime_unit_linkedlist runtime_unit_stringbuf runtime_unit_parser_pri runtime_unit_msg_replace \
-	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils
+	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils \
+	runtime_unit_module_reload
 TESTS = runtime_unit_linkedlist runtime_unit_stringbuf runtime_unit_parser_pri runtime_unit_msg_replace \
-	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils
+	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils \
+	runtime_unit_module_reload
 
 if ENABLE_FUZZING
 TESTS += $(TESTS_FUZZING)
@@ -2700,6 +2710,9 @@ runtime_unit_queue_da_SOURCES = \
 
 runtime_unit_omazuredce_utils_SOURCES = \
 	unit/omazuredce_utils_test.c
+
+runtime_unit_module_reload_SOURCES = \
+	unit/module_reload_test.c
 
 runtime_unit_omazuredce_utils_CPPFLAGS = \
 	$(runtime_unit_linkedlist_CPPFLAGS)
@@ -2777,6 +2790,8 @@ runtime_unit_segdisk_state_CPPFLAGS = \
 	$(runtime_unit_linkedlist_CPPFLAGS)
 runtime_unit_queue_da_CPPFLAGS = \
 	$(runtime_unit_linkedlist_CPPFLAGS)
+runtime_unit_module_reload_CPPFLAGS = \
+	$(runtime_unit_linkedlist_CPPFLAGS)
 
 runtime_unit_linkedlist_LDADD = $(RSRT_LIBS) $(PTHREADS_LIBS) $(SOL_LIBS)
 runtime_unit_stringbuf_LDADD = $(LIBESTR_LIBS) $(LIBFASTJSON_LIBS) $(LIBSYSTEMD_LIBS) $(PTHREADS_LIBS) $(SOL_LIBS)
@@ -2785,6 +2800,7 @@ runtime_unit_msg_replace_LDADD = $(runtime_unit_linkedlist_LDADD)
 runtime_unit_ommongodb_date_LDADD = $(runtime_unit_linkedlist_LDADD)
 runtime_unit_segdisk_state_LDADD =
 runtime_unit_queue_da_LDADD =
+runtime_unit_module_reload_LDADD =
 
 if ENABLE_LIBLOGGING_STDLOG
 runtime_unit_linkedlist_CPPFLAGS += $(LIBLOGGING_STDLOG_CFLAGS)
