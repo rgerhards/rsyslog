@@ -2666,11 +2666,7 @@ CLEANFILES=\
 	zookeeper.pid \
 	tmp.qi nocert
 
-CLEANFILES+= \
-	IN_AUTO_DEBUG \
-	runtime_unit_imbeats_seq
-# IN_AUTO_DEBUG should be deleted each time make check is run, but
-# there exists no such hook. Se we at least delete it on make clean.
+CLEANFILES+= runtime_unit_imbeats_seq
 # runtime_unit_imbeats_seq is conditional, but an outer build with imbeats
 # enabled can leave it for an inner distcheck configured without imbeats.
 
