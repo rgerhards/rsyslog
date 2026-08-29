@@ -1688,7 +1688,7 @@ static int reloadInstanceEqual(const instanceConf_t *const left,
            reloadUStringEqual(leftParams->pszAddr, rightParams->pszAddr) &&
            (ignoreNewSessionFields || leftParams->bSuppOctetFram == rightParams->bSuppOctetFram) &&
            reloadUStringEqual(leftParams->pszLstnPortFileName, rightParams->pszLstnPortFileName) &&
-           leftParams->bMultiLine == rightParams->bMultiLine &&
+           (ignoreNewSessionFields || leftParams->bMultiLine == rightParams->bMultiLine) &&
            reloadUStringEqual(leftParams->pszStartRegex, rightParams->pszStartRegex) &&
            reloadUStringEqual(leftParams->pszRatelimitName, rightParams->pszRatelimitName) &&
            leftLegacyAcl == rightLegacyAcl && reloadAllowedSendersEqual(leftAllowed, rightAllowed) &&
@@ -1749,6 +1749,7 @@ typedef struct imtcpReloadEntryV1_s {
     uint64_t compressionMaxExpansionRatio;
     uint64_t compressionMaxDecompressedBytesPerReceive;
     uint64_t compressionMaxTotalZstdWindowBytes;
+    int multiLine;
     uchar defaultTZ[8];
     ruleset_t *ruleset;
     uint64_t fenceToken;
@@ -1831,6 +1832,7 @@ static rsRetVal prepareReloadV1(const void *const pOldCnf, const void *const pNe
         state->entries[index].compressionMaxDecompressedBytesPerReceive =
             newInst->compressionMaxDecompressedBytesPerReceive;
         state->entries[index].compressionMaxTotalZstdWindowBytes = newInst->compressionMaxTotalZstdWindowBytes;
+        state->entries[index].multiLine = newInst->cnf_params->bMultiLine;
         u_cstr_copy(state->entries[index].defaultTZ, newInst->dfltTZ == NULL ? UCHAR_CONSTANT("") : newInst->dfltTZ,
                     sizeof(state->entries[index].defaultTZ));
         if (newInst->pszBindRuleset == NULL) {
@@ -1912,6 +1914,7 @@ static void commitReloadV1(void *const pReloadState) {
             server, state->entries[i].compressionMaxDecompressedBytesPerReceive);
         (void)tcpsrv.SetCompressionMaxTotalZstdWindowBytes(server,
                                                            state->entries[i].compressionMaxTotalZstdWindowBytes);
+        (void)tcpsrv.SetMultiLineForNewSessions(server, state->entries[i].multiLine);
         (void)tcpsrv.SetDfltTZ(server, state->entries[i].defaultTZ);
         (void)tcpsrv.SetRuleset(server, state->entries[i].ruleset);
     }
