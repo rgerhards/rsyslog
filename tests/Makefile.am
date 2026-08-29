@@ -1716,6 +1716,7 @@ TESTS_LIBYAML_IMTCP = \
 	config-translate-yaml-roundtrip.sh \
 	global-reloadonhup-off-yaml.sh \
 	global-reloadonhup-on-yaml.sh \
+	global-reloadonhup-ruleset-constructs-yaml.sh \
 	global-reloadonhup-validate-yaml.sh \
 	yaml-include-recursion.sh
 
