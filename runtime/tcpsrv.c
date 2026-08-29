@@ -2296,6 +2296,13 @@ static rsRetVal ATTR_NONNULL(1) SetbSPFramingFix(tcpsrv_t *pThis, const sbool va
     RETiRet;
 }
 
+static rsRetVal ATTR_NONNULL(1) SetSupportOctetCountedFraming(tcpsrv_t *const pThis, const int enabled) {
+    DEFiRet;
+    ISOBJ_TYPE_assert(pThis, tcpsrv);
+    tcpsrvApplyOctetCountedFramingForNewSessions(pThis, enabled);
+    RETiRet;
+}
+
 static rsRetVal ATTR_NONNULL(1) SetOrigin(tcpsrv_t *pThis, uchar *origin) {
     DEFiRet;
     free(pThis->pszOrigin);
@@ -2636,6 +2643,7 @@ BEGINobjQueryInterface(tcpsrv)
     pIf->RequestFence = tcpsrvRequestFence;
     pIf->WaitFence = tcpsrvWaitFence;
     pIf->ReleaseFence = tcpsrvReleaseFence;
+    pIf->SetSupportOctetCountedFraming = SetSupportOctetCountedFraming;
 
 finalize_it:
 ENDobjQueryInterface(tcpsrv)
