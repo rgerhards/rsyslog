@@ -2272,6 +2272,13 @@ static rsRetVal ATTR_NONNULL(1) SetDfltTZ(tcpsrv_t *const pThis, uchar *const tz
     RETiRet;
 }
 
+static rsRetVal ATTR_NONNULL(1) SetRuleset(tcpsrv_t *const pThis, ruleset_t *const targetRuleset) {
+    DEFiRet;
+    ISOBJ_TYPE_assert(pThis, tcpsrv);
+    tcpsrvApplyRulesetLive(pThis, targetRuleset);
+    RETiRet;
+}
+
 
 static rsRetVal ATTR_NONNULL(1) SetbSPFramingFix(tcpsrv_t *pThis, const sbool val) {
     DEFiRet;
@@ -2570,6 +2577,7 @@ BEGINobjQueryInterface(tcpsrv)
     pIf->SetGnutlsPriorityString = SetGnutlsPriorityString;
     pIf->SetUsrP = SetUsrP;
     pIf->SetInputName = SetInputName;
+    pIf->SetRuleset = SetRuleset;
     pIf->SetOrigin = SetOrigin;
     pIf->SetDfltTZ = SetDfltTZ;
     pIf->SetbSPFramingFix = SetbSPFramingFix;
