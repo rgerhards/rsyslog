@@ -5511,6 +5511,9 @@ rsRetVal msgPropDescrFill(msgPropDescr_t *pProp, uchar *name, int nameLen) {
     propid_t id;
     int offs;
     DEFiRet;
+    pProp->id = PROP_INVALID;
+    pProp->name = NULL;
+    pProp->nameLen = 0;
     if (propNameToID(name, &id) != RS_RET_OK) {
         parser_errmsg("invalid property '%s'", name);
         /* now try to find some common error causes */
@@ -5610,7 +5613,7 @@ rsRetVal msgPropDescrFill(msgPropDescr_t *pProp, uchar *name, int nameLen) {
         /* in these cases, we need the field name for later processing */
         /* normalize name: remove $ if present */
         offs = (name[0] == '$') ? 1 : 0;
-        pProp->name = ustrdup(name + offs);
+        CHKmalloc(pProp->name = ustrdup(name + offs));
         pProp->nameLen = nameLen - offs;
         /* we patch the root name, so that support functions do not need to
          * check for different root chars. */

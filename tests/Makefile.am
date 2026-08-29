@@ -2681,11 +2681,11 @@ check_LTLIBRARIES =
 check_PROGRAMS = runtime_unit_linkedlist runtime_unit_stringbuf runtime_unit_parser_pri runtime_unit_msg_replace \
 	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils \
 	runtime_unit_module_reload runtime_unit_reload_report runtime_unit_reload_normalized_graph \
-	runtime_unit_reload_candidate_graph runtime_unit_wtp_quiesce
+	runtime_unit_reload_candidate_graph runtime_unit_reload_syntax_clone runtime_unit_wtp_quiesce
 TESTS = runtime_unit_linkedlist runtime_unit_stringbuf runtime_unit_parser_pri runtime_unit_msg_replace \
 	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils \
 	runtime_unit_module_reload runtime_unit_reload_report runtime_unit_reload_normalized_graph \
-	runtime_unit_reload_candidate_graph runtime_unit_wtp_quiesce
+	runtime_unit_reload_candidate_graph runtime_unit_reload_syntax_clone runtime_unit_wtp_quiesce
 
 if ENABLE_FUZZING
 TESTS += $(TESTS_FUZZING)
@@ -2726,6 +2726,9 @@ runtime_unit_reload_normalized_graph_SOURCES = \
 
 runtime_unit_reload_candidate_graph_SOURCES = \
 	unit/reload_candidate_graph_test.c
+
+runtime_unit_reload_syntax_clone_SOURCES = \
+	unit/reload_syntax_clone_test.c
 
 runtime_unit_wtp_quiesce_SOURCES = \
 	unit/wtp_quiesce_test.c
@@ -2814,6 +2817,8 @@ runtime_unit_reload_normalized_graph_CPPFLAGS = \
 	$(runtime_unit_linkedlist_CPPFLAGS)
 runtime_unit_reload_candidate_graph_CPPFLAGS = \
 	$(runtime_unit_linkedlist_CPPFLAGS)
+runtime_unit_reload_syntax_clone_CPPFLAGS = \
+	$(runtime_unit_linkedlist_CPPFLAGS)
 runtime_unit_wtp_quiesce_CPPFLAGS = \
 	$(runtime_unit_linkedlist_CPPFLAGS)
 
@@ -2828,6 +2833,7 @@ runtime_unit_module_reload_LDADD =
 runtime_unit_reload_report_LDADD =
 runtime_unit_reload_normalized_graph_LDADD =
 runtime_unit_reload_candidate_graph_LDADD = $(LIBESTR_LIBS)
+runtime_unit_reload_syntax_clone_LDADD = $(LIBESTR_LIBS)
 runtime_unit_wtp_quiesce_LDADD = $(PTHREADS_LIBS) $(SOL_LIBS)
 
 if ENABLE_LIBLOGGING_STDLOG
