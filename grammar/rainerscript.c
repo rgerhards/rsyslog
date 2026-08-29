@@ -6115,6 +6115,11 @@ struct cnfstmt *cnfstmtOptimize(struct cnfstmt *root) {
             case S_ACT:
                 cnfstmtOptimizeAct(stmt);
                 break;
+            case S_RELOAD_ACT:
+                /* Private reload plans bind actions after structural and
+                 * expression optimization. The syntax node remains owning
+                 * until that later, fallible binding step succeeds. */
+                break;
             case S_CALL:
                 cnfstmtOptimizeCall(stmt);
                 break;
