@@ -2188,7 +2188,8 @@ static rsRetVal ATTR_NONNULL(1)
 static rsRetVal ATTR_NONNULL(1) SetbDisableLFDelim(tcpsrv_t *pThis, int bVal) {
     DEFiRet;
     ISOBJ_TYPE_assert(pThis, tcpsrv);
-    pThis->bDisableLFDelim = bVal;
+    tcpsrvApplyFramingForNewSessions(pThis, pThis->bSPFramingFix, pThis->addtlFrameDelim, pThis->maxFrameSize, bVal,
+                                     pThis->discardTruncatedMsg);
     RETiRet;
 }
 
@@ -2199,7 +2200,8 @@ static rsRetVal ATTR_NONNULL(1) SetbDisableLFDelim(tcpsrv_t *pThis, int bVal) {
 static rsRetVal ATTR_NONNULL(1) SetDiscardTruncatedMsg(tcpsrv_t *pThis, int discard) {
     DEFiRet;
     ISOBJ_TYPE_assert(pThis, tcpsrv);
-    pThis->discardTruncatedMsg = discard;
+    tcpsrvApplyFramingForNewSessions(pThis, pThis->bSPFramingFix, pThis->addtlFrameDelim, pThis->maxFrameSize,
+                                     pThis->bDisableLFDelim, discard);
     RETiRet;
 }
 
@@ -2208,7 +2210,8 @@ static rsRetVal ATTR_NONNULL(1) SetDiscardTruncatedMsg(tcpsrv_t *pThis, int disc
 static rsRetVal ATTR_NONNULL(1) SetAddtlFrameDelim(tcpsrv_t *pThis, int iDelim) {
     DEFiRet;
     ISOBJ_TYPE_assert(pThis, tcpsrv);
-    pThis->addtlFrameDelim = iDelim;
+    tcpsrvApplyFramingForNewSessions(pThis, pThis->bSPFramingFix, iDelim, pThis->maxFrameSize, pThis->bDisableLFDelim,
+                                     pThis->discardTruncatedMsg);
     RETiRet;
 }
 
@@ -2217,7 +2220,8 @@ static rsRetVal ATTR_NONNULL(1) SetAddtlFrameDelim(tcpsrv_t *pThis, int iDelim) 
 static rsRetVal ATTR_NONNULL(1) SetMaxFrameSize(tcpsrv_t *pThis, int maxFrameSize) {
     DEFiRet;
     ISOBJ_TYPE_assert(pThis, tcpsrv);
-    pThis->maxFrameSize = maxFrameSize;
+    tcpsrvApplyFramingForNewSessions(pThis, pThis->bSPFramingFix, pThis->addtlFrameDelim, maxFrameSize,
+                                     pThis->bDisableLFDelim, pThis->discardTruncatedMsg);
     RETiRet;
 }
 
@@ -2287,7 +2291,8 @@ static rsRetVal ATTR_NONNULL(1) SetRuleset(tcpsrv_t *const pThis, ruleset_t *con
 static rsRetVal ATTR_NONNULL(1) SetbSPFramingFix(tcpsrv_t *pThis, const sbool val) {
     DEFiRet;
     ISOBJ_TYPE_assert(pThis, tcpsrv);
-    pThis->bSPFramingFix = val;
+    tcpsrvApplyFramingForNewSessions(pThis, val, pThis->addtlFrameDelim, pThis->maxFrameSize, pThis->bDisableLFDelim,
+                                     pThis->discardTruncatedMsg);
     RETiRet;
 }
 
