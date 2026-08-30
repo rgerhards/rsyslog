@@ -471,6 +471,7 @@ TESTS_DEFAULT = \
 	global-reloadonhup-off-hup.sh \
 	global-reloadonhup-dirty-baseline.sh \
 	global-reloadonhup-imtcp-defaulttz-rainerscript.sh \
+	global-reloadonhup-imtcp-regex-rainerscript.sh \
 	global-reloadonhup-imtcp-ruleset-rainerscript.sh \
 	global-reloadonhup-imtcp-reorder-rainerscript.sh \
 	global-reloadonhup-imtcp-add-rainerscript.sh \
@@ -1720,6 +1721,7 @@ TESTS_LIBYAML_IMTCP = \
 	config-translate-yaml-roundtrip.sh \
 	global-reloadonhup-off-yaml.sh \
 	global-reloadonhup-imtcp-defaulttz-yaml.sh \
+	global-reloadonhup-imtcp-regex-yaml.sh \
 	global-reloadonhup-imtcp-ruleset-yaml.sh \
 	global-reloadonhup-imtcp-reorder-yaml.sh \
 	global-reloadonhup-imtcp-add-yaml.sh \
