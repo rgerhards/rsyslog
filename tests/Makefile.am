@@ -220,6 +220,7 @@ TESTS_ELASTICSEARCH_VALGRIND = \
 	es-basic-ha-vg.sh
 
 TESTS_DEFAULT = \
+	global-reloadonhup-oversizemsg-report-rainerscript.sh \
 	codex-pre-push-container-gate.sh \
 	backtick-cat-procfs.sh \
 	preservefqdn-localhostname-internal.sh \
@@ -808,6 +809,7 @@ TESTS_DEFAULT_VALGRIND = \
 TESTS_LIBGCRYPT_VALGRIND = \
 	queue-encryption-disk_keyfile-vg.sh
 TESTS_LIBYAML = \
+	global-reloadonhup-oversizemsg-report-yaml.sh \
 	config-translate-rs-to-yaml.sh \
 	config-translate-rs-filter-actions.sh \
 	config-translate-rs-script-expressions.sh \
