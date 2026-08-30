@@ -604,7 +604,7 @@ static rsRetVal ATTR_NONNULL(1, 3, 5) LstnInit(netstrms_t *const pNS,
     DEFiRet;
     netstrm_t *pNewStrm = NULL;
     nsd_t *pNewNsd = NULL;
-    int error, maxs, on = 1;
+    int error, maxs, expectedSocks, on = 1;
     int isIPv6 = 0;
     int sock = -1;
     int numSocks;
@@ -642,6 +642,7 @@ static rsRetVal ATTR_NONNULL(1, 3, 5) LstnInit(netstrms_t *const pNS,
     /* Count max number of sockets we may open */
     for (maxs = 0, r = res; r != NULL; r = r->ai_next, maxs++) /* EMPTY */
         ;
+    expectedSocks = maxs;
 
     numSocks = 0; /* num of sockets counter at start of array */
     for (r = res; r != NULL; r = r->ai_next) {
@@ -655,7 +656,9 @@ static rsRetVal ATTR_NONNULL(1, 3, 5) LstnInit(netstrms_t *const pNS,
         }
         sock = socket(r->ai_family, r->ai_socktype, r->ai_protocol);
         if (sock < 0) {
-            if (!(r->ai_family == PF_INET6 && errno == EAFNOSUPPORT)) {
+            if (r->ai_family == PF_INET6 && errno == EAFNOSUPPORT) {
+                --expectedSocks;
+            } else {
                 dbgprintf("error %d creating tcp listen socket", errno);
                 /* it is debatable if PF_INET with EAFNOSUPPORT should
                  * also be ignored...
@@ -805,6 +808,7 @@ static rsRetVal ATTR_NONNULL(1, 3, 5) LstnInit(netstrms_t *const pNS,
         }
         CHKiRet(fAddLstn(pUsr, pNewStrm));
         pNewStrm = NULL;
+        pNewNsd = NULL;
         /* sock has been handed over by SetSock() above, so invalidate it here
          * coverity scan falsely identifies this as ressource leak
          */
@@ -818,7 +822,7 @@ static rsRetVal ATTR_NONNULL(1, 3, 5) LstnInit(netstrms_t *const pNS,
             "- this may or may not be an error indication.\n",
             numSocks, maxs);
 
-    if (cnf_params->bDeferListen && numSocks != maxs) ABORT_FINALIZE(RS_RET_COULD_NOT_BIND);
+    if (cnf_params->bDeferListen && numSocks != expectedSocks) ABORT_FINALIZE(RS_RET_COULD_NOT_BIND);
 
     if (numSocks == 0) {
         dbgprintf("No TCP listen sockets could successfully be initialized\n");

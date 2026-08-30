@@ -2269,6 +2269,9 @@ static int mainloopComputeTimeoutMs(uint64_t now_ms, uint64_t next_janitor_run_m
         }
     }
 #endif
+    /* A draining module generation must retire without requiring another
+     * signal. The retry itself remains on the main control path. */
+    if (shadowReloadRetirementPending() && timeout_ms > 100) timeout_ms = 100;
     return rswatchComputeTimeoutMs(now_ms, timeout_ms);
 }
 
@@ -2467,6 +2470,8 @@ static void mainloop(void) {
         }
 
         processImInternal();
+
+        shadowReloadRetryRetirement();
 
         if (bFinished) break; /* exit as quickly as possible */
 
