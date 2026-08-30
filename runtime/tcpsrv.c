@@ -2844,6 +2844,8 @@ BEGINobjQueryInterface(tcpsrv)
     pIf->ApplySessionPolicyLive = tcpsrvApplySessionPolicyLive;
     pIf->SwapAllowedSendersLive = tcpsrvSwapAllowedSendersLive;
     pIf->SwapRateLimiterLive = tcpsrvSwapRateLimiterLive;
+    pIf->ValidateListenerTableCapacity = tcpsrvValidateListenerTableCapacity;
+    pIf->SwapListenerTablesLive = tcpsrvSwapListenerTablesLive;
 
 finalize_it:
 ENDobjQueryInterface(tcpsrv)
