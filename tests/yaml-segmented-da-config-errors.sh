@@ -39,7 +39,7 @@ validate_permissive_context() {
 	shutdown_when_empty
 	wait_shutdown
 	unset RS_REDIR
-	assert_contains "$out" 'apply only to FixedArray or LinkedList disk-assisted queues'
+	assert_contains "$out" 'apply only to FixedArray, LinkedList, or ConcurrentArray disk-assisted queues'
 }
 
 validate_strict_options() {
