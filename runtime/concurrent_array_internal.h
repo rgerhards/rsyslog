@@ -51,5 +51,30 @@ struct ca_queue {
 };
 
 extern const struct ca_ops ca_sparse_lanes_ops;
+extern const struct ca_ops ca_bbq_ops;
+
+#ifdef CA_TESTING
+void ca_bbq_test_pause_after_faa(ca_queue_t *queue);
+int ca_bbq_test_after_faa_entered(ca_queue_t *queue);
+void ca_bbq_test_release_after_faa(ca_queue_t *queue);
+void ca_bbq_test_pause_after_install(ca_queue_t *queue);
+int ca_bbq_test_after_install_entered(ca_queue_t *queue);
+void ca_bbq_test_release_after_install(ca_queue_t *queue);
+void ca_bbq_test_pause_after_claim(ca_queue_t *queue);
+int ca_bbq_test_after_claim_entered(ca_queue_t *queue);
+void ca_bbq_test_release_after_claim(ca_queue_t *queue);
+void ca_bbq_test_pause_after_record_release(ca_queue_t *queue);
+int ca_bbq_test_after_record_release_entered(ca_queue_t *queue);
+void ca_bbq_test_release_after_record_release(ca_queue_t *queue);
+void ca_bbq_test_pause_after_discard_producer(ca_queue_t *queue);
+int ca_bbq_test_after_discard_producer_entered(ca_queue_t *queue);
+void ca_bbq_test_release_after_discard_producer(ca_queue_t *queue);
+int ca_bbq_test_uses_futex(void);
+size_t ca_bbq_test_work_sleepers(ca_queue_t *queue);
+size_t ca_bbq_test_capacity_sleepers(ca_queue_t *queue);
+size_t ca_bbq_test_record_blocks(ca_queue_t *queue);
+void ca_bbq_test_reset_record_word_probes(ca_queue_t *queue);
+size_t ca_bbq_test_record_word_probes(ca_queue_t *queue);
+#endif
 
 #endif

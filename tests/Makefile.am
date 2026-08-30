@@ -2681,11 +2681,13 @@ check_LTLIBRARIES =
 check_PROGRAMS = runtime_unit_linkedlist runtime_unit_stringbuf runtime_unit_parser_pri runtime_unit_msg_replace \
 	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils \
 	runtime_unit_concurrent_array_ready_scq runtime_unit_concurrent_array_sparse_lanes \
-	runtime_unit_concurrent_array_sparse_lanes_pthread
+	runtime_unit_concurrent_array_sparse_lanes_pthread runtime_unit_concurrent_array_bbq \
+	runtime_unit_concurrent_array_bbq_pthread
 TESTS = runtime_unit_linkedlist runtime_unit_stringbuf runtime_unit_parser_pri runtime_unit_msg_replace \
 	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils \
 	runtime_unit_concurrent_array_ready_scq runtime_unit_concurrent_array_sparse_lanes \
-	runtime_unit_concurrent_array_sparse_lanes_pthread
+	runtime_unit_concurrent_array_sparse_lanes_pthread runtime_unit_concurrent_array_bbq \
+	runtime_unit_concurrent_array_bbq_pthread
 
 if ENABLE_FUZZING
 TESTS += $(TESTS_FUZZING)
@@ -2726,7 +2728,8 @@ runtime_unit_concurrent_array_sparse_lanes_SOURCES = \
 	../runtime/concurrent_array_internal.h \
 	../runtime/concurrent_array_ready_scq.c \
 	../runtime/concurrent_array_ready_scq.h \
-	../runtime/concurrent_array_sparse_lanes.c
+	../runtime/concurrent_array_sparse_lanes.c \
+	../runtime/concurrent_array_bbq.c
 runtime_unit_concurrent_array_sparse_lanes_CPPFLAGS = -I$(top_srcdir)/runtime -DCA_TESTING $(PTHREADS_CFLAGS)
 runtime_unit_concurrent_array_sparse_lanes_LDADD = $(PTHREADS_LIBS)
 
@@ -2735,6 +2738,24 @@ runtime_unit_concurrent_array_sparse_lanes_pthread_SOURCES = \
 runtime_unit_concurrent_array_sparse_lanes_pthread_CPPFLAGS = \
 	-I$(top_srcdir)/runtime -DCA_TESTING -DCA_FORCE_PTHREAD_WAIT $(PTHREADS_CFLAGS)
 runtime_unit_concurrent_array_sparse_lanes_pthread_LDADD = $(PTHREADS_LIBS)
+
+runtime_unit_concurrent_array_bbq_SOURCES = \
+	unit/concurrent_array_bbq_test.c \
+	../runtime/concurrent_array.c \
+	../runtime/concurrent_array.h \
+	../runtime/concurrent_array_internal.h \
+	../runtime/concurrent_array_ready_scq.c \
+	../runtime/concurrent_array_ready_scq.h \
+	../runtime/concurrent_array_sparse_lanes.c \
+	../runtime/concurrent_array_bbq.c
+runtime_unit_concurrent_array_bbq_CPPFLAGS = -I$(top_srcdir)/runtime -DCA_TESTING $(PTHREADS_CFLAGS)
+runtime_unit_concurrent_array_bbq_LDADD = $(PTHREADS_LIBS)
+
+runtime_unit_concurrent_array_bbq_pthread_SOURCES = \
+	$(runtime_unit_concurrent_array_bbq_SOURCES)
+runtime_unit_concurrent_array_bbq_pthread_CPPFLAGS = \
+	-I$(top_srcdir)/runtime -DCA_TESTING -DCA_FORCE_PTHREAD_WAIT $(PTHREADS_CFLAGS)
+runtime_unit_concurrent_array_bbq_pthread_LDADD = $(PTHREADS_LIBS)
 
 runtime_unit_omazuredce_utils_SOURCES = \
 	unit/omazuredce_utils_test.c

@@ -60,7 +60,7 @@ typedef enum ca_status {
     CA_NO_MEMORY
 } ca_status_t;
 
-typedef enum ca_core_kind { CA_CORE_SPARSE_LANES = 1 } ca_core_kind_t;
+typedef enum ca_core_kind { CA_CORE_SPARSE_LANES = 1, CA_CORE_BBQ } ca_core_kind_t;
 
 typedef enum ca_completion_state {
     CA_COMPLETE_COMMIT = 0,
@@ -82,6 +82,8 @@ typedef struct ca_config {
 
 typedef struct ca_producer {
     ca_queue_t *queue;
+    /* Candidate-private stable producer identity. */
+    void *private_state;
     uint32_t lane_index;
     uint64_t lane_generation;
     _Atomic size_t outstanding;

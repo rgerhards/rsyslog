@@ -10,6 +10,8 @@ ca_status_t ca_create(const ca_config_t *config, ca_queue_t **queue) {
     switch (config->core) {
         case CA_CORE_SPARSE_LANES:
             return ca_sparse_lanes_ops.create(config, queue);
+        case CA_CORE_BBQ:
+            return ca_bbq_ops.create(config, queue);
         default:
             return CA_INVALID;
     }

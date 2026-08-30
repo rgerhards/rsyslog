@@ -83,6 +83,7 @@ librsyslog_la_SOURCES = \
 	concurrent_array_ready_scq.c \
 	concurrent_array_ready_scq.h \
 	concurrent_array_sparse_lanes.c \
+	concurrent_array_bbq.c \
 	queue_da.c \
 	queue_da.h \
 	segdisk_codec.c \
