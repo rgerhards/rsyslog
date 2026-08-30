@@ -1222,6 +1222,7 @@ TESTS_MMDARWIN_VALGRIND = \
 	mmdarwin_errmsg_no_sock-vg.sh
 
 TESTS_OMPROG = \
+	global-reloadonhup-reportchild-rainerscript.sh \
 	omprog-defaults.sh \
 	omprog-output-capture.sh \
 	omprog-output-capture-mt.sh \
@@ -1243,6 +1244,9 @@ TESTS_OMPROG = \
 	omprog-if-error.sh \
 	omprog-transactions-failed-messages.sh \
 	omprog-transactions-failed-commits.sh
+
+TESTS_OMPROG_IMTCP_YAML = \
+	global-reloadonhup-reportchild-yaml.sh
 
 TESTS_OMPROG_VALGRIND = \
 	omprog-defaults-vg.sh \
@@ -2543,6 +2547,7 @@ EXTRA_DIST += $(TESTS_IMPROG_VALGRIND)
 EXTRA_DIST += $(TESTS_MMDARWIN)
 EXTRA_DIST += $(TESTS_MMDARWIN_VALGRIND)
 EXTRA_DIST += $(TESTS_OMPROG)
+EXTRA_DIST += $(TESTS_OMPROG_IMTCP_YAML)
 EXTRA_DIST += $(TESTS_OMPROG_VALGRIND)
 EXTRA_DIST += $(TESTS_OMHTTP)
 EXTRA_DIST += $(TESTS_OMHTTP_VALGRIND)
@@ -3423,6 +3428,11 @@ endif # ENABLE_IMPROG
 
 if ENABLE_OMPROG
 TESTS += $(TESTS_OMPROG)
+if ENABLE_IMTCP_TESTS
+if HAVE_LIBYAML
+TESTS += $(TESTS_OMPROG_IMTCP_YAML)
+endif
+endif
 if HAVE_VALGRIND
 TESTS += $(TESTS_OMPROG_VALGRIND)
 endif
