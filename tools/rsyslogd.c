@@ -2655,6 +2655,7 @@ static void deinitAll(void) {
 
     DBGPRINTF("destructing current config...\n");
     rsconf.Destruct(&runConf);
+    shadowReloadExitModuleSnapshots();
 
     modExitIminternal();
 
