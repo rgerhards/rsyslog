@@ -1787,7 +1787,8 @@ static int reloadInstanceEqual(const instanceConf_t *const left,
            left->numWrkr == right->numWrkr &&
            reloadUStringEqual(left->pszInputName == NULL ? UCHAR_CONSTANT("imtcp") : left->pszInputName,
                               right->pszInputName == NULL ? UCHAR_CONSTANT("imtcp") : right->pszInputName) &&
-           left->ratelimitInterval == right->ratelimitInterval && left->ratelimitBurst == right->ratelimitBurst &&
+           (leftParams->pszRatelimitName != NULL || rightParams->pszRatelimitName != NULL || ignoreLiveFields ||
+            (left->ratelimitInterval == right->ratelimitInterval && left->ratelimitBurst == right->ratelimitBurst)) &&
            (ignoreNewSessionFields ||
             (left->bSPFramingFix == right->bSPFramingFix && left->iAddtlFrameDelim == right->iAddtlFrameDelim &&
              left->maxFrameSize == right->maxFrameSize && left->bDisableLFDelim == right->bDisableLFDelim &&
@@ -2028,6 +2029,8 @@ typedef struct imtcpReloadEntryV1_s {
     int removal;
     int flowControl;
     unsigned starvationMaxReads;
+    unsigned ratelimitInterval;
+    unsigned ratelimitBurst;
     int notifyOnConnectionClose;
     int notifyOnConnectionOpen;
     int preserveCase;
@@ -2197,6 +2200,8 @@ static rsRetVal prepareReloadV1(const void *const pOldCnf, const void *const pNe
         state->count = index + 1;
         state->entries[index].flowControl = newInst->bUseFlowControl;
         state->entries[index].starvationMaxReads = newInst->starvationMaxReads;
+        state->entries[index].ratelimitInterval = (unsigned)newInst->ratelimitInterval;
+        state->entries[index].ratelimitBurst = (unsigned)newInst->ratelimitBurst;
         state->entries[index].notifyOnConnectionClose = newInst->bEmitMsgOnClose;
         state->entries[index].notifyOnConnectionOpen = newInst->bEmitMsgOnOpen;
         state->entries[index].preserveCase = newInst->bPreserveCase;
@@ -2306,6 +2311,8 @@ static void commitReloadV1(void *const pReloadState) {
         tcpsrv_reload_profile_t profile = {
             .useFlowControl = state->entries[i].flowControl,
             .starvationMaxReads = state->entries[i].starvationMaxReads,
+            .ratelimitInterval = state->entries[i].ratelimitInterval,
+            .ratelimitBurst = state->entries[i].ratelimitBurst,
             .notifyOnConnectionClose = state->entries[i].notifyOnConnectionClose,
             .notifyOnConnectionOpen = state->entries[i].notifyOnConnectionOpen,
             .preserveCase = state->entries[i].preserveCase,
