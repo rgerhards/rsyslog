@@ -114,6 +114,75 @@ static rsRetVal doSubmitToActionQNotAllMark(action_t *const pAction, wti_t *cons
 static void ATTR_NONNULL() actionSuspend(action_t *const pThis, wti_t *const pWti);
 static void ATTR_NONNULL() actionRetry(action_t *const pThis, wti_t *const pWti);
 
+#ifdef ENABLE_IMDIAG
+static int actionTestNameMatches(const action_t *const action, const char *const variable) {
+    const char *const requested = getenv(variable);
+    return requested != NULL && action->pszName != NULL && !strcmp(requested, (const char *)action->pszName);
+}
+
+static rsRetVal actionTestConfigureMessageFault(action_t *const action,
+                                                const char *const actionVariable,
+                                                const char *const messageVariable,
+                                                char **const requiredMessage,
+                                                _Atomic unsigned *const remaining) {
+    if (!actionTestNameMatches(action, actionVariable)) return RS_RET_OK;
+    const char *const requested = getenv(messageVariable);
+    *requiredMessage = strdup(requested == NULL ? "" : requested);
+    if (*requiredMessage == NULL) return RS_RET_OUT_OF_MEMORY;
+    atomic_store_explicit(remaining, 1, memory_order_relaxed);
+    return RS_RET_OK;
+}
+
+static rsRetVal actionConfigureConcurrentTestHooks(action_t *const action) {
+    DEFiRet;
+    if (action->pQueue == NULL || action->pQueue->qType != QUEUETYPE_CONCURRENT_ARRAY ||
+        action->pQueue->concurrentCore == NULL || strcasecmp(action->pQueue->concurrentCore, "sparseLanes"))
+        FINALIZE;
+    CHKiRet(actionTestConfigureMessageFault(
+        action, "RSYSLOG_TEST_CA_ACTION_COPY_FAIL", "RSYSLOG_TEST_CA_ACTION_COPY_FAIL_MESSAGE",
+        &action->concurrentTestCopyFailMessage, &action->concurrentTestCopyFailRemaining));
+    CHKiRet(actionTestConfigureMessageFault(
+        action, "RSYSLOG_TEST_CA_ACTION_STAGE_FAIL", "RSYSLOG_TEST_CA_ACTION_STAGE_FAIL_MESSAGE",
+        &action->concurrentTestStageFailMessage, &action->concurrentTestStageFailRemaining));
+    CHKiRet(actionTestConfigureMessageFault(
+        action, "RSYSLOG_TEST_CA_ACTION_CONSUMER_RETRY", "RSYSLOG_TEST_CA_ACTION_CONSUMER_RETRY_MESSAGE",
+        &action->concurrentTestConsumerRetryMessage, &action->concurrentTestConsumerRetryRemaining));
+    if (actionTestNameMatches(action, "RSYSLOG_TEST_CA_ACTION_CLAIM")) {
+        const char *const gate = getenv("RSYSLOG_TEST_CA_ACTION_CLAIM_GATE");
+        const char *const held = getenv("RSYSLOG_TEST_CA_ACTION_CLAIM_HELD");
+        if (gate != NULL && held != NULL) {
+            CHKmalloc(action->concurrentTestClaimGate = strdup(gate));
+            CHKmalloc(action->concurrentTestClaimHeld = strdup(held));
+        }
+    }
+finalize_it:
+    RETiRet;
+}
+
+static int actionTestConsumeMessageFault(const smsg_t *const msg,
+                                         const char *const requiredMessage,
+                                         _Atomic unsigned *const remaining) {
+    if (requiredMessage == NULL || msg == NULL || msg->pszRawMsg == NULL ||
+        strstr((const char *)msg->pszRawMsg, requiredMessage) == NULL)
+        return 0;
+    unsigned expected = 1;
+    return atomic_compare_exchange_strong_explicit(remaining, &expected, 0, memory_order_acq_rel, memory_order_relaxed);
+}
+
+static int actionTestHoldClaim(const action_t *const action, const wti_t *const wti) {
+    if (action->concurrentTestClaimGate == NULL || action->concurrentTestClaimHeld == NULL) return 0;
+    const int fd = open(action->concurrentTestClaimHeld, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd >= 0) {
+        const char marker[] = "held\n";
+        if (write(fd, marker, sizeof(marker) - 1) != (ssize_t)(sizeof(marker) - 1))
+            DBGPRINTF("ConcurrentArray action claim marker write failed\n");
+        close(fd);
+    }
+    while (access(action->concurrentTestClaimGate, F_OK) == 0 && !wtiIsShutdownImmediate(wti)) srSleep(0, 10000);
+    return 1;
+}
+#endif
+
 /* object static data (once for all instances) */
 DEFobjCurrIf(obj) DEFobjCurrIf(datetime) DEFobjCurrIf(module) DEFobjCurrIf(statsobj) DEFobjCurrIf(ruleset)
 
@@ -328,6 +397,13 @@ rsRetVal actionDestruct(action_t *const pThis) {
     free((void *)pThis->pszExternalStateFile);
     free(pThis->pszRatelimitName);
     free(pThis->pszName);
+#ifdef ENABLE_IMDIAG
+    free(pThis->concurrentTestCopyFailMessage);
+    free(pThis->concurrentTestStageFailMessage);
+    free(pThis->concurrentTestConsumerRetryMessage);
+    free(pThis->concurrentTestClaimGate);
+    free(pThis->concurrentTestClaimHeld);
+#endif
     nvlstDestruct(pThis->pSyntaxLst);
     free(pThis->ppTpl);
     free(pThis->peParamPassing);
@@ -389,6 +465,11 @@ rsRetVal actionConstruct(action_t **ppThis) {
     pThis->bReportSuspension = -1; /* indicate "not yet set" */
     pThis->bReportSuspensionCont = -1; /* indicate "not yet set" */
     pThis->bCopyMsg = 0;
+#ifdef ENABLE_IMDIAG
+    atomic_init(&pThis->concurrentTestCopyFailRemaining, 0);
+    atomic_init(&pThis->concurrentTestStageFailRemaining, 0);
+    atomic_init(&pThis->concurrentTestConsumerRetryRemaining, 0);
+#endif
     pThis->tLastOccur = datetime.GetTime(NULL); /* done once per action on startup only */
     pThis->iActionNbr = loadConf->actions.iActionNbr;
     pthread_mutex_init(&pThis->mutErrFile, NULL);
@@ -597,9 +678,12 @@ rsRetVal actionConstructFinalize(action_t *__restrict__ const pThis, struct nvls
     } else {
         /* we have v6-style config params */
         qqueueSetDefaultsActionQueue(pThis->pQueue);
-        qqueueApplyCnfParam(pThis->pQueue, lst);
+        CHKiRet(qqueueApplyCnfParam(pThis->pQueue, lst));
     }
     qqueueCorrectParams(pThis->pQueue);
+#ifdef ENABLE_IMDIAG
+    CHKiRet(actionConfigureConcurrentTestHooks(pThis));
+#endif
 
     if (pThis->pszRatelimitName != NULL) {
         CHKiRet(ratelimitNewFromConfigForScope(&pThis->ratelimiter, loadConf, (char *)pThis->pszRatelimitName, "action",
@@ -2039,6 +2123,9 @@ static rsRetVal ATTR_NONNULL() processBatchMain(void *__restrict__ const pVoid,
     action_t *__restrict__ const pAction = (action_t *__restrict__ const)pVoid;
     int i;
     struct syslogTime ttNow;
+#ifdef ENABLE_IMDIAG
+    rsRetVal injectedRet = RS_RET_OK;
+#endif
     DEFiRet;
 
     wtiResetExecState(pWti, pBatch);
@@ -2056,7 +2143,18 @@ static rsRetVal ATTR_NONNULL() processBatchMain(void *__restrict__ const pVoid,
             /* we do not check error state below, because aborting would be
              * more harmful than continuing.
              */
-            rsRetVal localRet = processMsgMain(pAction, pWti, pBatch->pElem[i].pMsg, &ttNow);
+            rsRetVal localRet;
+#ifdef ENABLE_IMDIAG
+            if (actionTestHoldClaim(pAction, pWti)) {
+                localRet = RS_RET_FORCE_TERM;
+                injectedRet = localRet;
+            } else if (actionTestConsumeMessageFault(pBatch->pElem[i].pMsg, pAction->concurrentTestConsumerRetryMessage,
+                                                     &pAction->concurrentTestConsumerRetryRemaining)) {
+                localRet = RS_RET_OUT_OF_MEMORY;
+                injectedRet = localRet;
+            } else
+#endif
+                localRet = processMsgMain(pAction, pWti, pBatch->pElem[i].pMsg, &ttNow);
             DBGPRINTF("processBatchMain: i %d, processMsgMain iRet %d\n", i, localRet);
             if (localRet == RS_RET_OK || localRet == RS_RET_DEFER_COMMIT || localRet == RS_RET_ACTION_FAILED ||
                 localRet == RS_RET_PREVIOUS_COMMITTED) {
@@ -2080,6 +2178,9 @@ static rsRetVal ATTR_NONNULL() processBatchMain(void *__restrict__ const pVoid,
     if (iRet == RS_RET_FORCE_TERM && pAction->isTransactional) {
         markBatchReadyFrom(pBatch, 0);
     }
+#ifdef ENABLE_IMDIAG
+    if (injectedRet != RS_RET_OK) iRet = injectedRet;
+#endif
 
 finalize_it:
     RETiRet;
@@ -2212,6 +2313,27 @@ static rsRetVal ATTR_NONNULL() doSubmitToActionQ(action_t *const pAction, wti_t 
         STATSCOUNTER_INC(pAction->ctrBatchesProcessed, pAction->mutCtrBatchesProcessed);
         ttNow.year = 0;
         iRet = processMsgMain(pAction, pWti, pMsg, &ttNow);
+    } else if (pWti->egress.enabled && qqueueSupportsConcurrentTarget(pAction->pQueue)) {
+        /* The WTI ledger owns exactly the copy/reference that immediate
+         * queued submission would receive. Its batch-scoped target publishes
+         * before Direct transaction commit and destroys unpublished ownership
+         * on every admission or cancellation failure. */
+        smsg_t *queuedMsg;
+#ifdef ENABLE_IMDIAG
+        if (pAction->bCopyMsg && actionTestConsumeMessageFault(pMsg, pAction->concurrentTestCopyFailMessage,
+                                                               &pAction->concurrentTestCopyFailRemaining)) {
+            queuedMsg = NULL;
+        } else
+#endif
+            queuedMsg = pAction->bCopyMsg ? MsgDup(pMsg) : MsgAddRef(pMsg);
+#ifdef ENABLE_IMDIAG
+        if (queuedMsg != NULL && actionTestConsumeMessageFault(pMsg, pAction->concurrentTestStageFailMessage,
+                                                               &pAction->concurrentTestStageFailRemaining)) {
+            msgDestruct(&queuedMsg);
+            queuedMsg = NULL;
+        }
+#endif
+        iRet = wtiEgressStage(pWti, pAction->pQueue, queuedMsg);
     } else { /* in this case, we do single submits to the queue.
               * TODO: optimize this, we may do at least a multi-submit!
               */

@@ -849,6 +849,142 @@ finalize_it:
 }
 
 
+#ifdef ENABLE_IMDIAG
+/* Build one exact MultiSubmit from the explicitly armed diagnostic command
+ * file without adding a command or ABI to imdiag. This complete control path
+ * is absent from ordinary builds. Each appended line is:
+ *   <first-id> <count> [ruleset] [expect-error|discard-transition]
+ * A missing ruleset or "-" targets Main. */
+static rsRetVal testInjectMultiCommand(const char *const command) {
+    long long first;
+    int count;
+    char targetName[128] = "-";
+    char expectedResult[32] = "ok";
+    ruleset_t *targetRuleset = NULL;
+    qqueue_t *targetQueue;
+    multi_submit_t multi = {0};
+    qqueue_ca_multi_test_stats_t stats;
+    DEFiRet;
+
+    const int fields = sscanf(command, "%lld %d %127s %31s", &first, &count, targetName, expectedResult);
+    if (fields < 2 || count <= 0 || count > SHRT_MAX || runConf->pMsgQueue == NULL) {
+        ABORT_FINALIZE(RS_RET_PARAM_ERROR);
+    }
+    if (fields >= 3 && strcmp(targetName, "-"))
+        CHKiRet(rulesetGetRuleset(runConf, &targetRuleset, (uchar *)targetName));
+    targetQueue = targetRuleset == NULL ? runConf->pMsgQueue : ruleset.GetRulesetQueue(targetRuleset);
+    if (targetQueue == NULL) ABORT_FINALIZE(RS_RET_PARAM_ERROR);
+
+    CHKmalloc(multi.ppMsgs = calloc((size_t)count, sizeof(*multi.ppMsgs)));
+    multi.maxElem = (short)count;
+    qqueueResetConcurrentArrayMultiTestStats(targetQueue);
+    for (int i = 0; i < count; ++i) {
+        char text[128];
+        smsg_t *msg = NULL;
+        const int priority = fields == 4 && !strcmp(expectedResult, "discard-transition") && i == 2 ? 160 : 167;
+        const int length =
+            snprintf(text, sizeof(text), "<%d>Mar  1 01:00:00 192.0.2.8 tag msgnum:%8.8lld:", priority, first + i);
+        if (length < 0 || (size_t)length >= sizeof(text)) ABORT_FINALIZE(RS_RET_PARAM_ERROR);
+        CHKiRet(msgConstruct(&msg));
+        MsgSetRawMsg(msg, text, (size_t)length);
+        msgSetPRI(msg, priority);
+        MsgSetInputName(msg, pInternalInputName);
+        MsgSetFlowControlType(msg, eFLOWCTL_NO_DELAY);
+        MsgSetRuleset(msg, targetRuleset);
+        msg->msgFlags = NEEDS_PARSING | PARSE_HOSTNAME;
+        MsgSetRcvFrom(msg, glbl.GetLocalHostNameProp());
+        CHKiRet_Hdlr(MsgSetRcvFromIP(msg, glbl.GetLocalHostIP())) {
+            msgDestruct(&msg);
+        }
+        multi.ppMsgs[multi.nElem++] = msg;
+    }
+    const rsRetVal flushRet = multiSubmitFlush(&multi);
+    if (fields == 4 && !strcmp(expectedResult, "expect-error")) {
+        if (flushRet == RS_RET_OK) ABORT_FINALIZE(RS_RET_INTERNAL_ERROR);
+        DBGPRINTF("CA test MultiSubmit observed expected failure %d\n", flushRet);
+    } else if (flushRet != RS_RET_OK) {
+        ABORT_FINALIZE(flushRet);
+    }
+    qqueueGetConcurrentArrayMultiTestStats(targetQueue, &stats);
+    DBGPRINTF("CA test MultiSubmit first=%lld count=%d target=%s reservations=%" PRIu64 " publications=%" PRIu64
+              " published=%" PRIu64 " advice=%" PRIu64 "\n",
+              first, count, targetRuleset == NULL ? "main" : targetName, stats.reservations, stats.publications,
+              stats.published_items, stats.advice);
+
+finalize_it:
+    for (short i = 0; i < multi.nElem; ++i)
+        if (multi.ppMsgs[i] != NULL) msgDestruct(&multi.ppMsgs[i]);
+    free(multi.ppMsgs);
+    RETiRet;
+}
+
+/* Resolve many synthetic logical producer identities without submitting. The
+ * summary is a deterministic oracle for queue-local dedicated assignment and
+ * bijective reachability of every pre-registered fallback handle. */
+static rsRetVal testMapConcurrentProducers(const char *const command) {
+    unsigned long long first;
+    size_t count;
+    char targetName[128] = "-";
+    ruleset_t *targetRuleset = NULL;
+    qqueue_t *targetQueue;
+    unsigned char *seen = NULL;
+    size_t dedicatedCount = 0;
+    size_t fallbackCount = 0;
+    size_t dedicatedSeen = 0;
+    size_t fallbackSeen = 0;
+    DEFiRet;
+
+    const int fields = sscanf(command, "map %llu %zu %127s", &first, &count, targetName);
+    if (fields < 2 || first == 0 || count == 0 || runConf->pMsgQueue == NULL) ABORT_FINALIZE(RS_RET_PARAM_ERROR);
+    if (fields == 3 && strcmp(targetName, "-"))
+        CHKiRet(rulesetGetRuleset(runConf, &targetRuleset, (uchar *)targetName));
+    targetQueue = targetRuleset == NULL ? runConf->pMsgQueue : ruleset.GetRulesetQueue(targetRuleset);
+    if (targetQueue == NULL) ABORT_FINALIZE(RS_RET_PARAM_ERROR);
+
+    uint32_t lane;
+    int fallback;
+    CHKiRet(qqueueConcurrentProducerTestResolve(targetQueue, (uint64_t)first, &lane, &fallback, &dedicatedCount,
+                                                &fallbackCount));
+    if (dedicatedCount > SIZE_MAX - fallbackCount) ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+    CHKmalloc(seen = calloc(dedicatedCount + fallbackCount, sizeof(*seen)));
+    for (size_t i = 0; i < count; ++i) {
+        if ((uint64_t)first > UINT64_MAX - i) ABORT_FINALIZE(RS_RET_PARAM_ERROR);
+        CHKiRet(qqueueConcurrentProducerTestResolve(targetQueue, (uint64_t)first + i, &lane, &fallback, &dedicatedCount,
+                                                    &fallbackCount));
+        if (lane >= dedicatedCount + fallbackCount) ABORT_FINALIZE(RS_RET_INTERNAL_ERROR);
+        if (!seen[lane]) {
+            seen[lane] = 1;
+            if (fallback)
+                ++fallbackSeen;
+            else
+                ++dedicatedSeen;
+        }
+    }
+    DBGPRINTF("CA test producer map target=%s dedicated=%zu/%zu fallback=%zu/%zu\n",
+              targetRuleset == NULL ? "main" : targetName, dedicatedSeen, dedicatedCount, fallbackSeen, fallbackCount);
+
+finalize_it:
+    free(seen);
+    RETiRet;
+}
+
+static rsRetVal testMultiCommandsRun(void) {
+    const char *const path = getenv("RSYSLOG_TEST_CA_MULTI_COMMAND_FILE");
+    if (path == NULL || *path == '\0') return RS_RET_OK;
+    FILE *const stream = fopen(path, "r");
+    if (stream == NULL) return RS_RET_IO_ERROR;
+    rsRetVal ret = RS_RET_OK;
+    char command[256];
+    while (fgets(command, sizeof(command), stream) != NULL) {
+        ret = strncmp(command, "map ", 4) == 0 ? testMapConcurrentProducers(command) : testInjectMultiCommand(command);
+        if (ret != RS_RET_OK) break;
+    }
+    if (ferror(stream) && ret == RS_RET_OK) ret = RS_RET_IO_ERROR;
+    fclose(stream);
+    return ret;
+}
+#endif
+
 /**
  * @brief Message Consumer (Worker Thread).
  *
@@ -866,7 +1002,35 @@ static rsRetVal msgConsumer(void __attribute__((unused)) * notNeeded, batch_t *p
     DEFiRet;
     assert(pBatch != NULL);
     preprocessBatch(pBatch, pWti);
-    ruleset.ProcessBatch(pBatch, pWti);
+    const rsRetVal processRet = ruleset.ProcessBatch(pBatch, pWti);
+    const int preserveCompletion = pWti->egress.preserveCompletion;
+    pWti->egress.preserveCompletion = 0;
+#ifdef ENABLE_IMDIAG
+    /* Deterministic test-only model of a config-generation replacement in
+     * the old post-ProcessBatch race window. The completion decision below
+     * must depend solely on preserveCompletion, never this mutable selector. */
+    const char *const flipMessage = getenv("RSYSLOG_TEST_CA_FLIP_ENGINE_AFTER_BATCH_MESSAGE");
+    const char *const flipValue = getenv("RSYSLOG_TEST_CA_FLIP_ENGINE_AFTER_BATCH_VALUE");
+    if (flipMessage != NULL && flipValue != NULL) {
+        for (int i = 0; i < pBatch->nElem; ++i) {
+            if (pBatch->pElem[i].pMsg != NULL &&
+                strstr((const char *)pBatch->pElem[i].pMsg->pszRawMsg, flipMessage) != NULL) {
+                runConf->executionEngine = atoi(flipValue) != 0;
+                DBGPRINTF("test changed mutable executionEngine to %d after batch; captured completion policy %d\n",
+                          runConf->executionEngine, preserveCompletion);
+                break;
+            }
+        }
+    }
+#endif
+    if (preserveCompletion) {
+        /* reservedBatch owns the exact per-source completion state. In
+         * particular, a target publication/termination error restores COMM
+         * items to RDY for source-queue retry and must reach the queue worker.
+         * This marker was captured from the batch's config before execution;
+         * consulting mutable runConf here would race a config replacement. */
+        return processRet;
+    }
     // TODO: the BATCH_STATE_COMM must be set somewhere down the road, but we
     // do not have this yet and so we emulate -- 2010-06-10
     int i;
@@ -997,7 +1161,7 @@ rsRetVal createMainQueue(qqueue_t **ppQueue, uchar *pszQueueName, struct nvlst *
 #undef setQPROPstr
     } else { /* use new style config! */
         qqueueSetDefaultsRulesetQueue(*ppQueue);
-        qqueueApplyCnfParam(*ppQueue, lst);
+        CHKiRet(qqueueApplyCnfParam(*ppQueue, lst));
     }
     qqueueCorrectParams(*ppQueue);
 
@@ -1008,9 +1172,17 @@ finalize_it:
 
 rsRetVal startMainQueue(rsconf_t *cnf, qqueue_t *const pQueue) {
     DEFiRet;
-    CHKiRet_Hdlr(qqueueStart(cnf, pQueue)) {
+    const queueType_t requestedType = pQueue->qType;
+    iRet = qqueueStart(cnf, pQueue);
+    if (iRet != RS_RET_OK) {
         /* no queue is fatal, we need to give up in that case... */
         LogError(0, iRet, "could not start (ruleset) main message queue");
+        if (cnf->executionEngine == 1 && requestedType == QUEUETYPE_CONCURRENT_ARRAY) {
+            LogError(0, iRet,
+                     "reservedBatch ConcurrentArray queue startup failed; Direct fallback would violate the "
+                     "reserved target contract");
+            return iRet;
+        }
         if (runConf->globals.bAbortOnFailedQueueStartup) {
             fprintf(stderr,
                     "rsyslogd: could not start (ruleset) main message queue, "
@@ -1020,11 +1192,15 @@ rsRetVal startMainQueue(rsconf_t *cnf, qqueue_t *const pQueue) {
             exit(1); /* "good" exit, this is intended here */
         }
         pQueue->qType = QUEUETYPE_DIRECT;
-        CHKiRet_Hdlr(qqueueStart(cnf, pQueue)) {
+        iRet = qqueueStart(cnf, pQueue);
+        if (iRet != RS_RET_OK) {
             /* no queue is fatal, we need to give up in that case... */
             LogError(0, iRet, "fatal error: could not even start queue in direct mode");
         }
     }
+#ifdef ENABLE_IMDIAG
+    if (pQueue == runConf->pMsgQueue) iRet = testMultiCommandsRun();
+#endif
     RETiRet;
 }
 

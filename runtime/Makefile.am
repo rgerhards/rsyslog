@@ -77,6 +77,12 @@ librsyslog_la_SOURCES = \
 	wti.h \
 	queue.c \
 	queue.h \
+	concurrent_array.c \
+	concurrent_array.h \
+	concurrent_array_internal.h \
+	concurrent_array_ready_scq.c \
+	concurrent_array_ready_scq.h \
+	concurrent_array_sparse_lanes.c \
 	queue_da.c \
 	queue_da.h \
 	segdisk_codec.c \

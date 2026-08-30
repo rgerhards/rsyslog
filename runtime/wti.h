@@ -67,6 +67,28 @@ typedef struct actWrkrInfo {
     } p; /* short name for "parameters" */
 } actWrkrInfo_t;
 
+typedef enum { EGRESS_EMPTY = 0, EGRESS_EXECUTING, EGRESS_PUBLISHING, EGRESS_PUBLISHED } egress_state_t;
+
+typedef struct egress_bucket_s {
+    qqueue_t *queue;
+    void *target; /* qConcurrentTarget_t, kept opaque to avoid queue/wti include cycles */
+} egress_bucket_t;
+
+typedef struct egress_ledger_s {
+    egress_bucket_t *buckets;
+    size_t nBuckets;
+    size_t nAllocated;
+    int enabled;
+    int preserveCompletion;
+    const rsconf_t *batchConfig;
+    rsRetVal error;
+    /* Distinguishes a new staged-branch failure from an earlier error in the
+     * same source batch, so action execution can propagate only its own
+     * admission failure. */
+    uint64_t errorGeneration;
+    egress_state_t state;
+} egress_ledger_t;
+
 /* the worker thread instance class */
 struct wti_s {
     BEGINobjInstance
@@ -75,11 +97,14 @@ struct wti_s {
         int bIsRunning; /* is this thread currently running? (must be int for atomic op!) */
         sbool bAlwaysRunning; /* should this thread always run? */
         int workerIndex; /* stable slot in the owning worker pool */
+        uint64_t producerIdentity; /* stable across this WTI's source and target queues */
         int *pbShutdownImmediate; /* end processing of this batch immediately if set to 1 */
         DEF_ATOMIC_HELPER_MUT(*pmutShutdownImmediate); /* fallback mutex for atomic access */
         wtp_t *pWtp; /* my worker thread pool (important if only the work thread instance is passed! */
         batch_t batch; /* pointer to an object array meaningful for current user
                   pointer (e.g. queue pUsr data elemt) */
+        void *pQueueWorkerData; /* queue-private state for opt-in unlocked workers */
+        sbool bQueueWorkerStarted;
         uchar *pszDbgHdr; /* header string for debug messages */
         actWrkrInfo_t *actWrkrInfo; /* *array* of action wrkr infos for all actions
                           (sized for max nbr of actions in config!) */
@@ -94,6 +119,7 @@ struct wti_s {
                                     */
             uint16_t rulesetCallDepth; /* synchronous ruleset call nesting depth */
         } execState; /* state for the execution engine */
+        egress_ledger_t egress;
 };
 
 
@@ -155,4 +181,8 @@ static inline void __attribute__((unused)) wtiResetExecState(wti_t *const pWti, 
 
 
 rsRetVal wtiNewIParam(wti_t *const pWti, action_t *const pAction, actWrkrIParams_t **piparams);
+void wtiEgressBegin(wti_t *pThis, const rsconf_t *batchConfig, int enabled);
+rsRetVal wtiEgressStage(wti_t *pThis, qqueue_t *queue, smsg_t *msg);
+void wtiEgressPublish(wti_t *pThis);
+rsRetVal wtiEgressCleanup(wti_t *pThis);
 #endif /* #ifndef WTI_H_INCLUDED */

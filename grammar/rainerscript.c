@@ -918,6 +918,8 @@ static int doGetQueueType(struct nvlst *valnode, struct cnfparamdescr *param, st
         val->val.d.n = QUEUETYPE_DIRECT;
     } else if (!es_strcasebufcmp(valnode->val.d.estr, (uchar *)"segmenteddisk", 13)) {
         val->val.d.n = QUEUETYPE_SEGMENTED_DISK;
+    } else if (!es_strcasebufcmp(valnode->val.d.estr, (uchar *)"concurrentarray", 15)) {
+        val->val.d.n = QUEUETYPE_CONCURRENT_ARRAY;
     } else {
         cstr = es_str2cstr(valnode->val.d.estr, NULL);
         if (cstr == NULL) {

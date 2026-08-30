@@ -56,6 +56,18 @@ EXTRA_DIST += $(TESTS_TEMPLATE_REGEX_BOUNDS) $(TESTS_TEMPLATE_REGEX_BOUNDS_LIBYA
 TESTS_RSCRIPT_OBJECT_STRINGS = rscript-object-string-escapes.sh
 EXTRA_DIST += $(TESTS_RSCRIPT_OBJECT_STRINGS)
 
+TESTS_CONCURRENT_ARRAY_QUEUE = concurrent-array-config.sh concurrent-array-queue.sh concurrent-array-full.sh \
+	concurrent-array-shutdown.sh concurrent-array-oom.sh concurrent-array-reserved-batch.sh \
+	concurrent-array-reserved-pressure.sh concurrent-array-native-multi.sh concurrent-array-routing-identity.sh \
+	concurrent-array-routing-discard.sh concurrent-array-routing-retry.sh concurrent-array-routing-subsets.sh \
+	concurrent-array-routing-fanout.sh concurrent-array-action.sh concurrent-array-action-oom.sh \
+	concurrent-array-action-retry.sh concurrent-array-action-shutdown.sh concurrent-array-action-transaction.sh \
+	concurrent-array-action-suspend.sh
+TESTS_CONCURRENT_ARRAY_QUEUE_LIBYAML = yaml-concurrent-array-queue.sh
+EXTRA_DIST += $(TESTS_CONCURRENT_ARRAY_QUEUE) $(TESTS_CONCURRENT_ARRAY_QUEUE_LIBYAML)
+EXTRA_DIST += testsuites/concurrent-array-action-transaction-bin.py
+EXTRA_DIST += testsuites/concurrent-array-action-accept-bin.py
+
 TESTS_RSCRIPT_REPLACE_OVERLAP = rscript_replace-overlap.sh
 EXTRA_DIST += $(TESTS_RSCRIPT_REPLACE_OVERLAP)
 
@@ -2666,9 +2678,13 @@ check_LTLIBRARIES =
 
 # TODO: reenable TESTRUNS = rt_init rscript
 check_PROGRAMS = runtime_unit_linkedlist runtime_unit_stringbuf runtime_unit_parser_pri runtime_unit_msg_replace \
-	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils
+	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils \
+	runtime_unit_concurrent_array_ready_scq runtime_unit_concurrent_array_sparse_lanes \
+	runtime_unit_concurrent_array_sparse_lanes_pthread
 TESTS = runtime_unit_linkedlist runtime_unit_stringbuf runtime_unit_parser_pri runtime_unit_msg_replace \
-	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils
+	runtime_unit_ommongodb_date runtime_unit_segdisk_state runtime_unit_queue_da runtime_unit_omazuredce_utils \
+	runtime_unit_concurrent_array_ready_scq runtime_unit_concurrent_array_sparse_lanes \
+	runtime_unit_concurrent_array_sparse_lanes_pthread
 
 if ENABLE_FUZZING
 TESTS += $(TESTS_FUZZING)
@@ -2694,6 +2710,30 @@ runtime_unit_segdisk_state_SOURCES = \
 
 runtime_unit_queue_da_SOURCES = \
 	unit/queue_da_test.c
+
+runtime_unit_concurrent_array_ready_scq_SOURCES = \
+	unit/concurrent_array_ready_scq_test.c \
+	../runtime/concurrent_array_ready_scq.c \
+	../runtime/concurrent_array_ready_scq.h
+runtime_unit_concurrent_array_ready_scq_CPPFLAGS = -I$(top_srcdir)/runtime -DCA_READY_SCQ_TESTING $(PTHREADS_CFLAGS)
+runtime_unit_concurrent_array_ready_scq_LDADD = $(PTHREADS_LIBS)
+
+runtime_unit_concurrent_array_sparse_lanes_SOURCES = \
+	unit/concurrent_array_sparse_lanes_test.c \
+	../runtime/concurrent_array.c \
+	../runtime/concurrent_array.h \
+	../runtime/concurrent_array_internal.h \
+	../runtime/concurrent_array_ready_scq.c \
+	../runtime/concurrent_array_ready_scq.h \
+	../runtime/concurrent_array_sparse_lanes.c
+runtime_unit_concurrent_array_sparse_lanes_CPPFLAGS = -I$(top_srcdir)/runtime -DCA_TESTING $(PTHREADS_CFLAGS)
+runtime_unit_concurrent_array_sparse_lanes_LDADD = $(PTHREADS_LIBS)
+
+runtime_unit_concurrent_array_sparse_lanes_pthread_SOURCES = \
+	$(runtime_unit_concurrent_array_sparse_lanes_SOURCES)
+runtime_unit_concurrent_array_sparse_lanes_pthread_CPPFLAGS = \
+	-I$(top_srcdir)/runtime -DCA_TESTING -DCA_FORCE_PTHREAD_WAIT $(PTHREADS_CFLAGS)
+runtime_unit_concurrent_array_sparse_lanes_pthread_LDADD = $(PTHREADS_LIBS)
 
 runtime_unit_omazuredce_utils_SOURCES = \
 	unit/omazuredce_utils_test.c
@@ -2949,6 +2989,9 @@ if ENABLE_DEFAULT_TESTS
 TESTS += $(TESTS_DEFAULT)
 TESTS += $(TESTS_JSON_OMITIFZERO)
 TESTS += $(TESTS_SEGMENTED_DISK_QUEUE)
+if ENABLE_IMDIAG
+TESTS += $(TESTS_CONCURRENT_ARRAY_QUEUE)
+endif
 if ENABLE_SEGQUEUE_TOOL
 TESTS += $(TESTS_SEGQUEUE_TOOL)
 endif
@@ -2957,6 +3000,9 @@ TESTS += $(TESTS_SEGMENTED_DISK_QUEUE_IMPSTATS)
 endif
 if HAVE_LIBYAML
 TESTS += $(TESTS_SEGMENTED_DISK_QUEUE_LIBYAML)
+if ENABLE_IMDIAG
+TESTS += $(TESTS_CONCURRENT_ARRAY_QUEUE_LIBYAML)
+endif
 endif
 
 if ENABLE_MMSNAREPARSE

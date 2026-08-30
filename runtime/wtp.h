@@ -67,10 +67,18 @@ struct wtp_s {
         rsRetVal (*pfChkStopWrkr)(void *pUsr, int);
         rsRetVal (*pfGetDeqBatchSize)(void *pUsr, int *); /* obtains max dequeue count from queue config */
         rsRetVal (*pfObjProcessed)(void *pUsr, wti_t *pWti); /* indicate user object is processed */
+        rsRetVal (*pfCancelProcessed)(void *pUsr, wti_t *pWti);
+        rsRetVal (*pfWorkerConstruct)(void *pUsr, wti_t *pWti);
+        void (*pfWorkerDestruct)(void *pUsr, wti_t *pWti);
+        rsRetVal (*pfWorkerStart)(void *pUsr, wti_t *pWti);
+        rsRetVal (*pfWorkerStop)(void *pUsr, wti_t *pWti);
+        rsRetVal (*pfWaitIdle)(void *pUsr, wti_t *pWti, int *pTimedOut);
+        rsRetVal (*pfWakeIdle)(void *pUsr);
         rsRetVal (*pfRateLimiter)(void *pUsr);
         rsRetVal (*pfDoWork)(void *pUsr, void *pWti);
         rsRetVal (*pfIdleTimeout)(void *pUsr);
         sbool bAllowFirstWorkerToTimeout;
+        sbool bUnlockedWorker;
         /* end user objects */
         uchar *pszDbgHdr; /* header string for debug messages */
         DEF_ATOMIC_HELPER_MUT(mutCurNumWrkThrd);
@@ -88,6 +96,8 @@ rsRetVal wtpConstruct(wtp_t **ppThis);
 rsRetVal wtpConstructFinalize(wtp_t *pThis);
 rsRetVal wtpDestruct(wtp_t **ppThis);
 rsRetVal wtpAdviseMaxWorkers(wtp_t *pThis, int nMaxWrkr, const int permit_during_shutdown);
+rsRetVal wtpAdviseMaxWorkersConcurrent(wtp_t *pThis, int nMaxWrkr, const int permit_during_shutdown);
+int wtpGetCurrentNumWorkers(wtp_t *pThis);
 rsRetVal wtpProcessThrdChanges(wtp_t *pThis);
 rsRetVal wtpChkStopWrkr(wtp_t *pThis, int bLockUsrMutex);
 rsRetVal wtpSetState(wtp_t *pThis, wtpState_t iNewState);
@@ -108,8 +118,16 @@ PROTOTYPEpropSetMethFP(wtp, pfRateLimiter, rsRetVal (*pVal)(void *));
 PROTOTYPEpropSetMethFP(wtp, pfGetDeqBatchSize, rsRetVal (*pVal)(void *, int *));
 PROTOTYPEpropSetMethFP(wtp, pfDoWork, rsRetVal (*pVal)(void *, void *));
 PROTOTYPEpropSetMethFP(wtp, pfObjProcessed, rsRetVal (*pVal)(void *, wti_t *));
+PROTOTYPEpropSetMethFP(wtp, pfCancelProcessed, rsRetVal (*pVal)(void *, wti_t *));
+PROTOTYPEpropSetMethFP(wtp, pfWorkerConstruct, rsRetVal (*pVal)(void *, wti_t *));
+PROTOTYPEpropSetMethFP(wtp, pfWorkerDestruct, void (*pVal)(void *, wti_t *));
+PROTOTYPEpropSetMethFP(wtp, pfWorkerStart, rsRetVal (*pVal)(void *, wti_t *));
+PROTOTYPEpropSetMethFP(wtp, pfWorkerStop, rsRetVal (*pVal)(void *, wti_t *));
+PROTOTYPEpropSetMethFP(wtp, pfWaitIdle, rsRetVal (*pVal)(void *, wti_t *, int *));
+PROTOTYPEpropSetMethFP(wtp, pfWakeIdle, rsRetVal (*pVal)(void *));
 PROTOTYPEpropSetMethFP(wtp, pfIdleTimeout, rsRetVal (*pVal)(void *));
 PROTOTYPEpropSetMeth(wtp, bAllowFirstWorkerToTimeout, sbool);
+PROTOTYPEpropSetMeth(wtp, bUnlockedWorker, sbool);
 PROTOTYPEpropSetMeth(wtp, toWrkShutdown, long);
 PROTOTYPEpropSetMeth(wtp, toFirstWrkShutdown, long);
 PROTOTYPEpropSetMeth(wtp, wtpState, wtpState_t);

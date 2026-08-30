@@ -61,6 +61,8 @@ EXTRA_DIST = \
     ai/drift_monitoring.md \
     ai/mermaid_rules.md \
     ai/module_map.yaml \
+    ai/mpmc_queue_design.md \
+    ai/mpmc_queue_lab_notebook.md \
     ai/security_triage_rubric.md \
     ai/structure_and_paths.md \
     ai/templates/template-concept.rst \

@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
+#include <limits.h>
 
 #include "rsyslog.h"
 #include "obj.h"
@@ -41,6 +42,7 @@
 #include "ruleset.h"
 #include "errmsg.h"
 #include "parser.h"
+#include "parserif.h"
 #include "batch.h"
 #include "unicode-helper.h"
 #include "rsconf.h"
@@ -152,22 +154,91 @@ finalize_it:
     RETiRet;
 }
 
+static int reservedBatchQueueConfigured(const qqueue_t *const queue) {
+    return queue != NULL && queue->qType == QUEUETYPE_CONCURRENT_ARRAY && queue->concurrentCore != NULL &&
+           !strcasecmp(queue->concurrentCore, "sparseLanes") && !queue->bIsDA && queue->pszFilePrefix == NULL &&
+           queue->iSmpInterval == 0 && queue->iMinDeqBatchSize == 0;
+}
+
+DEFFUNC_llExecFunc(doValidateReservedBatchRuleset) {
+    const ruleset_t *const ruleset = pData;
+    const rsconf_t *const conf = pParam;
+    if (conf->executionEngine != 1 || ruleset->pQueue == NULL || ruleset->pQueue->qType == QUEUETYPE_DIRECT)
+        return RS_RET_OK;
+    if (reservedBatchQueueConfigured(ruleset->pQueue)) return RS_RET_OK;
+    parser_errmsg(
+        "ruleset '%s': global executionEngine=reservedBatch requires queued targets to use "
+        "queue.type='ConcurrentArray' and queue.concurrentCore='sparseLanes' without disk assistance, sampling, "
+        "or minDequeueBatchSize",
+        ruleset->pszName);
+    return RS_RET_PARAM_ERROR;
+}
+
+typedef struct reservedActionValidation_s {
+    const rsconf_t *conf;
+    rsRetVal status;
+} reservedActionValidation_t;
+
+static rsRetVal validateReservedBatchAction(void *const data, void *const param) {
+    const action_t *const action = data;
+    reservedActionValidation_t *const validation = param;
+    if (validation->status != RS_RET_OK || action->pQueue == NULL || action->pQueue->qType == QUEUETYPE_DIRECT)
+        return RS_RET_OK;
+    if (action->pQueue->qType == QUEUETYPE_CONCURRENT_ARRAY) {
+        if (validation->conf->executionEngine != 1) {
+            parser_errmsg("action '%s': queue.type='ConcurrentArray' requires global executionEngine='reservedBatch'",
+                          action->pszName);
+            validation->status = RS_RET_PARAM_ERROR;
+        } else if (!reservedBatchQueueConfigured(action->pQueue)) {
+            parser_errmsg(
+                "action '%s': queued action ConcurrentArray requires queue.concurrentCore='sparseLanes' without "
+                "disk assistance, sampling, or minDequeueBatchSize",
+                action->pszName);
+            validation->status = RS_RET_PARAM_ERROR;
+        }
+    } else if (validation->conf->executionEngine == 1) {
+        parser_errmsg(
+            "action '%s': global executionEngine=reservedBatch requires queued actions to use "
+            "queue.type='ConcurrentArray' and queue.concurrentCore='sparseLanes'",
+            action->pszName);
+        validation->status = RS_RET_PARAM_ERROR;
+    }
+    return RS_RET_OK;
+}
+
+rsRetVal rulesetValidateQueues(rsconf_t *const conf) {
+    reservedActionValidation_t validation = {.conf = conf, .status = RS_RET_OK};
+    rsRetVal ret = llExecFunc(&conf->rulesets.llRulesets, doValidateReservedBatchRuleset, conf);
+    if (ret == RS_RET_OK) ret = iterateAllActions(conf, validateReservedBatchAction, &validation);
+    return ret == RS_RET_OK ? validation.status : ret;
+}
+
+rsRetVal rulesetValidateMainQueue(rsconf_t *const conf) {
+    if (conf->executionEngine != 1) return RS_RET_OK;
+    if (reservedBatchQueueConfigured(conf->pMsgQueue)) return RS_RET_OK;
+    parser_errmsg(
+        "global executionEngine=reservedBatch requires the Main queue to use queue.type='ConcurrentArray' and "
+        "queue.concurrentCore='sparseLanes'");
+    return RS_RET_PARAM_ERROR;
+}
+
 /* driver to iterate over all rulesets */
 DEFFUNC_llExecFunc(doActivateRulesetQueues) {
     DEFiRet;
     ruleset_t *pThis = (ruleset_t *)pData;
     dbgprintf("Activating Ruleset Queue[%p] for Ruleset %s\n", pThis->pQueue, pThis->pszName);
-    if (pThis->pQueue != NULL) startMainQueue(runConf, pThis->pQueue);
+    if (pThis->pQueue != NULL) CHKiRet(startMainQueue(runConf, pThis->pQueue));
+finalize_it:
     RETiRet;
 }
 /* activate all ruleset queues */
 rsRetVal activateRulesetQueues(void) {
-    llExecFunc(&(runConf->rulesets.llRulesets), doActivateRulesetQueues, NULL);
-    return RS_RET_OK;
+    return llExecFunc(&(runConf->rulesets.llRulesets), doActivateRulesetQueues, NULL);
 }
 
 
 static rsRetVal execAct(struct cnfstmt *stmt, smsg_t *pMsg, wti_t *pWti) {
+    const uint64_t egressErrorGeneration = pWti->egress.errorGeneration;
     DEFiRet;
     if (actionIsDisabled(stmt->d.act)) {
         DBGPRINTF("action %d died, do NOT execute\n", stmt->d.act->iActionNbr);
@@ -175,12 +246,18 @@ static rsRetVal execAct(struct cnfstmt *stmt, smsg_t *pMsg, wti_t *pWti) {
     }
 
     DBGPRINTF("executing action %d\n", stmt->d.act->iActionNbr);
-    stmt->d.act->submitToActQ(stmt->d.act, pWti, pMsg);
-    if (iRet != RS_RET_DISCARDMSG) {
+    const rsRetVal localRet = stmt->d.act->submitToActQ(stmt->d.act, pWti, pMsg);
+    if (pWti->egress.errorGeneration != egressErrorGeneration) {
+        iRet = localRet != RS_RET_OK ? localRet : pWti->egress.error;
+        FINALIZE;
+    }
+    if (localRet != RS_RET_DISCARDMSG) {
         /* note: we ignore the error code here, as we do NEVER want to
          * stop script execution due to action return code
          */
         iRet = RS_RET_OK;
+    } else {
+        iRet = localRet;
     }
 finalize_it:
     RETiRet;
@@ -245,7 +322,8 @@ static rsRetVal execCallIndirect(struct cnfstmt *const __restrict__ stmt,
 
     cnfexprEval(stmt->d.s_call_ind.expr, &result, pMsg, pWti);
     uchar *const rsName = (uchar *)var2CString(&result, &bMustFree);
-    const rsRetVal localRet = rulesetGetRuleset(runConf, &pRuleset, rsName);
+    const rsRetVal localRet = rulesetGetRuleset(
+        (rsconf_t *)(pWti->egress.batchConfig != NULL ? pWti->egress.batchConfig : runConf), &pRuleset, rsName);
     if (localRet != RS_RET_OK) {
         /* in that case, we accept that a NOP will "survive" */
         LogError(0, RS_RET_RULESET_NOT_FOUND,
@@ -264,7 +342,11 @@ static rsRetVal execCallIndirect(struct cnfstmt *const __restrict__ stmt,
         /* Note: we intentionally use submitMsg2() here, as we process messages
          * that were already run through the rate-limiter.
          */
-        submitMsg2(pMsg);
+        if (pWti->egress.enabled) {
+            CHKiRet(wtiEgressStage(pWti, pRuleset->pQueue, pMsg));
+        } else {
+            submitMsg2(pMsg);
+        }
     } else {
         CHKiRet(execSynchronousRulesetCall(pRuleset->root, (const char *)rsName, ustrlen(rsName), pMsg, pWti));
     }
@@ -287,7 +369,11 @@ static rsRetVal execCall(struct cnfstmt *stmt, smsg_t *pMsg, wti_t *pWti) {
         /* Note: we intentionally use submitMsg2() here, as we process messages
          * that were already run through the rate-limiter.
          */
-        submitMsg2(pMsg);
+        if (pWti->egress.enabled) {
+            CHKiRet(wtiEgressStage(pWti, stmt->d.s_call.ruleset->pQueue, pMsg));
+        } else {
+            submitMsg2(pMsg);
+        }
     }
 finalize_it:
     RETiRet;
@@ -606,22 +692,29 @@ static rsRetVal processBatch(batch_t *pBatch, wti_t *pWti) {
     DBGPRINTF("processBATCH: batch of %d elements must be processed\n", pBatch->nElem);
 
     wtiResetExecState(pWti, pBatch);
+    rsconf_t *const batchConfig = runConf;
+    const int egressEnabled = batchConfig->executionEngine == 1;
+    wtiEgressBegin(pWti, batchConfig, egressEnabled);
 
     /* execution phase */
     for (i = 0; i < batchNumMsgs(pBatch) && !wtiIsShutdownImmediate(pWti); ++i) {
         pMsg = pBatch->pElem[i].pMsg;
         DBGPRINTF("processBATCH: next msg %d: %.128s\n", i, pMsg->pszRawMsg);
-        pRuleset = (pMsg->pRuleset == NULL) ? runConf->rulesets.pDflt : pMsg->pRuleset;
+        pRuleset = (pMsg->pRuleset == NULL) ? batchConfig->rulesets.pDflt : pMsg->pRuleset;
         localRet = scriptExec(pRuleset->root, pMsg, pWti);
         /* the most important case here is that processing may be aborted
          * due to pbShutdownImmediate, in which case we MUST NOT flag this
          * message as committed. If we would do so, the message would
          * potentially be lost.
          */
-        if (localRet == RS_RET_OK)
+        if (localRet == RS_RET_OK || localRet == RS_RET_DISCARDMSG)
             batchSetElemState(pBatch, i, BATCH_STATE_COMM);
         else if (localRet == RS_RET_SUSPENDED)
             --i;
+        else if (pWti->egress.enabled) {
+            pWti->egress.preserveCompletion = 1;
+            if (iRet == RS_RET_OK) iRet = localRet;
+        }
     }
 
     /* commit phase */
@@ -629,7 +722,40 @@ static rsRetVal processBatch(batch_t *pBatch, wti_t *pWti) {
         "END batch execution phase, entering to commit phase "
         "[processed %d of %d messages]\n",
         i, batchNumMsgs(pBatch));
+    if (pWti->egress.enabled) wtiEgressPublish(pWti);
+#ifdef ENABLE_IMDIAG
+    if (pWti->egress.enabled && pWti->producerIdentity != 0) {
+        const char *const pauseAfterPublish = getenv("RSYSLOG_TEST_CA_PAUSE_AFTER_EGRESS_PUBLISH_MS");
+        if (pauseAfterPublish != NULL) {
+            char *end;
+            const long milliseconds = strtol(pauseAfterPublish, &end, 10);
+            if (*pauseAfterPublish != '\0' && *end == '\0' && milliseconds > 0 && milliseconds <= INT_MAX) {
+                DBGPRINTF("reservedBatch test pause after target publication and binding purge\n");
+                srSleep((int)(milliseconds / 1000), (int)(milliseconds % 1000) * 1000);
+            }
+        }
+    }
+#endif
     actionCommitAllDirect(pWti);
+    if (pWti->egress.enabled && pWti->egress.error != RS_RET_OK) iRet = pWti->egress.error;
+    const int shutdownImmediate = wtiIsShutdownImmediate(pWti);
+    const rsRetVal cleanupRet = wtiEgressCleanup(pWti);
+    if (iRet == RS_RET_OK && cleanupRet != RS_RET_OK) iRet = cleanupRet;
+    if (egressEnabled && iRet != RS_RET_OK) {
+        pWti->egress.preserveCompletion = 1;
+        /* Some earlier target buckets may already be visible, so retry is
+         * at-least-once. Never commit a source whose remaining accepted
+         * target span could not be published or whose binding did not close. */
+        int restored = 0;
+        for (int j = 0; j < i; ++j) {
+            if (pBatch->eltState[j] == BATCH_STATE_COMM) {
+                pBatch->eltState[j] = BATCH_STATE_RDY;
+                ++restored;
+            }
+        }
+        DBGPRINTF("reservedBatch egress error %d restored %d source messages to RDY\n", iRet, restored);
+    }
+    if (egressEnabled && shutdownImmediate) pWti->egress.preserveCompletion = 1;
 
     DBGPRINTF("processBATCH: batch of %d elements has been processed\n", pBatch->nElem);
     RETiRet;

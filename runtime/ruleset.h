@@ -101,6 +101,8 @@ rsRetVal rulesetGetRuleset(rsconf_t *conf, ruleset_t **ppRuleset, uchar *pszName
 rsRetVal rulesetOptimizeAll(rsconf_t *conf);
 rsRetVal rulesetProcessCnf(struct cnfobj *o);
 rsRetVal activateRulesetQueues(void);
+rsRetVal rulesetValidateQueues(rsconf_t *conf);
+rsRetVal rulesetValidateMainQueue(rsconf_t *conf);
 
 /* Set a current rule set to already-known pointer */
 #define rulesetSetCurrRulesetPtr(pRuleset) (loadConf->rulesets.pCurr = (pRuleset))
