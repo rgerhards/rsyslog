@@ -5,6 +5,7 @@
 # exactly one target identity after the hook disarms. One RDY diagnostic and
 # exact output prove retryability without ownership loss or duplicate publish.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 
 export RS_REDIR=">$RSYSLOG_DYNNAME.rsyslog.log 2>&1"
 export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
@@ -15,10 +16,10 @@ export RSYSLOG_TEST_CA_LIFECYCLE_MARKERS=1
 generate_conf
 add_conf '
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="1")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
-ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="16" queue.workerThreads="1") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
 }
@@ -46,10 +47,10 @@ export RSYSLOG_TEST_CA_FLIP_ENGINE_AFTER_BATCH_VALUE=0
 generate_conf
 add_conf '
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="1")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
-ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="16" queue.workerThreads="1") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
 }
@@ -74,7 +75,7 @@ export RSYSLOG_TEST_CA_FLIP_ENGINE_AFTER_BATCH_MESSAGE="msgnum:00000003:"
 export RSYSLOG_TEST_CA_FLIP_ENGINE_AFTER_BATCH_VALUE=1
 generate_conf
 add_conf '
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="1")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 if $msg contains "msgnum:" then action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
@@ -96,10 +97,10 @@ unset RSYSLOG_TEST_CA_FLIP_ENGINE_AFTER_BATCH_MESSAGE RSYSLOG_TEST_CA_FLIP_ENGIN
 generate_conf
 add_conf '
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="1")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
-ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="16" queue.workerThreads="1") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
 }
@@ -127,7 +128,7 @@ export RSYSLOG_TEST_CA_FLIP_ENGINE_AFTER_BATCH_MESSAGE="msgnum:00000005:"
 export RSYSLOG_TEST_CA_FLIP_ENGINE_AFTER_BATCH_VALUE=1
 generate_conf
 add_conf '
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="1")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 if $msg contains "msgnum:" then {

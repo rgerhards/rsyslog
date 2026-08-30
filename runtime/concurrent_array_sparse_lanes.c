@@ -2248,12 +2248,14 @@ static size_t sparse_ready_ring_capacity(const ca_queue_t *base) {
     return result;
 }
 
-#if defined(ENABLE_IMDIAG) || defined(CA_TESTING)
-void ca_test_fail_next_chunk_allocations(ca_queue_t *base, size_t count) {
+static void sparse_test_fail_next_chunk_allocations(ca_queue_t *base, size_t count) {
     if (base == NULL) return;
+#if defined(ENABLE_IMDIAG) || defined(CA_TESTING)
     atomic_store_explicit(&as_sparse(base)->injected_chunk_alloc_failures, count, memory_order_release);
-}
+#else
+    (void)count;
 #endif
+}
 
 #ifdef CA_TESTING
 void ca_test_pause_role(ca_queue_t *base, int role) {
@@ -2419,4 +2421,5 @@ const struct ca_ops ca_sparse_lanes_ops = {
     .dedicated_lane_limit = sparse_dedicated_lane_limit,
     .fallback_lane_count = sparse_fallback_lane_count,
     .ready_ring_capacity = sparse_ready_ring_capacity,
+    .test_fail_next_chunk_allocations = sparse_test_fail_next_chunk_allocations,
 };

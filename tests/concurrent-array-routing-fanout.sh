@@ -4,19 +4,20 @@
 # Per-target exact files are the oracle: target 1 contains each ID twice,
 # every other target contains each ID once, and no branch is lost or duplicated.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 export RS_REDIR=">$RSYSLOG_DYNNAME.rsyslog.log 2>&1"
 
 for fanout in 3 6; do
 	generate_conf
 	conf='global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="64" queue.workerThreads="1" queue.dequeueBatchSize="8")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 '
 	calls=''
 	for target in $(seq 1 "$fanout"); do
 		conf="$conf
-ruleset(name=\"target${target}\" queue.type=\"ConcurrentArray\" queue.concurrentCore=\"sparseLanes\"
+ruleset(name=\"target${target}\" queue.type=\"ConcurrentArray\" queue.concurrentCore=\"${CA_CORE}\"
         queue.size=\"32\" queue.workerThreads=\"1\") {
   action(type=\"omfile\" file=\"${RSYSLOG_OUT_LOG}.${target}\" template=\"outfmt\")
 }"

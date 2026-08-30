@@ -2,7 +2,7 @@
 # Verify the explicit Checkpoint 5 queue matrix without changing legacy action
 # paths. A source ruleset is either synchronous (no queue) or asynchronously
 # backed by ConcurrentArray; its action is either Direct or explicitly
-# ConcurrentArray/sparseLanes. With one worker per queue, exact ordered IDs
+# ConcurrentArray. With one worker per queue, exact ordered IDs
 # 0..15 prove that every source transfers exactly one action reference and that
 # the queued-action builder publishes before the source is completed.
 if [ "$1" != "--case" ]; then
@@ -14,24 +14,25 @@ if [ "$1" != "--case" ]; then
 	exit 0
 fi
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 
 source_decl='ruleset(name="source")'
 if [ "$RSTB_CA_ACTION_SOURCE" = queued ]; then
-	source_decl='ruleset(name="source" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+	source_decl='ruleset(name="source" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="64" queue.workerThreads="1" queue.dequeueBatchSize="16")'
 fi
 action_decl='action(name="matrix" type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt"
          queue.type="Direct")'
 if [ "$RSTB_CA_ACTION_QUEUE" = queued ]; then
 	action_decl='action(name="matrix" type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt"
-         queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+         queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
          queue.size="64" queue.workerThreads="1" queue.dequeueBatchSize="16")'
 fi
 
 generate_conf
 conf='
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="64" queue.workerThreads="1" queue.dequeueBatchSize="16")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 '

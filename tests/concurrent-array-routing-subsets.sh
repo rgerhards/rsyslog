@@ -4,17 +4,18 @@
 # identities 0,1 and B identities 0,2 prove dormant buckets neither survive
 # nor return INVALID, and the HUP boundary exercises callback/reopen cleanup.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 
 generate_conf
 add_conf '
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="1")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
-ruleset(name="target_a" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes" queue.size="16") {
+ruleset(name="target_a" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'" queue.size="16") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'.a" template="outfmt")
 }
-ruleset(name="target_b" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes" queue.size="16") {
+ruleset(name="target_b" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'" queue.size="16") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'.b" template="outfmt")
 }
 if $msg contains "00000000" then {

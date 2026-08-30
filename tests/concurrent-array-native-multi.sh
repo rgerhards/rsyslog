@@ -9,6 +9,7 @@
 # rather than timing, prove every accepted item is published once and every
 # rejected item transfers ownership once.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 
 export RS_REDIR=">$RSYSLOG_DYNNAME.rsyslog.log 2>&1"
 export RSYSLOG_DEBUG="debug nostdout noprintmutexaction"
@@ -17,7 +18,7 @@ export RSYSLOG_TEST_CA_MULTI_COMMAND_FILE="$RSYSLOG_DYNNAME.ca-multi.commands"
 
 generate_conf
 add_conf '
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
 	queue.size="65536" queue.workerThreads="1" queue.dequeueBatchSize="7")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 :msg, contains, "msgnum:" action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
@@ -45,7 +46,7 @@ rm -f "$RSYSLOG_OUT_LOG"
 generate_conf
 add_conf '
 module(load="../plugins/omtesting/.libs/omtesting")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
 	queue.size="7" queue.workerThreads="1" queue.dequeueBatchSize="1" queue.timeoutEnqueue="30000")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 :msg, contains, "msgnum:" :omtesting:sleep 0 2000
@@ -81,7 +82,7 @@ export RSYSLOG_DEBUGLOG="$RSYSLOG_DYNNAME.debug.log"
 generate_conf
 add_conf '
 module(load="../plugins/omtesting/.libs/omtesting")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
 	queue.size="1" queue.workerThreads="1" queue.dequeueBatchSize="1" queue.timeoutEnqueue="100")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 :msg, contains, "00000900" :omtesting:sleep 2 0
@@ -108,7 +109,7 @@ rm -f "$RSYSLOG_OUT_LOG" "$RSYSLOG_DEBUGLOG"
 generate_conf
 add_conf '
 module(load="../plugins/omtesting/.libs/omtesting")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
 	queue.size="8" queue.workerThreads="1" queue.dequeueBatchSize="1"
 	queue.discardMark="1" queue.discardSeverity="0")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
@@ -139,7 +140,7 @@ cmp_exact
 rm -f "$RSYSLOG_OUT_LOG" "$RSYSLOG_DEBUGLOG"
 generate_conf
 add_conf '
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
 	queue.size="2" queue.workerThreads="1" queue.dequeueBatchSize="2"
 	queue.timeoutEnqueue="5000" queue.discardMark="2" queue.discardSeverity="4")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")

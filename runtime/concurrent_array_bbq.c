@@ -53,6 +53,8 @@
 
 #define BBQ_BLOCK_ITEMS 64U
 #define BBQ_LEASE_MAX 64U
+#define BBQ_DEDICATED_PRODUCERS 16U
+#define BBQ_FALLBACK_PRODUCERS 2U
 #define BBQ_CELL_STATE_MASK UINT64_C(3)
 #define BBQ_CELL_INDEX_SHIFT 2U
 
@@ -156,6 +158,9 @@ struct bbq_queue {
 #endif
     ca_dispose_fn dispose;
     void *dispose_user;
+#if defined(ENABLE_IMDIAG) || defined(CA_TESTING)
+    _Atomic size_t injected_prepare_failures;
+#endif
 #ifdef CA_ENABLE_DIAGNOSTICS
     _Atomic uint64_t capacity_attempts;
     _Atomic uint64_t capacity_failures;
@@ -523,6 +528,16 @@ static void record_pool_trim(struct bbq_queue *queue) {
     atomic_store_explicit(&queue->record_cursor, 0, memory_order_relaxed);
 }
 
+#if defined(ENABLE_IMDIAG) || defined(CA_TESTING)
+static int fail_injected_prepare(struct bbq_queue *queue) {
+    size_t failures = atomic_load_explicit(&queue->injected_prepare_failures, memory_order_relaxed);
+    while (failures != 0 &&
+           !atomic_compare_exchange_weak_explicit(&queue->injected_prepare_failures, &failures, failures - 1,
+                                                  memory_order_relaxed, memory_order_relaxed));
+    return failures != 0;
+}
+#endif
+
 static void physical_publish(struct bbq_queue *queue, struct bbq_record *record) {
     for (;;) {
         const uint64_t position = atomic_fetch_add_explicit(&queue->publish_position, 1, memory_order_relaxed);
@@ -818,6 +833,8 @@ static ca_status_t bbq_producer_register_common(ca_queue_t *base,
     producer_registry_unlock(queue);
     producer->queue = base;
     producer->private_state = state;
+    producer->lane_index = (uint32_t)(fallback ? BBQ_DEDICATED_PRODUCERS + stable_key % BBQ_FALLBACK_PRODUCERS
+                                               : (stable_key == 0 ? 0 : stable_key - 1) % BBQ_DEDICATED_PRODUCERS);
     producer->lane_generation = 1;
     atomic_init(&producer->outstanding, 0);
     producer->active = 1;
@@ -916,6 +933,12 @@ static ca_status_t bbq_prepare_reserved(ca_reservation_t *reservation) {
     if (!atomic_load_explicit(&queue->publishing, memory_order_acquire))
         status = CA_CLOSED;
     else {
+#if defined(ENABLE_IMDIAG) || defined(CA_TESTING)
+        if (fail_injected_prepare(queue)) {
+            operation_exit(queue);
+            return CA_NO_MEMORY;
+        }
+#endif
         reservation->prepared = 1;
         status = CA_OK;
     }
@@ -1173,6 +1196,12 @@ static ca_status_t bbq_builder_prepare(ca_builder_t *builder) {
     if (!atomic_load_explicit(&queue->publishing, memory_order_acquire))
         status = CA_CLOSED;
     else {
+#if defined(ENABLE_IMDIAG) || defined(CA_TESTING)
+        if (fail_injected_prepare(queue)) {
+            operation_exit(queue);
+            return CA_NO_MEMORY;
+        }
+#endif
         builder->prepared = 1;
         status = CA_OK;
     }
@@ -1545,6 +1574,7 @@ static size_t discard_producer(struct bbq_queue *queue, struct bbq_producer_stat
 
 static ca_status_t bbq_quiesce(ca_queue_t *base, ca_quiesce_mode_t mode, const struct timespec *deadline) {
     struct bbq_queue *queue = as_bbq(base);
+    size_t discarded;
     ca_status_t status = writer_begin(queue, deadline);
     if (status != CA_OK) return status;
     const unsigned was_accepting = atomic_load_explicit(&queue->accepting, memory_order_relaxed);
@@ -1581,7 +1611,7 @@ static ca_status_t bbq_quiesce(ca_queue_t *base, ca_quiesce_mode_t mode, const s
         sched_yield();
     }
     physical_discard(queue);
-    size_t discarded = discard_producer(queue, &queue->anonymous_producer);
+    discarded = discard_producer(queue, &queue->anonymous_producer);
     for (struct bbq_producer_state *producer = atomic_load_explicit(&queue->producers, memory_order_acquire);
          producer != NULL; producer = producer->next) {
         discarded += discard_producer(queue, producer);
@@ -1727,6 +1757,9 @@ static ca_status_t bbq_create(const ca_config_t *config, ca_queue_t **result) {
     atomic_init(&queue->live_waiters, 0);
     atomic_init(&queue->live_bindings, 0);
     atomic_init(&queue->binding_cursor, 0);
+#if defined(ENABLE_IMDIAG) || defined(CA_TESTING)
+    atomic_init(&queue->injected_prepare_failures, 0);
+#endif
     atomic_init(&queue->epoch, 0);
     atomic_init(&queue->capacity_epoch, 0);
     atomic_init(&queue->sleepers, 0);
@@ -1819,16 +1852,25 @@ static void bbq_diagnostics_read(const ca_queue_t *base, ca_diagnostics_t *diagn
 
 static size_t bbq_dedicated_lane_limit(const ca_queue_t *base) {
     (void)base;
-    return 16;
+    return BBQ_DEDICATED_PRODUCERS;
 }
 
 static size_t bbq_fallback_lane_count(const ca_queue_t *base) {
     (void)base;
-    return 2;
+    return BBQ_FALLBACK_PRODUCERS;
 }
 
 static size_t bbq_ready_ring_capacity(const ca_queue_t *base) {
     return ((const struct bbq_queue *)base)->block_count;
+}
+
+static void bbq_test_fail_next_chunk_allocations(ca_queue_t *base, size_t count) {
+#if defined(ENABLE_IMDIAG) || defined(CA_TESTING)
+    atomic_store_explicit(&as_bbq(base)->injected_prepare_failures, count, memory_order_release);
+#else
+    (void)base;
+    (void)count;
+#endif
 }
 
 #ifdef CA_TESTING
@@ -1985,4 +2027,5 @@ const struct ca_ops ca_bbq_ops = {
     .dedicated_lane_limit = bbq_dedicated_lane_limit,
     .fallback_lane_count = bbq_fallback_lane_count,
     .ready_ring_capacity = bbq_ready_ring_capacity,
+    .test_fail_next_chunk_allocations = bbq_test_fail_next_chunk_allocations,
 };

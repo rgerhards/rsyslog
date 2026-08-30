@@ -16,6 +16,7 @@ export NUMMESSAGES=2000
 DA_SCOPE=${DA_SCOPE:?DA_SCOPE must be main, ruleset, or action}
 DA_ENGINE=${DA_ENGINE:?DA_ENGINE must be auto or disk}
 DA_QUEUE_TYPE=${DA_QUEUE_TYPE:?DA_QUEUE_TYPE must be LinkedList, FixedArray, or ConcurrentArray}
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 SPOOL_DIR="${RSYSLOG_DYNNAME}.spool"
 
 wait_for_path() {
@@ -51,10 +52,10 @@ else
 fi
 
 if [ "$DA_QUEUE_TYPE" = ConcurrentArray ]; then
-	CORE_CONFIG='queue.concurrentCore="sparseLanes"'
+	CORE_CONFIG='queue.concurrentCore="'"$CA_CORE"'"'
 	ENGINE_GLOBAL=' executionEngine="reservedBatch"'
 	CA_MODULE='module(load="../plugins/omtesting/.libs/omtesting")'
-	CA_MAIN_CONFIG='main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes")'
+	CA_MAIN_CONFIG='main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'"$CA_CORE"'")'
 	CA_DELAY=':omtesting:sleep 0 2000'
 	SLOWDOWN_CONFIG=
 else

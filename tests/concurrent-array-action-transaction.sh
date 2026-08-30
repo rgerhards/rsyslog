@@ -17,6 +17,7 @@ if [ "$1" != "--case" ]; then
 	exit 0
 fi
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 require_plugin omprog
 count=${RSTB_CA_ACTION_TX_COUNT:-3}
 export RSYSLOG_TEST_CA_WORKER_GATE_QUEUE=source
@@ -32,7 +33,7 @@ if [ "$RSTB_CA_ACTION_TX_MODE" = ordering ]; then
 	export RSYSLOG_TEST_CA_ACTION_PUBLICATION_ACTION=queued-before-direct
 	export RSYSLOG_TEST_CA_ACTION_PUBLICATION_MARK="$PWD/$RSYSLOG_DYNNAME.action-published"
 	queued_action='action(name="queued-before-direct" type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt"
-         queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+         queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
          queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="3")'
 	expected_transcript='BEGIN
 MSG msgnum:00000000:
@@ -44,7 +45,7 @@ else
          binary="'$srcdir'/testsuites/concurrent-array-action-transaction-bin.py"
          template="outfmt" confirmMessages="on" useTransactions="on"
          beginTransactionMark="BEGIN TRANSACTION" commitTransactionMark="COMMIT TRANSACTION"
-         queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+         queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
          queue.size="'$count'" queue.workerThreads="1" queue.dequeueBatchSize="'$count'")'
 fi
 
@@ -54,10 +55,10 @@ global(executionEngine="reservedBatch")
 module(load="../plugins/omprog/.libs/omprog")
 module(load="../plugins/impstats/.libs/impstats" interval="1" log.syslog="off"
        resetCounters="off" log.file="'$STATSFILE'")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="'$((count + 1))'" queue.workerThreads="1" queue.dequeueBatchSize="'$count'")
 template(name="outfmt" type="string" string="%msg%\n")
-ruleset(name="source" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="source" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="'$((count + 1))'" queue.workerThreads="1" queue.dequeueBatchSize="'$count'") {
   if $msg contains "msgnum:0" then {
     '"$queued_action"'

@@ -118,8 +118,8 @@ struct queue_s {
         ca_queue_t *concurrentArray;
         int concurrentRequestedQueueType; /* diagnostic enum, zero if not requested */
         int concurrentActualQueueType; /* diagnostic enum after safe fallback */
-        int concurrentRequestedCore; /* 1=sparseLanes */
-        int concurrentActualCore; /* 0=legacy storage, 1=sparseLanes */
+        int concurrentRequestedCore; /* 0=legacy, 1=sparseLanes, 2=bbq */
+        int concurrentActualCore; /* 0=legacy, 1=sparseLanes, 2=bbq */
         ca_producer_t *concurrentProducers;
         size_t concurrentProducerCount;
         size_t concurrentDedicatedProducerCount;
@@ -326,6 +326,7 @@ rsRetVal qqueueConcurrentProducerTestResolve(qqueue_t *pThis,
                                              size_t *fallbackCount);
 #endif
 int qqueueSupportsConcurrentTarget(const qqueue_t *pThis);
+int qqueueHasSupportedConcurrentCore(const qqueue_t *pThis);
 rsRetVal qqueueConcurrentTargetCreate(qqueue_t *pThis, uint64_t producerIdentity, qConcurrentTarget_t **target);
 rsRetVal qqueueConcurrentTargetStage(
     qConcurrentTarget_t *target, smsg_t *msg, int tryOnly, int countArrival, int *consumed);

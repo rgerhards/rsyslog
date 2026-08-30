@@ -251,6 +251,36 @@ struct qConcurrentProducerMapEntry {
     _Atomic size_t producerIndexPlusOne;
 };
 
+enum qConcurrentCoreKind {
+    Q_CONCURRENT_CORE_LEGACY = 0,
+    Q_CONCURRENT_CORE_SPARSE_LANES = 1,
+    Q_CONCURRENT_CORE_BBQ = 2
+};
+
+static int concurrentArrayCoreFromName(const char *const name, ca_core_kind_t *const core) {
+    if (name == NULL) return Q_CONCURRENT_CORE_LEGACY;
+    if (!strcasecmp(name, "sparseLanes")) {
+        if (core != NULL) *core = CA_CORE_SPARSE_LANES;
+        return Q_CONCURRENT_CORE_SPARSE_LANES;
+    }
+    if (!strcasecmp(name, "bbq")) {
+        if (core != NULL) *core = CA_CORE_BBQ;
+        return Q_CONCURRENT_CORE_BBQ;
+    }
+    return Q_CONCURRENT_CORE_LEGACY;
+}
+
+static const char *concurrentArrayCoreName(const int core) {
+    switch (core) {
+        case Q_CONCURRENT_CORE_SPARSE_LANES:
+            return "sparseLanes";
+        case Q_CONCURRENT_CORE_BBQ:
+            return "bbq";
+        default:
+            return "legacy";
+    }
+}
+
 uint64_t qqueueConcurrentProducerIdentityAcquire(void) {
     const uint64_t identity = atomic_fetch_add_explicit(&concurrentSubmitKeyNext, 1, memory_order_relaxed);
     if (identity == 0) {
@@ -2481,7 +2511,10 @@ static size_t concurrentArrayProducerMapSize(const size_t dedicated) {
 }
 
 static rsRetVal qConstructConcurrentArray(qqueue_t *pThis) {
-    ca_config_t config = {.core = CA_CORE_SPARSE_LANES,
+    ca_core_kind_t core;
+    if (concurrentArrayCoreFromName(pThis->concurrentCore, &core) == Q_CONCURRENT_CORE_LEGACY)
+        return RS_RET_CONF_PARAM_INVLD;
+    ca_config_t config = {.core = core,
                           .capacity = (size_t)pThis->iMaxQueueSize,
                           .consumers = (unsigned)pThis->iNumWorkerThreads,
                           .dispose = concurrentArrayDispose,
@@ -4500,18 +4533,19 @@ rsRetVal qqueueStart(rsconf_t *cnf, qqueue_t *pThis) /* this is the Construction
     if (pThis->qType == QUEUETYPE_CONCURRENT_ARRAY && pThis->concurrentRequestedQueueType == 0) {
         pThis->concurrentRequestedQueueType = QUEUETYPE_CONCURRENT_ARRAY;
         pThis->concurrentActualQueueType = QUEUETYPE_CONCURRENT_ARRAY;
-        pThis->concurrentRequestedCore = 1;
-        pThis->concurrentActualCore = 1;
+        pThis->concurrentRequestedCore = concurrentArrayCoreFromName(pThis->concurrentCore, NULL);
+        pThis->concurrentActualCore = pThis->concurrentRequestedCore;
     }
     if (pThis->concurrentRequestedQueueType == QUEUETYPE_CONCURRENT_ARRAY)
-        LogMsg(0, RS_RET_OK, LOG_INFO, "%s: requested queue=ConcurrentArray core=sparseLanes; actual queue=%s core=%s",
-               obj.GetName((obj_t *)pThis),
+        LogMsg(0, RS_RET_OK, LOG_INFO, "%s: requested queue=ConcurrentArray core=%s; actual queue=%s core=%s",
+               obj.GetName((obj_t *)pThis), concurrentArrayCoreName(pThis->concurrentRequestedCore),
                pThis->concurrentActualQueueType == QUEUETYPE_CONCURRENT_ARRAY ? "ConcurrentArray" : "FixedArray",
-               pThis->concurrentActualCore == 1 ? "sparseLanes" : "legacy");
+               concurrentArrayCoreName(pThis->concurrentActualCore));
 
     if (pThis->qType == QUEUETYPE_CONCURRENT_ARRAY &&
-        (pThis->concurrentCore == NULL || strcasecmp(pThis->concurrentCore, "sparseLanes"))) {
-        LogError(0, RS_RET_CONF_PARAM_INVLD, "%s: ConcurrentArray requires the explicit supported core 'sparseLanes'",
+        concurrentArrayCoreFromName(pThis->concurrentCore, NULL) == Q_CONCURRENT_CORE_LEGACY) {
+        LogError(0, RS_RET_CONF_PARAM_INVLD,
+                 "%s: ConcurrentArray requires the explicit supported core 'sparseLanes' or 'bbq'",
                  obj.GetName((obj_t *)pThis));
         ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
     }
@@ -5565,10 +5599,14 @@ struct qConcurrentTarget_s {
     ca_credit_lease_t lease;
 };
 
+int qqueueHasSupportedConcurrentCore(const qqueue_t *const pThis) {
+    return pThis != NULL && pThis->qType == QUEUETYPE_CONCURRENT_ARRAY && pThis->concurrentCore != NULL &&
+           concurrentArrayCoreFromName(pThis->concurrentCore, NULL) != Q_CONCURRENT_CORE_LEGACY;
+}
+
 int qqueueSupportsConcurrentTarget(const qqueue_t *const pThis) {
     return pThis != NULL && pThis->qType == QUEUETYPE_CONCURRENT_ARRAY && pThis->concurrentArray != NULL &&
-           pThis->concurrentCore != NULL && !strcasecmp(pThis->concurrentCore, "sparseLanes") &&
-           pThis->iSmpInterval == 0 && pThis->iMinDeqBatchSize == 0;
+           qqueueHasSupportedConcurrentCore(pThis) && pThis->iSmpInterval == 0 && pThis->iMinDeqBatchSize == 0;
 }
 
 static rsRetVal concurrentTargetActivate(qConcurrentTarget_t *const target, ca_lifecycle_scope_t *const scope) {
@@ -6439,15 +6477,16 @@ rsRetVal qqueueApplyCnfParam(qqueue_t *pThis, struct nvlst *lst) {
     if (pThis->qType == QUEUETYPE_CONCURRENT_ARRAY) {
         pThis->concurrentRequestedQueueType = QUEUETYPE_CONCURRENT_ARRAY;
         pThis->concurrentActualQueueType = QUEUETYPE_CONCURRENT_ARRAY;
-        pThis->concurrentRequestedCore = 1;
-        pThis->concurrentActualCore = 1;
+        pThis->concurrentRequestedCore = concurrentArrayCoreFromName(pThis->concurrentCore, NULL);
+        pThis->concurrentActualCore = pThis->concurrentRequestedCore;
         if (pThis->concurrentCore == NULL) {
-            parser_errmsg("queue.type=\"ConcurrentArray\" requires queue.concurrentCore=\"sparseLanes\"");
+            parser_errmsg("queue.type=\"ConcurrentArray\" requires queue.concurrentCore=\"sparseLanes\" or \"bbq\"");
             ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
         }
-        if (strcasecmp(pThis->concurrentCore, "sparseLanes")) {
-            parser_errmsg("queue.concurrentCore: unsupported ConcurrentArray core '%s'; expected 'sparseLanes'",
-                          pThis->concurrentCore);
+        if (pThis->concurrentRequestedCore == Q_CONCURRENT_CORE_LEGACY) {
+            parser_errmsg(
+                "queue.concurrentCore: unsupported ConcurrentArray core '%s'; expected 'sparseLanes' or 'bbq'",
+                pThis->concurrentCore);
             ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
         }
         if ((concurrentDiskParamSet && pThis->pszFilePrefix == NULL) || concurrentMinDequeueSet ||
@@ -6457,12 +6496,12 @@ rsRetVal qqueueApplyCnfParam(qqueue_t *pThis, struct nvlst *lst) {
                                        : concurrentRateParamSet ? "dequeue rate/time controls"
                                                                 : "disk-assistance parameters without queue.filename";
             LogMsg(0, RS_RET_OK_WARN, LOG_WARNING,
-                   "queue '%s': requested ConcurrentArray/sparseLanes does not support %s; using the "
+                   "queue '%s': requested ConcurrentArray/%s does not support %s; using the "
                    "semantically compatible FixedArray queue instead",
-                   obj.GetName((obj_t *)pThis), reason);
+                   obj.GetName((obj_t *)pThis), pThis->concurrentCore, reason);
             pThis->qType = QUEUETYPE_FIXED_ARRAY;
             pThis->concurrentActualQueueType = QUEUETYPE_FIXED_ARRAY;
-            pThis->concurrentActualCore = 0;
+            pThis->concurrentActualCore = Q_CONCURRENT_CORE_LEGACY;
             free(pThis->concurrentCore);
             pThis->concurrentCore = NULL;
             /* The warning above deliberately consumes disk-child selectors

@@ -15,13 +15,14 @@
 export NUMMESSAGES=2000
 DA_ENGINE=${DA_ENGINE:?DA_ENGINE must be auto or disk}
 DA_QUEUE_TYPE=${DA_QUEUE_TYPE:?DA_QUEUE_TYPE must be LinkedList, FixedArray, or ConcurrentArray}
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 SPOOL_DIR="${RSYSLOG_DYNNAME}.spool"
 idle_config=
 if [ "$DA_ENGINE" = auto ]; then
 	idle_config='queue.diskQueueIdleTimeout="-1"'
 fi
 if [ "$DA_QUEUE_TYPE" = ConcurrentArray ]; then
-	core_config='queue.concurrentCore="sparseLanes"'
+	core_config='queue.concurrentCore="'"$CA_CORE"'"'
 	global_engine=' executionEngine="reservedBatch"'
 	dequeue_slowdown=
 	consumer_delay=':omtesting:sleep 0 1000'

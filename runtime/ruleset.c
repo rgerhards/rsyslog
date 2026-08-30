@@ -155,9 +155,7 @@ finalize_it:
 }
 
 static int reservedBatchQueueConfigured(const qqueue_t *const queue) {
-    return queue != NULL && queue->qType == QUEUETYPE_CONCURRENT_ARRAY && queue->concurrentCore != NULL &&
-           !strcasecmp(queue->concurrentCore, "sparseLanes") && queue->iSmpInterval == 0 &&
-           queue->iMinDeqBatchSize == 0;
+    return qqueueHasSupportedConcurrentCore(queue) && queue->iSmpInterval == 0 && queue->iMinDeqBatchSize == 0;
 }
 
 DEFFUNC_llExecFunc(doValidateReservedBatchRuleset) {
@@ -168,7 +166,7 @@ DEFFUNC_llExecFunc(doValidateReservedBatchRuleset) {
     if (reservedBatchQueueConfigured(ruleset->pQueue)) return RS_RET_OK;
     parser_errmsg(
         "ruleset '%s': global executionEngine=reservedBatch requires queued targets to use "
-        "queue.type='ConcurrentArray' and queue.concurrentCore='sparseLanes' without sampling or "
+        "queue.type='ConcurrentArray' and queue.concurrentCore='sparseLanes' or 'bbq' without sampling or "
         "minDequeueBatchSize",
         ruleset->pszName);
     return RS_RET_PARAM_ERROR;
@@ -191,7 +189,8 @@ static rsRetVal validateReservedBatchAction(void *const data, void *const param)
             validation->status = RS_RET_PARAM_ERROR;
         } else if (!reservedBatchQueueConfigured(action->pQueue)) {
             parser_errmsg(
-                "action '%s': queued action ConcurrentArray requires queue.concurrentCore='sparseLanes' without "
+                "action '%s': queued action ConcurrentArray requires queue.concurrentCore='sparseLanes' or 'bbq' "
+                "without "
                 "sampling or minDequeueBatchSize",
                 action->pszName);
             validation->status = RS_RET_PARAM_ERROR;
@@ -199,7 +198,7 @@ static rsRetVal validateReservedBatchAction(void *const data, void *const param)
     } else if (validation->conf->executionEngine == 1) {
         parser_errmsg(
             "action '%s': global executionEngine=reservedBatch requires queued actions to use "
-            "queue.type='ConcurrentArray' and queue.concurrentCore='sparseLanes'",
+            "queue.type='ConcurrentArray' and queue.concurrentCore='sparseLanes' or 'bbq'",
             action->pszName);
         validation->status = RS_RET_PARAM_ERROR;
     }
@@ -218,7 +217,7 @@ rsRetVal rulesetValidateMainQueue(rsconf_t *const conf) {
     if (reservedBatchQueueConfigured(conf->pMsgQueue)) return RS_RET_OK;
     parser_errmsg(
         "global executionEngine=reservedBatch requires the Main queue to use queue.type='ConcurrentArray' and "
-        "queue.concurrentCore='sparseLanes'");
+        "queue.concurrentCore='sparseLanes' or 'bbq'");
     return RS_RET_PARAM_ERROR;
 }
 

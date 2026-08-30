@@ -1,5 +1,5 @@
 #!/bin/bash
-# Exercise deterministic ownership failures for explicit sparseLanes action
+# Exercise deterministic ownership failures for explicit ConcurrentArray action
 # queues with both action.copyMsg modes. An early copy/allocation failure must
 # leave the source RDY and deliver it exactly once after the one-shot fault.
 # A late failure after the first action was staged must publish that accepted
@@ -27,24 +27,25 @@ if [ "$1" != "--case" ]; then
 	exit 0
 fi
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 
 if [ "$RSTB_CA_ACTION_FAULT" = late ]; then
 	actions='action(name="first" type="omfile" file="'$RSYSLOG_OUT_LOG'.first" template="outfmt"
        action.copyMsg="'$RSTB_CA_ACTION_COPY'" queue.type="ConcurrentArray"
-       queue.concurrentCore="sparseLanes" queue.size="16" queue.workerThreads="1")
+       queue.concurrentCore="'$CA_CORE'" queue.size="16" queue.workerThreads="1")
   action(name="second" type="omfile" file="'$RSYSLOG_OUT_LOG'.second" template="outfmt"
        action.copyMsg="'$RSTB_CA_ACTION_COPY'" queue.type="ConcurrentArray"
-       queue.concurrentCore="sparseLanes" queue.size="16" queue.workerThreads="1")'
+       queue.concurrentCore="'$CA_CORE'" queue.size="16" queue.workerThreads="1")'
 else
 	actions='action(name="only" type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt"
        action.copyMsg="'$RSTB_CA_ACTION_COPY'" queue.type="ConcurrentArray"
-       queue.concurrentCore="sparseLanes" queue.size="16" queue.workerThreads="1")'
+       queue.concurrentCore="'$CA_CORE'" queue.size="16" queue.workerThreads="1")'
 fi
 
 generate_conf
 add_conf '
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="32" queue.workerThreads="1" queue.dequeueBatchSize="8")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 if $msg contains "msgnum:00000000" then {

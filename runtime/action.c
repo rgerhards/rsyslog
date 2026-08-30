@@ -135,9 +135,7 @@ static rsRetVal actionTestConfigureMessageFault(action_t *const action,
 
 static rsRetVal actionConfigureConcurrentTestHooks(action_t *const action) {
     DEFiRet;
-    if (action->pQueue == NULL || action->pQueue->qType != QUEUETYPE_CONCURRENT_ARRAY ||
-        action->pQueue->concurrentCore == NULL || strcasecmp(action->pQueue->concurrentCore, "sparseLanes"))
-        FINALIZE;
+    if (!qqueueHasSupportedConcurrentCore(action->pQueue)) FINALIZE;
     CHKiRet(actionTestConfigureMessageFault(
         action, "RSYSLOG_TEST_CA_ACTION_COPY_FAIL", "RSYSLOG_TEST_CA_ACTION_COPY_FAIL_MESSAGE",
         &action->concurrentTestCopyFailMessage, &action->concurrentTestCopyFailRemaining));

@@ -57,6 +57,8 @@ TESTS_RSCRIPT_OBJECT_STRINGS = rscript-object-string-escapes.sh
 EXTRA_DIST += $(TESTS_RSCRIPT_OBJECT_STRINGS)
 
 TESTS_CONCURRENT_ARRAY_QUEUE = concurrent-array-config.sh concurrent-array-queue.sh concurrent-array-full.sh \
+	concurrent-array-bbq-queue.sh concurrent-array-bbq-routing.sh concurrent-array-bbq-action.sh \
+	concurrent-array-bbq-da.sh \
 	concurrent-array-shutdown.sh concurrent-array-oom.sh concurrent-array-reserved-batch.sh \
 	concurrent-array-reserved-pressure.sh concurrent-array-native-multi.sh concurrent-array-routing-identity.sh \
 	concurrent-array-routing-discard.sh concurrent-array-routing-retry.sh concurrent-array-routing-subsets.sh \
@@ -64,7 +66,8 @@ TESTS_CONCURRENT_ARRAY_QUEUE = concurrent-array-config.sh concurrent-array-queue
 	concurrent-array-action-retry.sh concurrent-array-action-shutdown.sh concurrent-array-action-transaction.sh \
 	concurrent-array-action-suspend.sh concurrent-array-da.sh concurrent-array-da-persist.sh \
 	concurrent-array-da-maxdiskspace.sh
-TESTS_CONCURRENT_ARRAY_QUEUE_LIBYAML = yaml-concurrent-array-queue.sh yaml-concurrent-array-da.sh
+TESTS_CONCURRENT_ARRAY_QUEUE_LIBYAML = yaml-concurrent-array-queue.sh yaml-concurrent-array-da.sh \
+	yaml-concurrent-array-bbq.sh
 EXTRA_DIST += $(TESTS_CONCURRENT_ARRAY_QUEUE) $(TESTS_CONCURRENT_ARRAY_QUEUE_LIBYAML)
 EXTRA_DIST += testsuites/concurrent-array-action-transaction-bin.py
 EXTRA_DIST += testsuites/concurrent-array-action-accept-bin.py

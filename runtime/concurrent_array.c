@@ -192,3 +192,7 @@ size_t ca_fallback_lane_count(const ca_queue_t *queue) {
 size_t ca_ready_ring_capacity(const ca_queue_t *queue) {
     return queue == NULL ? 0 : queue->ops->ready_ring_capacity(queue);
 }
+
+void ca_test_fail_next_chunk_allocations(ca_queue_t *queue, size_t count) {
+    if (queue != NULL) queue->ops->test_fail_next_chunk_allocations(queue, count);
+}

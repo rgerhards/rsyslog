@@ -4,10 +4,11 @@
 # both targets proves pressure handling publishes every prior local bucket
 # before blocking; flushing only the pressured bucket would deadlock or drop.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 generate_conf
 add_conf '
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="16" queue.workerThreads="2" queue.workerThreadMinimumMessages="1"
            queue.dequeueBatchSize="1")
 module(load="../plugins/omtesting/.libs/omtesting")
@@ -15,11 +16,11 @@ template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 ruleset(name="barrier") {
   :msg, contains, "msgnum:" :omtesting:barrier_error 2
 }
-ruleset(name="target_a" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target_a" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="1" queue.timeoutEnqueue="5000") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'.a" template="outfmt")
 }
-ruleset(name="target_b" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target_b" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="1" queue.timeoutEnqueue="5000") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'.b" template="outfmt")
 }

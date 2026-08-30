@@ -1,6 +1,6 @@
 #!/bin/bash
 # Exercise action suspension/recovery in fast-first and slow-first branch order.
-# A Direct omprog fsyncs every accepted ID before ACK; a sparseLanes omfile
+# A Direct omprog fsyncs every accepted ID before ACK; a ConcurrentArray omfile
 # action is suspended by a missing parent directory until impstats reports a
 # real retry. After creating the directory, every durably accepted ID must be
 # present in the recovered output and no unaccepted/malformed ID may appear.
@@ -19,6 +19,7 @@ if [ "$1" != "--case" ]; then
 	exit 0
 fi
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 require_plugin omprog
 export NUMMESSAGES=32
 export STATSFILE="$RSYSLOG_DYNNAME.stats"
@@ -31,7 +32,7 @@ accept_action='action(name="accept" type="omprog"
        template="outfmt" confirmMessages="on" queue.type="Direct")'
 slow_action='action(name="slow" type="omfile" file="'$slow_output'" template="outfmt" createDirs="off"
        action.resumeRetryCount="-1" action.resumeInterval="1"
-       queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+       queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
        queue.size="8" queue.dequeueBatchSize="4" queue.workerThreads="1"
        queue.timeoutEnqueue="30000")'
 if [ "$RSTB_CA_ACTION_ORDER" = fast-first ]; then
@@ -48,10 +49,10 @@ global(executionEngine="reservedBatch")
 module(load="../plugins/omprog/.libs/omprog")
 module(load="../plugins/impstats/.libs/impstats" interval="1" log.syslog="off"
        resetCounters="off" log.file="'$STATSFILE'")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="64" queue.workerThreads="1" queue.dequeueBatchSize="8")
 template(name="outfmt" type="string" string="%msg%\n")
-ruleset(name="source" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="source" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="64" queue.workerThreads="1" queue.dequeueBatchSize="8") {
   if $msg contains "msgnum:" then {
     '"$actions"'

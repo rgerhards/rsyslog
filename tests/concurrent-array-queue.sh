@@ -1,5 +1,5 @@
 #!/bin/bash
-# Verify the opt-in ConcurrentArray main queue with one, eight, and sixteen
+# Verify either opt-in ConcurrentArray core with one, eight, and sixteen
 # workers. Each cycle publishes a burst, waits until it is fully observed, then
 # publishes one independent tail message after the workers have gone idle. The
 # oracle begins with exact unsorted single-submit and MultiEnq sequences, then
@@ -7,6 +7,7 @@
 # producer-lane reordering, lost ready tokens, multiplicity errors, and an
 # empty-to-nonempty lost wake.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 require_plugin imtcp
 require_plugin omtesting
 
@@ -36,7 +37,7 @@ generate_conf
 add_conf '
 module(load="../plugins/omtesting/.libs/omtesting")
 module(load="../plugins/imtcp/.libs/imtcp")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
 	queue.size="128" queue.workerThreads="1" queue.dequeueBatchSize="128")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 :msg, contains, "msgnum:00000000:" :omtesting:sleep 1 0
@@ -71,7 +72,7 @@ export RSYSLOG_TEST_CA_MULTI_COMMAND_FILE="$RSYSLOG_DYNNAME.ca-producer-map.comm
 printf 'map 10000 4096\n' >"$RSYSLOG_TEST_CA_MULTI_COMMAND_FILE"
 generate_conf
 add_conf '
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
 	queue.size="128" queue.workerThreads="1" queue.dequeueBatchSize="32")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
 :msg, contains, "msgnum:" action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
@@ -95,7 +96,7 @@ expected=24
 for workers in 1 8 16; do
 	generate_conf
 	add_conf '
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
 	queue.size="4096" queue.dequeueBatchSize="128"
 	queue.workerThreads="'$workers'" queue.workerThreadMinimumMessages="1")
 
@@ -122,9 +123,9 @@ done
 generate_conf
 add_conf '
 module(load="../plugins/imtcp/.libs/imtcp")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes")
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
-ruleset(name="named" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="named" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
 	queue.workerThreads="8" queue.workerThreadMinimumMessages="1") {
 	action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
 }

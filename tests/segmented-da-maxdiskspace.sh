@@ -12,9 +12,10 @@
 require_plugin impstats
 export NUMMESSAGES=2000
 DA_QUEUE_TYPE=${DA_QUEUE_TYPE:-LinkedList}
+CA_CORE_NAME=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 STATS_FILE="$PWD/${RSYSLOG_DYNNAME}.stats.log"
 if [ "$DA_QUEUE_TYPE" = ConcurrentArray ]; then
-	CA_CORE='queue.concurrentCore="sparseLanes"'
+	CA_CORE='queue.concurrentCore="'"$CA_CORE_NAME"'"'
 	CA_ENGINE=' executionEngine="reservedBatch"'
 else
 	CA_CORE=

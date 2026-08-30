@@ -7,18 +7,19 @@
 # retain every exact output. Shutdown success additionally proves every
 # batch-scoped target binding was released before the source WTI became idle.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 export RSYSLOG_TEST_CA_TARGET_FAIL_CHUNK_ON_MESSAGE="msgnum:00000001:"
 generate_conf
 add_conf '
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="256" queue.workerThreads="2" queue.workerThreadMinimumMessages="1")
 template(name="snap" type="string" string="%msg:F,58:2%|%$!snap%\n")
-ruleset(name="target_a" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target_a" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="128" queue.workerThreads="2" queue.workerThreadMinimumMessages="1") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'.a" template="snap")
 }
-ruleset(name="target_b" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target_b" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="128" queue.workerThreads="2" queue.workerThreadMinimumMessages="1") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'.b" template="snap")
 }

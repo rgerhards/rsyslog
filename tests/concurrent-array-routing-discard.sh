@@ -5,6 +5,7 @@
 # diagnostic, and clean teardown prove the inactive empty wrapper is a no-op
 # rather than an INVALID publication/retry loop or stale lifecycle binding.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 require_plugin omtesting
 
 export RS_REDIR=">$RSYSLOG_DYNNAME.rsyslog.log 2>&1"
@@ -16,10 +17,10 @@ generate_conf
 add_conf '
 module(load="../plugins/omtesting/.libs/omtesting")
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="1")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
-ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="8" queue.workerThreads="1" queue.dequeueBatchSize="1"
         queue.discardMark="1" queue.discardSeverity="0") {
   :msg, contains, "00000900" :omtesting:sleep 3 0

@@ -240,12 +240,10 @@ size_t ca_dedicated_lane_limit(const ca_queue_t *queue);
 size_t ca_fallback_lane_count(const ca_queue_t *queue);
 size_t ca_ready_ring_capacity(const ca_queue_t *queue);
 
-#if defined(ENABLE_IMDIAG) || defined(CA_TESTING)
-/* Compiled-out deterministic fault injection for qqueue ownership tests. It
- * rejects the next count chunk acquisitions, including pool reuse, so the
- * ownership oracle does not depend on earlier lane history. */
+/* Deterministic fault injection for qqueue ownership tests. It rejects the
+ * next count candidate-specific preparation allocations; production callers
+ * never arm it. */
 void ca_test_fail_next_chunk_allocations(ca_queue_t *queue, size_t count);
-#endif
 
 #ifdef CA_TESTING
 /* Deterministic white-box pauses used only by the standalone unit target. */

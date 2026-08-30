@@ -44,6 +44,7 @@ struct ca_ops {
     size_t (*dedicated_lane_limit)(const ca_queue_t *);
     size_t (*fallback_lane_count)(const ca_queue_t *);
     size_t (*ready_ring_capacity)(const ca_queue_t *);
+    void (*test_fail_next_chunk_allocations)(ca_queue_t *, size_t);
 };
 
 struct ca_queue {

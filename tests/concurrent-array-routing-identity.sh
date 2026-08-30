@@ -1,6 +1,6 @@
 #!/bin/bash
 # Verify that native MultiSubmit and a reservedBatch source WTI use distinct
-# process-wide producer identities while targeting one sparseLanes queue. The
+# process-wide producer identities while targeting one ConcurrentArray queue.
 # native 128-item span is injected by the imdiag-compiled, startup-only tool
 # hook; the routed source then uses its independently allocated WTI identity.
 # The first phase uses one target worker, so exact order within each producer
@@ -10,6 +10,7 @@
 # and clean teardown are checked in both phases; waits observe debug events,
 # not elapsed time.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 require_plugin omtesting
 
 export RS_REDIR=">$RSYSLOG_DYNNAME.rsyslog.log 2>&1"
@@ -21,10 +22,10 @@ generate_conf
 add_conf '
 module(load="../plugins/omtesting/.libs/omtesting")
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="512" queue.workerThreads="1" queue.dequeueBatchSize="32")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
-ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="512" queue.workerThreads="1" queue.dequeueBatchSize="17") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
 }
@@ -71,10 +72,10 @@ generate_conf
 add_conf '
 module(load="../plugins/omtesting/.libs/omtesting")
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="512" queue.workerThreads="1" queue.dequeueBatchSize="32")
 template(name="outfmt" type="string" string="%msg:F,58:2%\n")
-ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+ruleset(name="target" queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
         queue.size="512" queue.workerThreads="2" queue.dequeueBatchSize="17") {
   action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
 }

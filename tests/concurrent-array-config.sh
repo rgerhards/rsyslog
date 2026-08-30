@@ -64,12 +64,26 @@ reserved_start_error() {
 
 generate_conf
 add_conf '
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="SpArSeLaNeS" queue.workerThreads="16")
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="BbQ" queue.workerThreads="16")
 ruleset(name="queued" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes") {
 	action(type="omfile" file="'$RSYSLOG_OUT_LOG'")
 }
 '
 validate_ok positive
+
+# Actual activation must report both the requested and selected core. This is
+# the startup oracle that a recognized BBQ selector did not silently fall back
+# to a legacy queue after configuration validation.
+generate_conf
+add_conf '
+global(executionEngine="reservedBatch")
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="bbq")
+'
+startup
+shutdown_when_empty
+wait_shutdown
+content_check 'requested queue=ConcurrentArray core=bbq; actual queue=ConcurrentArray core=bbq' \
+	"$RSYSLOG_DYNNAME.started"
 
 generate_conf
 add_conf '
@@ -83,8 +97,8 @@ validate_ok legacy-memory
 generate_conf
 add_conf '
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes")
-ruleset(name="reserved-target" queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes") {
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="bbq")
+ruleset(name="reserved-target" queue.type="ConcurrentArray" queue.concurrentCore="bbq") {
 	action(type="omfile" file="'$RSYSLOG_OUT_LOG'")
 }
 '
@@ -125,14 +139,14 @@ add_conf '
 global(abortOnUncleanConfig="on")
 main_queue(queue.type="ConcurrentArray")
 '
-validate_error missing-core 'requires queue.concurrentCore="sparseLanes"'
+validate_error missing-core 'requires queue.concurrentCore="sparseLanes" or "bbq"'
 
 generate_conf
 add_conf '
 global(abortOnUncleanConfig="on")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="bbq")
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="notACore")
 '
-validate_error unknown-core "unsupported ConcurrentArray core 'bbq'"
+validate_error unknown-core "unsupported ConcurrentArray core 'notACore'"
 
 generate_conf
 add_conf '
@@ -192,13 +206,13 @@ generate_conf
 add_conf '
 main_queue(queue.type="ConcurrentArray")
 '
-validate_error missing-core-no-abort 'requires queue.concurrentCore="sparseLanes"'
+validate_error missing-core-no-abort 'requires queue.concurrentCore="sparseLanes" or "bbq"'
 
 generate_conf
 add_conf '
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="bbq")
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="notACore")
 '
-validate_error unknown-core-no-abort "unsupported ConcurrentArray core 'bbq'"
+validate_error unknown-core-no-abort "unsupported ConcurrentArray core 'notACore'"
 
 generate_conf
 add_conf '
@@ -212,7 +226,7 @@ validate_ok disk-assisted-no-abort
 generate_conf
 add_conf '
 $MainMsgQueueType ConcurrentArray
-$MainMsgQueueConcurrentCore sparseLanes
+$MainMsgQueueConcurrentCore bbq
 $MainMsgQueueFilename legacy-ca
 '
 validate_ok legacy-concurrent-da

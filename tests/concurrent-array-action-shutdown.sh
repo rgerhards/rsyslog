@@ -6,6 +6,7 @@
 # core without leaving a live binding. A one-second action-completion timeout
 # bounds the deliberate blocked callback; no fixed sleep controls the race.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 export RSYSLOG_TEST_CA_ACTION_CLAIM=held-action
 export RSYSLOG_TEST_CA_ACTION_CLAIM_GATE="$RSYSLOG_DYNNAME.claim-gate"
 export RSYSLOG_TEST_CA_ACTION_CLAIM_HELD="$RSYSLOG_DYNNAME.claim-held"
@@ -14,11 +15,11 @@ export RSYSLOG_TEST_CA_ACTION_CLAIM_HELD="$RSYSLOG_DYNNAME.claim-held"
 generate_conf
 add_conf '
 global(executionEngine="reservedBatch")
-main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
            queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="4")
 if $msg contains "msgnum:" then
   action(name="held-action" type="omfile" file="'$RSYSLOG_OUT_LOG'"
-         queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+         queue.type="ConcurrentArray" queue.concurrentCore="'$CA_CORE'"
          queue.size="16" queue.workerThreads="1" queue.dequeueBatchSize="1"
          queue.timeoutActionCompletion="1000" queue.timeoutShutdown="2000")
 '

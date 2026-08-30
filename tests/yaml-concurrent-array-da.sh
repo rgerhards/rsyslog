@@ -1,8 +1,9 @@
 #!/bin/bash
-# Verify YAML configures the same sparseLanes DA parent as RainerScript.  A
+# Verify YAML configures the selected ConcurrentArray DA parent.  A
 # slowed Main consumer forces an automatic segmented child to materialize;
 # the marker plus exact unordered IDs prove frontend parity and ownership.
 . ${srcdir:=.}/diag.sh init
+CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 require_plugin imtcp
 require_plugin omtesting
 export NUMMESSAGES=128
@@ -22,7 +23,7 @@ add_yaml_conf '  executionEngine: reservedBatch'
 add_yaml_conf '  workDirectory: "'${SPOOL_DIR}'"'
 add_yaml_conf 'mainqueue:'
 add_yaml_conf '  queue.type: ConcurrentArray'
-add_yaml_conf '  queue.concurrentCore: sparseLanes'
+add_yaml_conf '  queue.concurrentCore: '"$CA_CORE"
 add_yaml_conf '  queue.filename: yaml-ca'
 add_yaml_conf '  queue.size: 32'
 add_yaml_conf '  queue.highWatermark: 8'
