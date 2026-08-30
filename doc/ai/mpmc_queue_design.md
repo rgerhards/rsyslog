@@ -1026,3 +1026,48 @@ allowing 8,192- and 65,536-message callback transcripts without
 action builder commits and proves that visibility precedes a Direct COMMIT.
 No plugin source or callback ABI, `smsg_t`, public `multi_submit_t`, or disk
 format changes are part of this checkpoint.
+
+## 2026-08-30 Checkpoint 6 disk assistance and configuration
+
+`ConcurrentArray` now supports the existing disk-assisted model when a
+`queue.filename` is configured.  The sparseLanes memory parent and the classic
+or segmented disk child remain independent queues.  The normal consumers and
+the single spill worker may therefore claim different parent ranges
+concurrently, and no merged memory/disk output ordering is promised.  The
+spill worker adds a reference and submits it through the unchanged child queue
+API without holding a sparseLanes lane, ready-ring, or capacity lock during
+serialization or I/O.  Only child-accepted records complete in the parent;
+child pressure or error leaves the unaccepted suffix RDY and runnable.
+
+High- and low-watermark control remains the established DA policy.  Reaching
+the high watermark advises the spill pool, which stops only after the parent
+falls to the low watermark.  Normal parent consumers continue independently.
+During orderly shutdown the regular consumers first quiesce; when
+`queue.saveOnShutdown="on"`, the same spill path transfers the remaining
+memory work before the unchanged child persists.  An ungraceful crash still
+protects only records already durable in that child.  Classic and segmented
+disk formats, checkpointing, encryption, corruption handling, max-disk-space
+behavior, and replay code are unchanged.
+
+Startup creates the DA transfer pool and child transactionally.  If a later
+step fails, rollback destroys the partial transfer pool and child before the
+regular pool, sparse core, and parent synchronization state.  An
+`ENABLE_IMDIAG` fault after child construction proves that the legacy engine's
+intentional Direct fallback can reuse the queue object and shut down cleanly.
+ReservedBatch retains its stricter topology rule and never falls back to a
+non-reservable queue behind compiled asynchronous routing.
+
+Modern RainerScript and YAML support the same explicit
+`queue.type="ConcurrentArray"`, `queue.concurrentCore="sparseLanes"`, and DA
+parameters.  Legacy Main-queue syntax adds `$MainMsgQueueConcurrentCore` beside
+`$MainMsgQueueType ConcurrentArray`; the core is never inferred.  Missing or
+unknown core names remain configuration errors.  Known ConcurrentArray
+requests with a semantically compatible but unsupported memory-only option
+warn and select FixedArray.  Startup diagnostics and immutable queue statistics
+record requested and actual queue/core IDs, so fallback is observable.
+
+DA recovery tests use an unordered accepted-set oracle with anchored IDs and
+explicit multiplicity.  This is intentional: a memory parent and disk child
+have never provided unified ordering while DA is active.  Duplicates remain
+permitted only at the documented interrupted-claim/replay boundary; malformed,
+out-of-range, or missing accepted IDs fail the oracle.

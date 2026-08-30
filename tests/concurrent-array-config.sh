@@ -1,11 +1,10 @@
 #!/bin/bash
 # Verify the modern ConcurrentArray configuration contract. The positive
 # oracle is -N1 acceptance for explicit Main and named ruleset queues plus the
-# unchanged FixedArray/LinkedList defaults. Missing/unknown cores and currently
-# unsupported disk/watermark, sampling, and minimum-dequeue combinations must
-# fail under abortOnUncleanConfig with their precise diagnostics. Separate
-# no-abort validation cases prove Main's late queue construction propagates
-# the same errors rather than silently selecting sparseLanes.
+# unchanged FixedArray/LinkedList defaults. Missing/unknown cores fail;
+# semantically compatible unsupported options warn and select FixedArray.
+# Disk assistance with a filename remains ConcurrentArray. Separate no-abort
+# cases prove Main's late queue construction never selects a core implicitly.
 . ${srcdir:=.}/diag.sh init
 
 validate_ok() {
@@ -28,6 +27,21 @@ validate_error() {
 		cat "$out"
 		error_exit 1 "missing $label diagnostic: $diagnostic"
 	}
+}
+
+validate_fallback() {
+	local label="$1"
+	local reason="$2"
+	local out="${RSYSLOG_DYNNAME}.${label}.log"
+	if ! ../tools/rsyslogd -C -N1 -f"${TESTCONF_NM}.conf" -M../runtime/.libs:../.libs >"$out" 2>&1; then
+		cat "$out"
+		error_exit 1 "expected $label safe fallback configuration to pass"
+	fi
+	grep -Fq "using the semantically compatible FixedArray queue instead" "$out" || {
+		cat "$out"
+		error_exit 1 "missing $label FixedArray fallback diagnostic"
+	}
+	grep -Fq "$reason" "$out" || error_exit 1 "missing $label fallback reason: $reason"
 }
 
 reserved_start_error() {
@@ -125,7 +139,7 @@ add_conf '
 global(abortOnUncleanConfig="on")
 main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes" queue.filename="not-supported")
 '
-validate_error disk 'do not yet support disk assistance'
+validate_ok disk-assisted
 
 generate_conf
 add_conf '
@@ -133,21 +147,29 @@ global(abortOnUncleanConfig="on")
 main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
            queue.highWatermark="8" queue.lowWatermark="4")
 '
-validate_error watermarks 'do not yet support disk assistance'
+validate_fallback watermarks 'disk-assistance parameters without queue.filename'
+
+generate_conf
+add_conf '
+global(abortOnUncleanConfig="on")
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+           queue.diskQueueType="auto")
+'
+validate_fallback disk-selector-without-filename 'disk-assistance parameters without queue.filename'
 
 generate_conf
 add_conf '
 global(abortOnUncleanConfig="on")
 main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes" queue.samplingInterval="2")
 '
-validate_error sampling 'do not yet support queue.samplingInterval'
+validate_fallback sampling 'queue.samplingInterval'
 
 generate_conf
 add_conf '
 global(abortOnUncleanConfig="on")
 main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes" queue.minDequeueBatchSize="2")
 '
-validate_error minimum-dequeue 'do not yet support queue.minDequeueBatchSize'
+validate_fallback minimum-dequeue 'queue.minDequeueBatchSize'
 
 generate_conf
 add_conf '
@@ -182,7 +204,25 @@ generate_conf
 add_conf '
 main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes" queue.filename="not-supported")
 '
-validate_error unsupported-no-abort 'do not yet support disk assistance'
+validate_ok disk-assisted-no-abort
+
+# Legacy Main-queue syntax has an explicit core directive as well; the core is
+# never inferred merely from selecting ConcurrentArray.  A filename exercises
+# the same DA parent/child selection as the modern frontend.
+generate_conf
+add_conf '
+$MainMsgQueueType ConcurrentArray
+$MainMsgQueueConcurrentCore sparseLanes
+$MainMsgQueueFilename legacy-ca
+'
+validate_ok legacy-concurrent-da
+
+generate_conf
+add_conf '
+$MainMsgQueueType FixedArray
+$MainMsgQueueConcurrentCore sparseLanes
+'
+validate_error legacy-core-without-concurrent '$MainMsgQueueConcurrentCore applies only when $MainMsgQueueType is ConcurrentArray'
 
 # A CA worker-start failure may fall back to Direct in the legacy engine, but
 # reservedBatch requires the validated Main/target topology to remain exact.
@@ -266,5 +306,37 @@ shutdown_immediate
 wait_shutdown
 seq_check 0 1
 unset RS_REDIR RSYSLOG_DEBUG RSYSLOG_DEBUGLOG RSYSLOG_TEST_FAIL_CA_WTP_ARRAY_ALLOC RSYSLOG_TEST_CA_LIFECYCLE_MARKERS
+
+# Fail after both the DA transfer pool and unchanged disk child exist. Startup
+# rollback must destroy them before the parent core/mutex and leave the queue
+# reusable as Direct. Exact ID 2 plus both lifecycle markers prove recovery;
+# stale child workers or borrowed parent state would hang or fault shutdown.
+generate_conf
+add_conf '
+global(workDirectory="'$RSYSLOG_DYNNAME'.da-start-spool")
+main_queue(queue.type="ConcurrentArray" queue.concurrentCore="sparseLanes"
+	queue.filename="rollback-da" queue.workerThreads="2")
+template(name="outfmt" type="string" string="%msg:F,58:2%\n")
+:msg, contains, "msgnum:" action(type="omfile" file="'$RSYSLOG_OUT_LOG'" template="outfmt")
+'
+da_start_out="${RSYSLOG_DYNNAME}.da-start.log"
+mkdir -p "$RSYSLOG_DYNNAME.da-start-spool"
+export RS_REDIR=">$da_start_out 2>&1"
+export RSYSLOG_DEBUG="debug nostdout"
+export RSYSLOG_DEBUGLOG="$RSYSLOG_DYNNAME.da-start.debug.log"
+export RSYSLOG_TEST_FAIL_CA_DA_START=1
+export RSYSLOG_TEST_CA_LIFECYCLE_MARKERS=1
+startup
+content_check 'injected ConcurrentArray DA startup failure after child construction' "$da_start_out"
+content_check 'could not start (ruleset) main message queue' "$da_start_out"
+content_check 'ConcurrentArray core destruction complete' "$RSYSLOG_DEBUGLOG"
+content_check 'ConcurrentArray startup rollback complete' "$RSYSLOG_DEBUGLOG"
+check_not_present 'ConcurrentArray queue start complete' "$RSYSLOG_DEBUGLOG"
+injectmsg 2 1
+wait_file_lines "$RSYSLOG_OUT_LOG" 3
+shutdown_immediate
+wait_shutdown
+seq_check 0 2
+unset RS_REDIR RSYSLOG_DEBUG RSYSLOG_DEBUGLOG RSYSLOG_TEST_FAIL_CA_DA_START RSYSLOG_TEST_CA_LIFECYCLE_MARKERS
 
 exit_test

@@ -386,6 +386,7 @@ static void cnfSetDefaults(rsconf_t *pThis) {
     pThis->globals.mainQ.iMainMsgQueueNumWorkers = 2;
     pThis->globals.mainQ.MainMsgQueType = QUEUETYPE_FIXED_ARRAY;
     pThis->globals.mainQ.pszMainMsgQFName = NULL;
+    pThis->globals.mainQ.pszMainMsgQueueConcurrentCore = NULL;
     pThis->globals.mainQ.iMainMsgQueMaxFileSize = 1024 * 1024;
     pThis->globals.mainQ.iMainMsgQPersistUpdCnt = 0;
     pThis->globals.mainQ.bMainMsgQSyncQeueFiles = 0;
@@ -494,6 +495,7 @@ BEGINobjDestruct(rsconf) /* be sure to specify the object type also in END and C
     parser.DestructParserList(&pThis->parsers.pDfltParsLst);
     parser.destroyMasterParserList(pThis->parsers.pParsLstRoot);
     free(pThis->globals.mainQ.pszMainMsgQFName);
+    free(pThis->globals.mainQ.pszMainMsgQueueConcurrentCore);
     free(pThis->globals.pszConfDAGFile);
     free(pThis->globals.pszWorkDir);
     free(pThis->globals.operatingStateFile);
@@ -1366,6 +1368,9 @@ static rsRetVal setMainMsgQueType(void __attribute__((unused)) * pVal, uchar *ps
     } else if (!strcasecmp((char *)pszType, "segmenteddisk")) {
         loadConf->globals.mainQ.MainMsgQueType = QUEUETYPE_SEGMENTED_DISK;
         DBGPRINTF("main message queue type set to SEGMENTED_DISK\n");
+    } else if (!strcasecmp((char *)pszType, "concurrentarray")) {
+        loadConf->globals.mainQ.MainMsgQueType = QUEUETYPE_CONCURRENT_ARRAY;
+        DBGPRINTF("main message queue type set to CONCURRENT_ARRAY\n");
     } else if (!strcasecmp((char *)pszType, "direct")) {
         loadConf->globals.mainQ.MainMsgQueType = QUEUETYPE_DIRECT;
         DBGPRINTF("main message queue type set to DIRECT (no queueing at all)\n");
@@ -1385,6 +1390,7 @@ static rsRetVal setMainMsgQueType(void __attribute__((unused)) * pVal, uchar *ps
 /* legacy config system: reset config variables to default values.  */
 static rsRetVal resetConfigVariables(uchar __attribute__((unused)) * pp, void __attribute__((unused)) * pVal) {
     free(loadConf->globals.mainQ.pszMainMsgQFName);
+    free(loadConf->globals.mainQ.pszMainMsgQueueConcurrentCore);
     freeActionNames(loadConf);
 
     cnfSetDefaults(loadConf);
@@ -1540,6 +1546,8 @@ static rsRetVal initLegacyConf(void) {
     CHKiRet(regCfSysLineHdlr((uchar *)"mainmsgqueuesyncqueuefiles", 0, eCmdHdlrBinary, NULL,
                              &loadConf->globals.mainQ.bMainMsgQSyncQeueFiles, NULL));
     CHKiRet(regCfSysLineHdlr((uchar *)"mainmsgqueuetype", 0, eCmdHdlrGetWord, setMainMsgQueType, NULL, NULL));
+    CHKiRet(regCfSysLineHdlr((uchar *)"mainmsgqueueconcurrentcore", 0, eCmdHdlrGetWord, NULL,
+                             &loadConf->globals.mainQ.pszMainMsgQueueConcurrentCore, NULL));
     CHKiRet(regCfSysLineHdlr((uchar *)"mainmsgqueueworkerthreads", 0, eCmdHdlrPositiveInt, NULL,
                              &loadConf->globals.mainQ.iMainMsgQueueNumWorkers, NULL));
     CHKiRet(regCfSysLineHdlr((uchar *)"mainmsgqueuetimeoutshutdown", 0, eCmdHdlrInt, NULL,

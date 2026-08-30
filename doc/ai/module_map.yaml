@@ -16,6 +16,8 @@ runtime_queue:
     - The queue mutex is shared by a disk-assisted parent and child; segmented store operations and idle dematerialization callbacks run under that lock.
     - queue_da resolves the durable disk-child engine at startup and atomically publishes its marker before first persistent data; engines never switch while a process is running.
     - The segmented store is lazy only for a disk-assisted child, and dematerialization requires an empty store with no recovery, batch, retry, or completion work pending.
+    - A ConcurrentArray DA parent claims memory ranges without the queue mutex; the spill worker holds no sparseLanes storage lock during child serialization or I/O.
+    - DA memory-parent and disk-child consumers run independently, so their merged output has no global ordering guarantee; only accepted child records complete in the parent.
 
 runtime_ratelimit:
   paths: ["runtime/ratelimit.c", "runtime/ratelimit.h"]

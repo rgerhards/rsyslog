@@ -58,6 +58,7 @@ struct queuecnf_s {
     int iMainMsgQueueNumWorkers; /* number of worker threads for the mm queue above */
     queueType_t MainMsgQueType; /* type of the main message queue above */
     uchar *pszMainMsgQFName; /* prefix for the main message queue file */
+    uchar *pszMainMsgQueueConcurrentCore; /* explicit opt-in core for ConcurrentArray */
     int64 iMainMsgQueMaxFileSize;
     int iMainMsgQPersistUpdCnt; /* persist queue info every n updates */
     int bMainMsgQSyncQeueFiles; /* sync queue files on every write? */

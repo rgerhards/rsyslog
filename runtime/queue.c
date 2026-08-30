@@ -286,6 +286,7 @@ static rsRetVal qConstructConcurrentArray(qqueue_t *pThis);
 static rsRetVal qDestructConcurrentArray(qqueue_t *pThis);
 static rsRetVal qAddConcurrentArray(qqueue_t *pThis, smsg_t *pMsg);
 static rsRetVal ConsumerConcurrentArray(qqueue_t *pThis, wti_t *pWti);
+static rsRetVal ConsumerConcurrentArrayDA(qqueue_t *pThis, wti_t *pWti);
 static rsRetVal concurrentArrayBatchProcessed(qqueue_t *pThis, wti_t *pWti);
 static rsRetVal concurrentArrayReturnClaim(qqueue_t *pThis, wti_t *pWti);
 static rsRetVal concurrentArrayWorkerConstruct(qqueue_t *pThis, wti_t *pWti);
@@ -778,10 +779,13 @@ static rsRetVal qqueueAdviseMaxWorkersConcurrentArray(qqueue_t *pThis) {
         const uint64_t scaled = (uint64_t)(unsigned)backlog / (uint64_t)(unsigned)pThis->iMinMsgsPerWrkr + 1;
         wanted = scaled >= (uint64_t)(unsigned)pThis->iNumWorkerThreads ? pThis->iNumWorkerThreads : (int)scaled;
     }
-    if (wtpGetCurrentNumWorkers(pThis->pWtpReg) >= wanted) return RS_RET_OK;
-
     d_pthread_mutex_lock(&pThis->mutThrdMgmt);
-    const rsRetVal ret = wtpAdviseMaxWorkersConcurrent(pThis->pWtpReg, wanted, DENY_WORKER_START_DURING_SHUTDOWN);
+    rsRetVal ret = RS_RET_OK;
+    if (pThis->bIsDA && backlog >= pThis->iHighWtrMrk && pThis->pWtpDA != NULL &&
+        wtpGetCurrentNumWorkers(pThis->pWtpDA) == 0)
+        ret = wtpAdviseMaxWorkersConcurrent(pThis->pWtpDA, 1, DENY_WORKER_START_DURING_SHUTDOWN);
+    if (ret == RS_RET_OK && wtpGetCurrentNumWorkers(pThis->pWtpReg) < wanted)
+        ret = wtpAdviseMaxWorkersConcurrent(pThis->pWtpReg, wanted, DENY_WORKER_START_DURING_SHUTDOWN);
     d_pthread_mutex_unlock(&pThis->mutThrdMgmt);
     return ret;
 }
@@ -981,6 +985,18 @@ static rsRetVal ATTR_NONNULL() InitDA(qqueue_t *const pThis, const int bLockMute
     CHKiRet(wtpSetpfGetDeqBatchSize(pThis->pWtpDA, (rsRetVal(*)(void *pUsr, int *))GetDeqBatchSize));
     CHKiRet(wtpSetpfDoWork(pThis->pWtpDA, (rsRetVal(*)(void *pUsr, void *pWti))ConsumerDA));
     CHKiRet(wtpSetpfObjProcessed(pThis->pWtpDA, (rsRetVal(*)(void *pUsr, wti_t *pWti))batchProcessed));
+    if (pThis->qType == QUEUETYPE_CONCURRENT_ARRAY) {
+        CHKiRet(wtpSetbUnlockedWorker(pThis->pWtpDA, 1));
+        CHKiRet(wtpSetpfDoWork(pThis->pWtpDA, (rsRetVal(*)(void *, void *))ConsumerConcurrentArrayDA));
+        CHKiRet(wtpSetpfObjProcessed(pThis->pWtpDA, (rsRetVal(*)(void *, wti_t *))concurrentArrayBatchProcessed));
+        CHKiRet(wtpSetpfCancelProcessed(pThis->pWtpDA, (rsRetVal(*)(void *, wti_t *))concurrentArrayReturnClaim));
+        CHKiRet(wtpSetpfWorkerConstruct(pThis->pWtpDA, (rsRetVal(*)(void *, wti_t *))concurrentArrayWorkerConstruct));
+        CHKiRet(wtpSetpfWorkerDestruct(pThis->pWtpDA, (void (*)(void *, wti_t *))concurrentArrayWorkerDestruct));
+        CHKiRet(wtpSetpfWorkerStart(pThis->pWtpDA, (rsRetVal(*)(void *, wti_t *))concurrentArrayWorkerStart));
+        CHKiRet(wtpSetpfWorkerStop(pThis->pWtpDA, (rsRetVal(*)(void *, wti_t *))concurrentArrayWorkerStop));
+        CHKiRet(wtpSetpfWaitIdle(pThis->pWtpDA, (rsRetVal(*)(void *, wti_t *, int *))concurrentArrayWaitIdle));
+        CHKiRet(wtpSetpfWakeIdle(pThis->pWtpDA, (rsRetVal(*)(void *))concurrentArrayWakeIdle));
+    }
     CHKiRet(wtpSetpmutUsr(pThis->pWtpDA, pThis->mut));
     CHKiRet(wtpSetiNumWorkerThreads(pThis->pWtpDA, 1));
     CHKiRet(wtpSettoWrkShutdown(pThis->pWtpDA, pThis->toWrkShutdown));
@@ -992,6 +1008,17 @@ static rsRetVal ATTR_NONNULL() InitDA(qqueue_t *const pThis, const int bLockMute
     if (pThis->pqDA == NULL) {
         CHKiRet(StartDA(pThis));
     }
+#ifdef ENABLE_IMDIAG
+    if (pThis->qType == QUEUETYPE_CONCURRENT_ARRAY) {
+        const char *const injectDAFailure = getenv("RSYSLOG_TEST_FAIL_CA_DA_START");
+        if (injectDAFailure != NULL && strcmp(injectDAFailure, "0") != 0) {
+            LogError(0, RS_RET_OUT_OF_MEMORY,
+                     "%s: injected ConcurrentArray DA startup failure after child construction",
+                     obj.GetName((obj_t *)pThis));
+            ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+        }
+    }
+#endif
 
 finalize_it:
     if (iRet != RS_RET_OK) pThis->bIsDA = 0;
@@ -2569,7 +2596,7 @@ static rsRetVal qConstructConcurrentArray(qqueue_t *pThis) {
             }
         }
 #endif
-        if (status == CA_OK) return RS_RET_OK;
+        if (status == CA_OK) return qqueueChkIsDA(pThis);
     }
     while (registered != 0) (void)ca_producer_release(&pThis->concurrentProducers[--registered]);
 
@@ -2623,6 +2650,12 @@ static rsRetVal qDestructConcurrentArray(qqueue_t *pThis) {
  * false. */
 static void qqueueRollbackConcurrentArrayStart(qqueue_t *pThis, const int synchronizationInitialized) {
     if (pThis->statsobj != NULL) statsobj.Destruct(&pThis->statsobj);
+    /* InitDA() can fail after either the transfer pool or its unchanged disk
+     * child has been constructed.  Both borrow parent-owned state, so unwind
+     * them before the regular pool, ConcurrentArray core, and synchronization
+     * primitives disappear. */
+    if (pThis->pWtpDA != NULL) wtpDestruct(&pThis->pWtpDA);
+    if (pThis->pqDA != NULL) qqueueDestruct(&pThis->pqDA);
     if (pThis->pWtpReg != NULL) wtpDestruct(&pThis->pWtpReg);
     if (pThis->concurrentArray != NULL && qDestructConcurrentArray(pThis) != RS_RET_OK) abort();
 
@@ -2790,6 +2823,48 @@ static rsRetVal ConsumerConcurrentArray(qqueue_t *pThis, wti_t *pWti) {
     ret = pThis->pConsumer(pThis->pAction, &pWti->batch, pWti);
     pthread_setcancelstate(oldCancelState, NULL);
     return ret;
+}
+
+/* Transfer a ConcurrentArray parent claim into its unchanged disk child.
+ * The claim itself owns the parent messages while qqueueEnqMsg() receives an
+ * added reference.  Only child-accepted entries become committed; a child
+ * pressure/error boundary leaves this and the remaining entries retryable in
+ * their original lane.  No ConcurrentArray storage lock is held while the
+ * child serializes or performs I/O. */
+static rsRetVal ConsumerConcurrentArrayDA(qqueue_t *pThis, wti_t *pWti) {
+    qConcurrentWorker_t *worker = pWti->pQueueWorkerData;
+    rsRetVal ret = concurrentArrayBatchProcessed(pThis, pWti);
+    if (ret != RS_RET_OK) return ret;
+
+    worker->observedEpoch = ca_epoch(pThis->concurrentArray);
+    const ca_status_t status =
+        ca_claim_up_to(pThis->concurrentArray, &worker->claim, worker->items, (size_t)pWti->batch.maxElem);
+    if (status == CA_EMPTY || status == CA_CLOSED) return RS_RET_IDLE;
+    if (status != CA_OK) return caStatusToRet(status);
+
+    pWti->batch.nElem = (int)worker->claim.count;
+    pWti->batch.nElemDeq = (int)worker->claim.count;
+    pWti->batch.storeData = worker;
+    for (size_t i = 0; i < worker->claim.count; ++i) {
+        pWti->batch.pElem[i].pMsg = worker->items[i].item;
+        pWti->batch.eltState[i] = BATCH_STATE_RDY;
+    }
+
+    int oldCancelState;
+    qqueueSetWtiShutdownImmediate(pThis, pWti);
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &oldCancelState);
+    for (size_t i = 0; i < worker->claim.count && !qqueueIsShutdownImmediate(pThis); ++i) {
+        ret = qqueueEnqMsg(pThis->pqDA, eFLOWCTL_NO_DELAY, MsgAddRef(pWti->batch.pElem[i].pMsg));
+        if (ret != RS_RET_OK) break;
+        pWti->batch.eltState[i] = BATCH_STATE_COMM;
+    }
+    pthread_setcancelstate(oldCancelState, NULL);
+
+    /* Complete before the DA pool re-evaluates its low-water stop predicate.
+     * Otherwise a successfully transferred last claim could be returned by
+     * worker-stop cleanup and replayed into the child.  Accepted prefixes are
+     * committed and any still-RDY suffix remains lane-local retry work. */
+    return concurrentArrayBatchProcessed(pThis, pWti);
 }
 
 static void monotonicDeadline(struct timespec *deadline, const int timeoutMs) {
@@ -4422,6 +4497,25 @@ rsRetVal qqueueStart(rsconf_t *cnf, qqueue_t *pThis) /* this is the Construction
 
     assert(pThis != NULL);
 
+    if (pThis->qType == QUEUETYPE_CONCURRENT_ARRAY && pThis->concurrentRequestedQueueType == 0) {
+        pThis->concurrentRequestedQueueType = QUEUETYPE_CONCURRENT_ARRAY;
+        pThis->concurrentActualQueueType = QUEUETYPE_CONCURRENT_ARRAY;
+        pThis->concurrentRequestedCore = 1;
+        pThis->concurrentActualCore = 1;
+    }
+    if (pThis->concurrentRequestedQueueType == QUEUETYPE_CONCURRENT_ARRAY)
+        LogMsg(0, RS_RET_OK, LOG_INFO, "%s: requested queue=ConcurrentArray core=sparseLanes; actual queue=%s core=%s",
+               obj.GetName((obj_t *)pThis),
+               pThis->concurrentActualQueueType == QUEUETYPE_CONCURRENT_ARRAY ? "ConcurrentArray" : "FixedArray",
+               pThis->concurrentActualCore == 1 ? "sparseLanes" : "legacy");
+
+    if (pThis->qType == QUEUETYPE_CONCURRENT_ARRAY &&
+        (pThis->concurrentCore == NULL || strcasecmp(pThis->concurrentCore, "sparseLanes"))) {
+        LogError(0, RS_RET_CONF_PARAM_INVLD, "%s: ConcurrentArray requires the explicit supported core 'sparseLanes'",
+                 obj.GetName((obj_t *)pThis));
+        ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
+    }
+
     /* do not modify the queue if it's already running(happens when dynamic config reload is invoked
      * and the queue is used in the new config as well)
      */
@@ -4660,6 +4754,16 @@ rsRetVal qqueueStart(rsconf_t *cnf, qqueue_t *pThis) /* this is the Construction
     } else {
         CHKiRet(statsobj.AddCounter(pThis->statsobj, UCHAR_CONSTANT("size"), ctrType_Int, CTR_FLAG_NONE,
                                     &pThis->iQueueSize));
+    }
+    if (pThis->concurrentRequestedQueueType == QUEUETYPE_CONCURRENT_ARRAY) {
+        CHKiRet(statsobj.AddCounter(pThis->statsobj, UCHAR_CONSTANT("requested.queue.type"), ctrType_Int, CTR_FLAG_NONE,
+                                    &pThis->concurrentRequestedQueueType));
+        CHKiRet(statsobj.AddCounter(pThis->statsobj, UCHAR_CONSTANT("actual.queue.type"), ctrType_Int, CTR_FLAG_NONE,
+                                    &pThis->concurrentActualQueueType));
+        CHKiRet(statsobj.AddCounter(pThis->statsobj, UCHAR_CONSTANT("requested.concurrent.core"), ctrType_Int,
+                                    CTR_FLAG_NONE, &pThis->concurrentRequestedCore));
+        CHKiRet(statsobj.AddCounter(pThis->statsobj, UCHAR_CONSTANT("actual.concurrent.core"), ctrType_Int,
+                                    CTR_FLAG_NONE, &pThis->concurrentActualCore));
     }
 
     CHKiRet(statsobj.AddCounter(pThis->statsobj, UCHAR_CONSTANT("enqueued"), ctrType_IntCtr, CTR_FLAG_RESETTABLE,
@@ -5463,8 +5567,8 @@ struct qConcurrentTarget_s {
 
 int qqueueSupportsConcurrentTarget(const qqueue_t *const pThis) {
     return pThis != NULL && pThis->qType == QUEUETYPE_CONCURRENT_ARRAY && pThis->concurrentArray != NULL &&
-           pThis->concurrentCore != NULL && !strcasecmp(pThis->concurrentCore, "sparseLanes") && !pThis->bIsDA &&
-           pThis->pszFilePrefix == NULL && pThis->iSmpInterval == 0 && pThis->iMinDeqBatchSize == 0;
+           pThis->concurrentCore != NULL && !strcasecmp(pThis->concurrentCore, "sparseLanes") &&
+           pThis->iSmpInterval == 0 && pThis->iMinDeqBatchSize == 0;
 }
 
 static rsRetVal concurrentTargetActivate(qConcurrentTarget_t *const target, ca_lifecycle_scope_t *const scope) {
@@ -6332,9 +6436,11 @@ rsRetVal qqueueApplyCnfParam(qqueue_t *pThis, struct nvlst *lst) {
             concurrentRateParamSet = 1;
     }
 
-    const sbool is_da_memory_queue =
-        (pThis->qType == QUEUETYPE_FIXED_ARRAY || pThis->qType == QUEUETYPE_LINKEDLIST) && pThis->pszFilePrefix != NULL;
     if (pThis->qType == QUEUETYPE_CONCURRENT_ARRAY) {
+        pThis->concurrentRequestedQueueType = QUEUETYPE_CONCURRENT_ARRAY;
+        pThis->concurrentActualQueueType = QUEUETYPE_CONCURRENT_ARRAY;
+        pThis->concurrentRequestedCore = 1;
+        pThis->concurrentActualCore = 1;
         if (pThis->concurrentCore == NULL) {
             parser_errmsg("queue.type=\"ConcurrentArray\" requires queue.concurrentCore=\"sparseLanes\"");
             ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
@@ -6344,28 +6450,40 @@ rsRetVal qqueueApplyCnfParam(qqueue_t *pThis, struct nvlst *lst) {
                           pThis->concurrentCore);
             ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
         }
-        if (concurrentDiskParamSet) {
-            parser_errmsg(
-                "ConcurrentArray queues do not yet support disk assistance, disk storage, high/low watermarks, or "
-                "encryption");
-            ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
-        }
-        if (concurrentMinDequeueSet) {
-            parser_errmsg("ConcurrentArray queues do not yet support queue.minDequeueBatchSize");
-            ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
-        }
-        if (concurrentSamplingSet) {
-            parser_errmsg("ConcurrentArray queues do not yet support queue.samplingInterval");
-            ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
-        }
-        if (concurrentRateParamSet) {
-            parser_errmsg("ConcurrentArray queues do not yet support dequeue slowdown or dequeue time windows");
-            ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
+        if ((concurrentDiskParamSet && pThis->pszFilePrefix == NULL) || concurrentMinDequeueSet ||
+            concurrentSamplingSet || concurrentRateParamSet) {
+            const char *const reason = concurrentMinDequeueSet  ? "queue.minDequeueBatchSize"
+                                       : concurrentSamplingSet  ? "queue.samplingInterval"
+                                       : concurrentRateParamSet ? "dequeue rate/time controls"
+                                                                : "disk-assistance parameters without queue.filename";
+            LogMsg(0, RS_RET_OK_WARN, LOG_WARNING,
+                   "queue '%s': requested ConcurrentArray/sparseLanes does not support %s; using the "
+                   "semantically compatible FixedArray queue instead",
+                   obj.GetName((obj_t *)pThis), reason);
+            pThis->qType = QUEUETYPE_FIXED_ARRAY;
+            pThis->concurrentActualQueueType = QUEUETYPE_FIXED_ARRAY;
+            pThis->concurrentActualCore = 0;
+            free(pThis->concurrentCore);
+            pThis->concurrentCore = NULL;
+            /* The warning above deliberately consumes disk-child selectors
+             * that cannot apply without queue.filename.  Do not diagnose the
+             * same known-safe fallback again as a dirty configuration. */
+            if (concurrentDiskParamSet && pThis->pszFilePrefix == NULL) {
+                pThis->diskQueueTypeSet = 0;
+                pThis->diskQueueAutoUpgradeSet = 0;
+                pThis->diskQueueIdleTimeoutSet = 0;
+                pThis->diskQueueType = QDA_ENGINE_AUTO;
+                pThis->diskQueueAutoUpgrade = 0;
+                pThis->diskQueueIdleTimeout = 60000;
+            }
         }
     } else if (pThis->concurrentCore != NULL) {
         parser_errmsg("queue.concurrentCore applies only to queue.type=\"ConcurrentArray\"");
         ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
     }
+    const sbool is_da_memory_queue = (pThis->qType == QUEUETYPE_FIXED_ARRAY || pThis->qType == QUEUETYPE_LINKEDLIST ||
+                                      pThis->qType == QUEUETYPE_CONCURRENT_ARRAY) &&
+                                     pThis->pszFilePrefix != NULL;
     /* These are deliberately parser_errmsg(), not advisory warnings:
      * parser_errmsg marks the configuration dirty.  Permissive startup keeps
      * running after the unusable value is ignored, while
@@ -6374,7 +6492,7 @@ rsRetVal qqueueApplyCnfParam(qqueue_t *pThis, struct nvlst *lst) {
         !is_da_memory_queue) {
         parser_errmsg(
             "queue.diskQueueType, queue.diskQueueAutoUpgrade, and queue.diskQueueIdleTimeout apply only to "
-            "FixedArray or LinkedList disk-assisted queues; ignoring these parameters");
+            "FixedArray, LinkedList, or ConcurrentArray disk-assisted queues; ignoring these parameters");
         pThis->diskQueueType = QDA_ENGINE_AUTO;
         pThis->diskQueueAutoUpgrade = 0;
         pThis->diskQueueIdleTimeout = 60000;
@@ -6460,15 +6578,16 @@ int queuesEqual(qqueue_t *pOld, qqueue_t *pNew) {
         .idle_timeout = pNew->diskQueueIdleTimeout,
     };
     return (NUM_EQUALS(qType) && NUM_EQUALS(iMaxQueueSize) && NUM_EQUALS(iDeqBatchSize) &&
-            NUM_EQUALS(iMinDeqBatchSize) && NUM_EQUALS(toMinDeqBatchSize) && NUM_EQUALS(sizeOnDiskMax) &&
-            NUM_EQUALS(iHighWtrMrk) && NUM_EQUALS(iLowWtrMrk) && NUM_EQUALS(iFullDlyMrk) && NUM_EQUALS(iLightDlyMrk) &&
-            NUM_EQUALS(iDiscardMrk) && NUM_EQUALS(iDiscardSeverity) && NUM_EQUALS(iPersistUpdCnt) &&
-            NUM_EQUALS(bSyncQueueFiles) && NUM_EQUALS(iNumWorkerThreads) && NUM_EQUALS(toQShutdown) &&
-            NUM_EQUALS(toActShutdown) && NUM_EQUALS(toEnq) && NUM_EQUALS(toWrkShutdown) &&
-            NUM_EQUALS(iMinMsgsPerWrkr) && NUM_EQUALS(iMaxFileSize) && NUM_EQUALS(bSaveOnShutdown) &&
-            NUM_EQUALS(iDeqSlowdown) && NUM_EQUALS(iDeqtWinFromHr) && NUM_EQUALS(iDeqtWinToHr) &&
-            NUM_EQUALS(iSmpInterval) && NUM_EQUALS(takeFlowCtlFromMsg) && qdaLifecycleConfigEqual(&old_da, &new_da) &&
-            USTR_EQUALS(pszFilePrefix) && USTR_EQUALS(cryprovName) &&
+            NUM_EQUALS(concurrentRequestedQueueType) && NUM_EQUALS(concurrentActualQueueType) &&
+            NUM_EQUALS(concurrentRequestedCore) && NUM_EQUALS(concurrentActualCore) && NUM_EQUALS(iMinDeqBatchSize) &&
+            NUM_EQUALS(toMinDeqBatchSize) && NUM_EQUALS(sizeOnDiskMax) && NUM_EQUALS(iHighWtrMrk) &&
+            NUM_EQUALS(iLowWtrMrk) && NUM_EQUALS(iFullDlyMrk) && NUM_EQUALS(iLightDlyMrk) && NUM_EQUALS(iDiscardMrk) &&
+            NUM_EQUALS(iDiscardSeverity) && NUM_EQUALS(iPersistUpdCnt) && NUM_EQUALS(bSyncQueueFiles) &&
+            NUM_EQUALS(iNumWorkerThreads) && NUM_EQUALS(toQShutdown) && NUM_EQUALS(toActShutdown) &&
+            NUM_EQUALS(toEnq) && NUM_EQUALS(toWrkShutdown) && NUM_EQUALS(iMinMsgsPerWrkr) && NUM_EQUALS(iMaxFileSize) &&
+            NUM_EQUALS(bSaveOnShutdown) && NUM_EQUALS(iDeqSlowdown) && NUM_EQUALS(iDeqtWinFromHr) &&
+            NUM_EQUALS(iDeqtWinToHr) && NUM_EQUALS(iSmpInterval) && NUM_EQUALS(takeFlowCtlFromMsg) &&
+            qdaLifecycleConfigEqual(&old_da, &new_da) && USTR_EQUALS(pszFilePrefix) && USTR_EQUALS(cryprovName) &&
             (pOld->concurrentCore == NULL
                  ? pNew->concurrentCore == NULL
                  : pNew->concurrentCore != NULL && !strcasecmp(pOld->concurrentCore, pNew->concurrentCore)));

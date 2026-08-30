@@ -62,8 +62,9 @@ TESTS_CONCURRENT_ARRAY_QUEUE = concurrent-array-config.sh concurrent-array-queue
 	concurrent-array-routing-discard.sh concurrent-array-routing-retry.sh concurrent-array-routing-subsets.sh \
 	concurrent-array-routing-fanout.sh concurrent-array-action.sh concurrent-array-action-oom.sh \
 	concurrent-array-action-retry.sh concurrent-array-action-shutdown.sh concurrent-array-action-transaction.sh \
-	concurrent-array-action-suspend.sh
-TESTS_CONCURRENT_ARRAY_QUEUE_LIBYAML = yaml-concurrent-array-queue.sh
+	concurrent-array-action-suspend.sh concurrent-array-da.sh concurrent-array-da-persist.sh \
+	concurrent-array-da-maxdiskspace.sh
+TESTS_CONCURRENT_ARRAY_QUEUE_LIBYAML = yaml-concurrent-array-queue.sh yaml-concurrent-array-da.sh
 EXTRA_DIST += $(TESTS_CONCURRENT_ARRAY_QUEUE) $(TESTS_CONCURRENT_ARRAY_QUEUE_LIBYAML)
 EXTRA_DIST += testsuites/concurrent-array-action-transaction-bin.py
 EXTRA_DIST += testsuites/concurrent-array-action-accept-bin.py

@@ -1105,6 +1105,13 @@ rsRetVal createMainQueue(qqueue_t **ppQueue, uchar *pszQueueName, struct nvlst *
                  iRet);                                                             \
     }
 
+        if (ourConf->globals.mainQ.pszMainMsgQueueConcurrentCore != NULL &&
+            ourConf->globals.mainQ.MainMsgQueType != QUEUETYPE_CONCURRENT_ARRAY) {
+            LogError(0, RS_RET_CONF_PARAM_INVLD,
+                     "$MainMsgQueueConcurrentCore applies only when $MainMsgQueueType is ConcurrentArray");
+            ABORT_FINALIZE(RS_RET_CONF_PARAM_INVLD);
+        }
+
         if (ourConf->globals.mainQ.pszMainMsgQFName != NULL) {
             /* check if the queue file name is unique, else emit an error */
             for (qfn = queuefilenames; qfn != NULL; qfn = qfn->next) {
@@ -1133,6 +1140,11 @@ rsRetVal createMainQueue(qqueue_t **ppQueue, uchar *pszQueueName, struct nvlst *
         setQPROP(qqueueSetiDeqBatchSize, "$MainMsgQueueDequeueBatchSize",
                  ourConf->globals.mainQ.iMainMsgQueDeqBatchSize);
         setQPROPstr(qqueueSetFilePrefix, "$MainMsgQueueFileName", qfname);
+        if (ourConf->globals.mainQ.pszMainMsgQueueConcurrentCore != NULL) {
+            free((*ppQueue)->concurrentCore);
+            CHKmalloc((*ppQueue)->concurrentCore =
+                          strdup((char *)ourConf->globals.mainQ.pszMainMsgQueueConcurrentCore));
+        }
         setQPROP(qqueueSetiPersistUpdCnt, "$MainMsgQueueCheckpointInterval",
                  ourConf->globals.mainQ.iMainMsgQPersistUpdCnt);
         setQPROP(qqueueSetbSyncQueueFiles, "$MainMsgQueueSyncQueueFiles",

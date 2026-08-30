@@ -116,6 +116,10 @@ struct queue_s {
         wtp_t *pWtpDA; /* single-worker DA transfer pool, not the DA disk queue child consumer pool */
         wtp_t *pWtpReg;
         ca_queue_t *concurrentArray;
+        int concurrentRequestedQueueType; /* diagnostic enum, zero if not requested */
+        int concurrentActualQueueType; /* diagnostic enum after safe fallback */
+        int concurrentRequestedCore; /* 1=sparseLanes */
+        int concurrentActualCore; /* 0=legacy storage, 1=sparseLanes */
         ca_producer_t *concurrentProducers;
         size_t concurrentProducerCount;
         size_t concurrentDedicatedProducerCount;

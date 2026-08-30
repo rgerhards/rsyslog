@@ -156,8 +156,8 @@ finalize_it:
 
 static int reservedBatchQueueConfigured(const qqueue_t *const queue) {
     return queue != NULL && queue->qType == QUEUETYPE_CONCURRENT_ARRAY && queue->concurrentCore != NULL &&
-           !strcasecmp(queue->concurrentCore, "sparseLanes") && !queue->bIsDA && queue->pszFilePrefix == NULL &&
-           queue->iSmpInterval == 0 && queue->iMinDeqBatchSize == 0;
+           !strcasecmp(queue->concurrentCore, "sparseLanes") && queue->iSmpInterval == 0 &&
+           queue->iMinDeqBatchSize == 0;
 }
 
 DEFFUNC_llExecFunc(doValidateReservedBatchRuleset) {
@@ -168,8 +168,8 @@ DEFFUNC_llExecFunc(doValidateReservedBatchRuleset) {
     if (reservedBatchQueueConfigured(ruleset->pQueue)) return RS_RET_OK;
     parser_errmsg(
         "ruleset '%s': global executionEngine=reservedBatch requires queued targets to use "
-        "queue.type='ConcurrentArray' and queue.concurrentCore='sparseLanes' without disk assistance, sampling, "
-        "or minDequeueBatchSize",
+        "queue.type='ConcurrentArray' and queue.concurrentCore='sparseLanes' without sampling or "
+        "minDequeueBatchSize",
         ruleset->pszName);
     return RS_RET_PARAM_ERROR;
 }
@@ -192,7 +192,7 @@ static rsRetVal validateReservedBatchAction(void *const data, void *const param)
         } else if (!reservedBatchQueueConfigured(action->pQueue)) {
             parser_errmsg(
                 "action '%s': queued action ConcurrentArray requires queue.concurrentCore='sparseLanes' without "
-                "disk assistance, sampling, or minDequeueBatchSize",
+                "sampling or minDequeueBatchSize",
                 action->pszName);
             validation->status = RS_RET_PARAM_ERROR;
         }

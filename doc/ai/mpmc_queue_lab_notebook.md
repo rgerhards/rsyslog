@@ -1128,3 +1128,42 @@ Incremental `make -j4 check TESTS=''`, the 8,192/65,536/order transaction cells,
 and both suspension cells passed. Bash syntax, shellcheck warning level,
 clang-format dry-run, `git diff --check`, and focused antipattern review passed;
 generated runtime-unit binaries were removed again.
+
+## 2026-08-30 Checkpoint 6: sparseLanes disk assistance
+
+The first DA implementation reused the ordinary ConcurrentArray claim path but
+tested the low-water stop predicate before completing its current spill claim.
+That returned an already child-accepted final record as RDY and replayed it.
+Moving completion into the same transfer turn, before the stop check, removed
+the duplicate while retaining retry for the unaccepted suffix.
+
+Focused live coverage then passed six classic/segmented cells across Main,
+named-ruleset, and queued-action parents with exact 2,000-ID sets and real disk
+child markers.  Classic and segmented save-on-shutdown/restart both created
+durable child state and recovered the full accepted set.  Segmented
+max-disk-space completed two fill/drain cycles separated by HUP.  A real YAML
+segmented-DA configuration delivered 128 exact IDs.  Legacy FixedArray and
+LinkedList behavior, persistence, and segmented max-disk-space cells passed
+against the same shared drivers.
+
+Those legacy persistence runs exposed a misleading old oracle: their merged DA
+output visibly jumped ahead while the memory parent and disk child drained in
+parallel, even though all 2,000 IDs arrived.  The prior `seq_check -d` happened
+to wait through this but encoded a global order the DA contract does not
+promise.  The driver now waits for all unique, anchored, in-range IDs and then
+compares the exact accepted set; duplicates are allowed at restart, ordering is
+not asserted, and malformed or missing records fail.
+
+A startup audit found that the ConcurrentArray rollback path cleaned the
+regular pool and sparse core but not a DA transfer pool/child created before a
+later initialization failure.  Rollback now destroys those borrowed-parent
+objects first.  A test-only failure immediately after child construction proves
+the exact lifecycle markers, Direct fallback reuse, delivery of the next ID,
+and clean shutdown.
+
+The touched runtime and tools objects compiled and linked.  A full host
+recursive build still stops later at the workstation's stale/missing
+`mongoc-2.2.2` and `bson-2.2.2` include directories; no ConcurrentArray compile
+diagnostic precedes that unrelated environment failure.  CP6 remains focused
+functionally tested, not sanitizer/container/performance validated under the
+authorized reduced-development scope.
