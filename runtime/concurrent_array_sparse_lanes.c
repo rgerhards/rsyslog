@@ -514,8 +514,9 @@ static struct ca_lane *lane_from_handle(struct sparse_queue *queue, uint32_t ind
 
 static struct ca_chunk *slot_chunk(ca_slot_meta_t *slot) {
     if (slot->offset == UINT8_MAX) return NULL;
-    return (struct ca_chunk *)((char *)slot - offsetof(struct ca_chunk, slots) -
-                               (size_t)slot->offset * sizeof(ca_slot_meta_t));
+    const uintptr_t chunk_address =
+        (uintptr_t)(void *)slot - offsetof(struct ca_chunk, slots) - (size_t)slot->offset * sizeof(ca_slot_meta_t);
+    return (struct ca_chunk *)chunk_address;
 }
 
 static uint64_t slot_ordinal(ca_slot_meta_t *slot) {
