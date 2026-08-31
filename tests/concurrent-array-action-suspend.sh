@@ -10,6 +10,8 @@
 # before IDs are extracted, so malformed or extra action output cannot hide.
 # The 30-second state and 60-second delivery bounds only guard loaded CI hosts;
 # the resumed counter and exact set comparison are the synchronization oracles.
+# Configurations without impstats skip via require_plugin because that
+# deterministic counter oracle depends on it.
 # The background injector is explicitly awaited after recovery; exit_test owns
 # the daemon lifecycle and cleanup after both exact output sets are complete.
 if [ "$1" != "--case" ]; then
@@ -19,6 +21,7 @@ if [ "$1" != "--case" ]; then
 	exit 0
 fi
 . ${srcdir:=.}/diag.sh init
+require_plugin impstats
 CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 require_plugin omprog
 export NUMMESSAGES=32

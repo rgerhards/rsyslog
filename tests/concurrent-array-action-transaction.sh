@@ -7,8 +7,9 @@
 # marker to exist when the Direct transaction commits, proving target
 # publication precedes Direct commit. File waits are failure guards only; the
 # worker gate and an impstats enqueue-count predicate, never time, form each
-# batch. The 30-second polling bound only guards a stalled daemon on a loaded
-# test host.
+# batch. Configurations without impstats skip via require_plugin because this
+# deterministic oracle depends on it. The 30-second polling bound only guards
+# a stalled daemon on a loaded test host.
 if [ "$1" != "--case" ]; then
 	for count in 8192 65536; do
 		RSTB_CA_ACTION_TX_COUNT=$count "$0" --case || exit $?
@@ -17,6 +18,7 @@ if [ "$1" != "--case" ]; then
 	exit 0
 fi
 . ${srcdir:=.}/diag.sh init
+require_plugin impstats
 CA_CORE=${RSYSLOG_TEST_CA_CORE:-sparseLanes}
 require_plugin omprog
 count=${RSTB_CA_ACTION_TX_COUNT:-3}
