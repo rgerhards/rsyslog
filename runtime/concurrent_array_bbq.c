@@ -55,10 +55,18 @@
 #define BBQ_LEASE_MAX 64U
 #define BBQ_DEDICATED_PRODUCERS 16U
 #define BBQ_FALLBACK_PRODUCERS 2U
-#define BBQ_CELL_STATE_MASK UINT64_C(3)
-#define BBQ_CELL_INDEX_SHIFT 2U
+#define BBQ_CELL_STATE_MASK UINT64_C(7)
+#define BBQ_CELL_INDEX_SHIFT 3U
+#define BBQ_PRODUCER_CLOSED ((size_t)1 << (sizeof(size_t) * CHAR_BIT - 1))
+#define BBQ_PRODUCER_REF_MASK (BBQ_PRODUCER_CLOSED - 1)
 
-enum bbq_cell_state { BBQ_CELL_EMPTY = 0, BBQ_CELL_FULL = 1, BBQ_CELL_TOMBSTONE = 2, BBQ_CELL_CLAIMED = 3 };
+enum bbq_cell_state {
+    BBQ_CELL_EMPTY = 0,
+    BBQ_CELL_FULL = 1,
+    BBQ_CELL_TOMBSTONE = 2,
+    BBQ_CELL_CLAIMED = 3,
+    BBQ_CELL_RESERVED = 4
+};
 
 enum bbq_phase { BBQ_PHASE_RUNNING = 0, BBQ_PHASE_DRAIN, BBQ_PHASE_DISCARD, BBQ_PHASE_DESTROY };
 
@@ -87,6 +95,7 @@ struct bbq_producer_state {
     size_t active_completions;
     unsigned fallback;
     atomic_flag gate;
+    atomic_flag publish_gate;
 };
 
 struct bbq_record {
@@ -133,6 +142,7 @@ struct bbq_queue {
     _Atomic size_t in_flight;
     _Atomic size_t active_calls;
     _Atomic unsigned lifecycle_writer;
+    _Atomic unsigned control_owner;
     _Atomic size_t live_producers;
     _Atomic size_t live_reservations;
     _Atomic size_t live_leases;
@@ -141,8 +151,12 @@ struct bbq_queue {
     _Atomic size_t live_waiters;
     _Atomic size_t live_bindings;
     _Atomic size_t binding_cursor;
-    _Atomic uint32_t epoch;
-    _Atomic uint32_t capacity_epoch;
+    _Atomic uint64_t epoch;
+    _Atomic uint64_t capacity_epoch;
+#if BBQ_USE_FUTEX
+    _Atomic uint32_t epoch_futex;
+    _Atomic uint32_t capacity_epoch_futex;
+#endif
     _Atomic unsigned sleepers;
     _Atomic unsigned capacity_sleepers;
     _Atomic unsigned accepting;
@@ -181,6 +195,9 @@ struct bbq_queue {
     _Atomic int test_pause_after_faa;
     _Atomic int test_after_faa_entered;
     _Atomic int test_after_faa_release;
+    _Atomic size_t test_pause_reserved_remaining;
+    _Atomic size_t test_reserved_entered;
+    _Atomic size_t test_reserved_release_count;
     _Atomic int test_pause_after_install;
     _Atomic int test_after_install_entered;
     _Atomic int test_after_install_release;
@@ -194,6 +211,9 @@ struct bbq_queue {
     _Atomic int test_after_discard_producer_entered;
     _Atomic int test_after_discard_producer_release;
     _Atomic size_t test_record_word_probes;
+    _Atomic int test_pause_before_producer_ref;
+    _Atomic int test_before_producer_ref_entered;
+    _Atomic int test_before_producer_ref_release;
 #endif
 };
 
@@ -328,12 +348,30 @@ static void writer_end(struct bbq_queue *queue) {
     atomic_store_explicit(&queue->lifecycle_writer, 0, memory_order_release);
 }
 
+static int control_enter(struct bbq_queue *queue) {
+    unsigned expected = 0;
+    return atomic_compare_exchange_strong_explicit(&queue->control_owner, &expected, 1, memory_order_acq_rel,
+                                                   memory_order_acquire);
+}
+
+static void control_exit(struct bbq_queue *queue) {
+    atomic_store_explicit(&queue->control_owner, 0, memory_order_release);
+}
+
 static void producer_lock(struct bbq_producer_state *producer) {
     while (atomic_flag_test_and_set_explicit(&producer->gate, memory_order_acquire)) sched_yield();
 }
 
 static void producer_unlock(struct bbq_producer_state *producer) {
     atomic_flag_clear_explicit(&producer->gate, memory_order_release);
+}
+
+static void producer_publish_lock(struct bbq_producer_state *producer) {
+    while (atomic_flag_test_and_set_explicit(&producer->publish_gate, memory_order_acquire)) sched_yield();
+}
+
+static void producer_publish_unlock(struct bbq_producer_state *producer) {
+    atomic_flag_clear_explicit(&producer->publish_gate, memory_order_release);
 }
 
 static void producer_registry_lock(struct bbq_queue *queue) {
@@ -358,6 +396,29 @@ static void producer_registry_unlink(struct bbq_queue *queue, struct bbq_produce
         previous->next = producer->next;
 }
 
+static void producer_registry_sweep(struct bbq_queue *queue) {
+    producer_registry_lock(queue);
+    struct bbq_producer_state *previous = NULL;
+    struct bbq_producer_state *producer = atomic_load_explicit(&queue->producers, memory_order_relaxed);
+    while (producer != NULL) {
+        struct bbq_producer_state *next = producer->next;
+        producer_lock(producer);
+        const int reclaim = producer->handle_refs == 0 && producer->active_completions == 0 && producer->head == NULL;
+        if (reclaim) {
+            if (previous == NULL)
+                atomic_store_explicit(&queue->producers, next, memory_order_release);
+            else
+                previous->next = next;
+        } else {
+            previous = producer;
+        }
+        producer_unlock(producer);
+        if (reclaim) free(producer);
+        producer = next;
+    }
+    producer_registry_unlock(queue);
+}
+
 static void producer_completion_exit(struct bbq_queue *queue, struct bbq_producer_state *producer) {
     if (producer == &queue->anonymous_producer) {
         producer_lock(producer);
@@ -379,7 +440,10 @@ static void producer_completion_exit(struct bbq_queue *queue, struct bbq_produce
 }
 
 static void event_signal_on(struct bbq_queue *queue,
-                            _Atomic uint32_t *epoch,
+                            _Atomic uint64_t *epoch,
+#if BBQ_USE_FUTEX
+                            _Atomic uint32_t *futex_epoch,
+#endif
                             _Atomic unsigned *sleepers,
 #if !BBQ_USE_FUTEX
                             pthread_cond_t *condition,
@@ -387,9 +451,10 @@ static void event_signal_on(struct bbq_queue *queue,
                             int all) {
 #if BBQ_USE_FUTEX
     atomic_fetch_add_explicit(epoch, 1, memory_order_release);
+    atomic_fetch_add_explicit(futex_epoch, 1, memory_order_release);
     if (atomic_load_explicit(sleepers, memory_order_acquire) != 0) {
         BBQ_DIAG_INC(queue, wake_requests);
-        (void)syscall(SYS_futex, epoch, FUTEX_WAKE_PRIVATE, all ? INT_MAX : 1, NULL, NULL, 0);
+        (void)syscall(SYS_futex, futex_epoch, FUTEX_WAKE_PRIVATE, all ? INT_MAX : 1, NULL, NULL, 0);
     }
 #else
     pthread_mutex_lock(&queue->wait_mutex);
@@ -404,7 +469,11 @@ static void event_signal_on(struct bbq_queue *queue,
 }
 
 static void signal_work(struct bbq_queue *queue, int all) {
-    event_signal_on(queue, &queue->epoch, &queue->sleepers,
+    event_signal_on(queue, &queue->epoch,
+#if BBQ_USE_FUTEX
+                    &queue->epoch_futex,
+#endif
+                    &queue->sleepers,
 #if !BBQ_USE_FUTEX
                     &queue->wait_cond,
 #endif
@@ -412,7 +481,11 @@ static void signal_work(struct bbq_queue *queue, int all) {
 }
 
 static void signal_capacity(struct bbq_queue *queue, int all) {
-    event_signal_on(queue, &queue->capacity_epoch, &queue->capacity_sleepers,
+    event_signal_on(queue, &queue->capacity_epoch,
+#if BBQ_USE_FUTEX
+                    &queue->capacity_epoch_futex,
+#endif
+                    &queue->capacity_sleepers,
 #if !BBQ_USE_FUTEX
                     &queue->capacity_cond,
 #endif
@@ -539,8 +612,12 @@ static int fail_injected_prepare(struct bbq_queue *queue) {
 #endif
 
 static void physical_publish(struct bbq_queue *queue, struct bbq_record *record) {
+    const size_t record_index = record->pool_index;
     for (;;) {
-        const uint64_t position = atomic_fetch_add_explicit(&queue->publish_position, 1, memory_order_relaxed);
+#ifdef CA_TESTING
+        int installed_by_owner = 0;
+#endif
+        const uint64_t position = atomic_load_explicit(&queue->publish_position, memory_order_acquire);
         const uint64_t generation = position / queue->capacity;
         if (generation >= queue->generation_max) abort();
         struct bbq_cell *cell = cell_get(queue, position);
@@ -557,30 +634,77 @@ static void physical_publish(struct bbq_queue *queue, struct bbq_record *record)
                 }
             }
         } while (cell_generation(queue, control) < generation);
-        if (cell_generation(queue, control) != generation || cell_state(control) != BBQ_CELL_EMPTY) continue;
+        if (cell_generation(queue, control) != generation) continue;
+        enum bbq_cell_state state = cell_state(control);
+        if (state == BBQ_CELL_EMPTY) {
+            uint64_t expected_control = cell_control(queue, generation, BBQ_CELL_EMPTY, 0);
+            const uint64_t reserved_control = cell_control(queue, generation, BBQ_CELL_RESERVED, record_index);
+            if (!cell_control_cas(cell, &expected_control, reserved_control)) continue;
+            control = reserved_control;
+            state = BBQ_CELL_RESERVED;
 #ifdef CA_TESTING
-        int pause_expected = 1;
-        if (atomic_compare_exchange_strong_explicit(&queue->test_pause_after_faa, &pause_expected, 0,
-                                                    memory_order_acq_rel, memory_order_acquire)) {
-            atomic_store_explicit(&queue->test_after_faa_entered, 1, memory_order_release);
-            while (!atomic_load_explicit(&queue->test_after_faa_release, memory_order_acquire)) sched_yield();
-        }
+            installed_by_owner = 1;
 #endif
-        BBQ_DIAG_INC(queue, ready_enqueues);
-        signal_work(queue, 0);
-        uint64_t expected_control = cell_control(queue, generation, BBQ_CELL_EMPTY, 0);
-        if (!cell_control_cas(cell, &expected_control,
-                              cell_control(queue, generation, BBQ_CELL_FULL, record->pool_index)))
-            continue;
+        }
+        if (state == BBQ_CELL_RESERVED) {
+            const size_t installed_index = cell_record_index(queue, control);
 #ifdef CA_TESTING
-        pause_expected = 1;
-        if (atomic_compare_exchange_strong_explicit(&queue->test_pause_after_install, &pause_expected, 0,
-                                                    memory_order_acq_rel, memory_order_acquire)) {
-            atomic_store_explicit(&queue->test_after_install_entered, 1, memory_order_release);
-            while (!atomic_load_explicit(&queue->test_after_install_release, memory_order_acquire)) sched_yield();
-        }
+            if (installed_by_owner && installed_index == record_index) {
+                int pause_expected = 1;
+                if (atomic_compare_exchange_strong_explicit(&queue->test_pause_after_faa, &pause_expected, 0,
+                                                            memory_order_acq_rel, memory_order_acquire)) {
+                    atomic_store_explicit(&queue->test_after_faa_entered, 1, memory_order_release);
+                    while (!atomic_load_explicit(&queue->test_after_faa_release, memory_order_acquire)) sched_yield();
+                }
+                size_t remaining = atomic_load_explicit(&queue->test_pause_reserved_remaining, memory_order_acquire);
+                while (remaining != 0 && !atomic_compare_exchange_weak_explicit(
+                                             &queue->test_pause_reserved_remaining, &remaining, remaining - 1,
+                                             memory_order_acq_rel, memory_order_acquire));
+                if (remaining != 0) {
+                    const size_t ticket =
+                        atomic_fetch_add_explicit(&queue->test_reserved_entered, 1, memory_order_acq_rel);
+                    while (atomic_load_explicit(&queue->test_reserved_release_count, memory_order_acquire) <= ticket)
+                        sched_yield();
+                }
+            }
 #endif
-        return;
+            uint64_t expected_position = position;
+            (void)atomic_compare_exchange_strong_explicit(&queue->publish_position, &expected_position, position + 1,
+                                                          memory_order_release, memory_order_acquire);
+            if (installed_index != record_index) {
+                uint64_t expected_control = control;
+                if (cell_control_cas(cell, &expected_control,
+                                     cell_control(queue, generation, BBQ_CELL_FULL, installed_index))) {
+                    BBQ_DIAG_INC(queue, ready_enqueues);
+                    signal_work(queue, 0);
+                }
+                continue;
+            }
+            uint64_t expected_control = control;
+            if (cell_control_cas(cell, &expected_control,
+                                 cell_control(queue, generation, BBQ_CELL_FULL, record_index))) {
+                BBQ_DIAG_INC(queue, ready_enqueues);
+                signal_work(queue, 0);
+            } else if (cell_generation(queue, expected_control) == generation &&
+                       cell_record_index(queue, expected_control) != record_index) {
+                abort();
+            }
+#ifdef CA_TESTING
+            int pause_expected;
+            pause_expected = 1;
+            if (atomic_compare_exchange_strong_explicit(&queue->test_pause_after_install, &pause_expected, 0,
+                                                        memory_order_acq_rel, memory_order_acquire)) {
+                atomic_store_explicit(&queue->test_after_install_entered, 1, memory_order_release);
+                while (!atomic_load_explicit(&queue->test_after_install_release, memory_order_acquire)) sched_yield();
+            }
+#endif
+            return;
+        }
+        uint64_t expected_position = position;
+        (void)atomic_compare_exchange_strong_explicit(&queue->publish_position, &expected_position, position + 1,
+                                                      memory_order_release, memory_order_acquire);
+        if (cell_record_index(queue, control) == record_index) return;
+        sched_yield();
     }
 }
 
@@ -589,6 +713,34 @@ static struct bbq_producer_state *producer_state(struct bbq_queue *queue, ca_pro
     if (!producer->active || producer->queue != &queue->base || producer->private_state == NULL) return NULL;
     struct bbq_producer_state *state = producer->private_state;
     return state->queue == queue ? state : NULL;
+}
+
+static struct bbq_producer_state *producer_state_pin(struct bbq_queue *queue, ca_producer_t *producer) {
+    if (producer == NULL) return &queue->anonymous_producer;
+    size_t state = atomic_load_explicit(&producer->op_state, memory_order_acquire);
+    for (;;) {
+        if (state & BBQ_PRODUCER_CLOSED || (state & BBQ_PRODUCER_REF_MASK) == BBQ_PRODUCER_REF_MASK) return NULL;
+#ifdef CA_TESTING
+        if (atomic_load_explicit(&queue->test_pause_before_producer_ref, memory_order_acquire)) {
+            atomic_store_explicit(&queue->test_before_producer_ref_entered, 1, memory_order_release);
+            while (!atomic_load_explicit(&queue->test_before_producer_ref_release, memory_order_acquire)) sched_yield();
+        }
+#endif
+        if (atomic_compare_exchange_weak_explicit(&producer->op_state, &state, state + 1, memory_order_acquire,
+                                                  memory_order_acquire))
+            break;
+    }
+    struct bbq_producer_state *producer_private = producer_state(queue, producer);
+    if (producer_private == NULL) {
+        const size_t previous = atomic_fetch_sub_explicit(&producer->op_state, 1, memory_order_release);
+        if ((previous & BBQ_PRODUCER_REF_MASK) == 0) abort();
+    }
+    return producer_private;
+}
+
+static void producer_op_exit(ca_producer_t *producer) {
+    const size_t previous = atomic_fetch_sub_explicit(&producer->op_state, 1, memory_order_release);
+    if ((previous & BBQ_PRODUCER_REF_MASK) == 0) abort();
 }
 
 static ca_status_t publish_items(struct bbq_queue *queue,
@@ -619,9 +771,11 @@ static ca_status_t publish_items(struct bbq_queue *queue,
         }
         last = record;
     }
+    producer_publish_lock(producer);
     producer_lock(producer);
     if (count > UINT64_MAX - producer->next_ordinal) {
         producer_unlock(producer);
+        producer_publish_unlock(producer);
         while (first != NULL) {
             struct bbq_record *next = first->next;
             record_release(queue, first);
@@ -645,6 +799,7 @@ static ca_status_t publish_items(struct bbq_queue *queue,
         physical_publish(queue, record);
         record = next;
     }
+    producer_publish_unlock(producer);
     BBQ_DIAG_INC(queue, publish_calls);
     BBQ_DIAG_ADD(queue, published_items, count);
 #ifdef CA_ENABLE_DIAGNOSTICS
@@ -683,31 +838,85 @@ static void cell_finish(struct bbq_queue *queue, struct bbq_cell *cell, uint64_t
         abort();
 }
 
+static uint64_t help_reserved_publish_tail(struct bbq_queue *queue) {
+    const uint64_t position = atomic_load_explicit(&queue->publish_position, memory_order_acquire);
+    const uint64_t generation = position / queue->capacity;
+    if (generation >= queue->generation_max) abort();
+    struct bbq_cell *cell = cell_get(queue, position);
+    uint64_t control = cell_control_load(cell);
+    if (cell_generation(queue, control) != generation || cell_state(control) != BBQ_CELL_RESERVED) return position;
+    const size_t record_index = cell_record_index(queue, control);
+    uint64_t expected_position = position;
+    (void)atomic_compare_exchange_strong_explicit(&queue->publish_position, &expected_position, position + 1,
+                                                  memory_order_release, memory_order_acquire);
+    uint64_t expected_control = control;
+    if (cell_control_cas(cell, &expected_control, cell_control(queue, generation, BBQ_CELL_FULL, record_index))) {
+        BBQ_DIAG_INC(queue, ready_enqueues);
+        signal_work(queue, 0);
+    }
+    return atomic_load_explicit(&queue->publish_position, memory_order_acquire);
+}
+
 static ca_status_t claim_records(struct bbq_queue *queue,
                                  ca_claim_item_t *items,
                                  size_t maximum,
                                  size_t *claimed_count) {
     size_t count = 0;
+    /* Scan only the physical prefix visible on entry. Logical capacity bounds
+     * this prefix, so blocked records or tombstones cannot make one claim call
+     * chase a concurrently growing publication tail without bound. */
+    const uint64_t scan_limit = help_reserved_publish_tail(queue);
     while (count < maximum) {
         uint64_t position = atomic_load_explicit(&queue->claim_position, memory_order_acquire);
-        if (position >= atomic_load_explicit(&queue->publish_position, memory_order_acquire)) break;
-        if (!atomic_compare_exchange_weak_explicit(&queue->claim_position, &position, position + 1,
-                                                   memory_order_acq_rel, memory_order_acquire))
-            continue;
+        if (position >= scan_limit) break;
+        const uint64_t published = atomic_load_explicit(&queue->publish_position, memory_order_acquire);
+        if (position >= published) break;
         struct bbq_cell *cell = cell_get(queue, position);
         const uint64_t generation = position / queue->capacity;
         uint64_t control;
+        int stale_position = 0;
         do {
             control = cell_control_load(cell);
-            if (cell_generation(queue, control) < generation) sched_yield();
+            if (cell_generation(queue, control) < generation) {
+                if (atomic_load_explicit(&queue->claim_position, memory_order_acquire) != position) {
+                    stale_position = 1;
+                    break;
+                }
+                sched_yield();
+            }
         } while (cell_generation(queue, control) < generation);
-        if (cell_generation(queue, control) != generation) abort();
-        if (cell_state(control) == BBQ_CELL_EMPTY) {
+        /* Inspection precedes ownership of the head ticket. Another consumer
+         * may advance and fully recycle this cell while we inspect it. */
+        if (stale_position || cell_generation(queue, control) != generation) continue;
+        if (cell_state(control) == BBQ_CELL_RESERVED) {
+            const size_t record_index = cell_record_index(queue, control);
+            uint64_t expected_control = control;
+            if (cell_control_cas(cell, &expected_control,
+                                 cell_control(queue, generation, BBQ_CELL_FULL, record_index))) {
+                BBQ_DIAG_INC(queue, ready_enqueues);
+                signal_work(queue, 0);
+                control = cell_control(queue, generation, BBQ_CELL_FULL, record_index);
+            } else {
+                control = expected_control;
+            }
+            if (cell_generation(queue, control) != generation) continue;
+        }
+        /* Do not steal the newest reservation from a running publisher. A
+         * later reserved position is the helpability proof that this hole may
+         * be tombstoned without letting a polling consumer starve a producer. */
+        if (cell_state(control) == BBQ_CELL_EMPTY && published == position + 1) break;
+        if (!atomic_compare_exchange_weak_explicit(&queue->claim_position, &position, position + 1,
+                                                   memory_order_acq_rel, memory_order_acquire))
+            continue;
+        control = cell_control_load(cell);
+        if (cell_generation(queue, control) != generation) continue;
+        if (cell_state(control) == BBQ_CELL_EMPTY &&
+            atomic_load_explicit(&queue->publish_position, memory_order_acquire) > position + 1) {
             uint64_t expected_control = cell_control(queue, generation, BBQ_CELL_EMPTY, 0);
             (void)cell_control_cas(cell, &expected_control, cell_control(queue, generation, BBQ_CELL_TOMBSTONE, 0));
             control = cell_control_load(cell);
         }
-        if (cell_generation(queue, control) != generation) abort();
+        if (cell_generation(queue, control) != generation) continue;
         if (cell_state(control) == BBQ_CELL_TOMBSTONE) {
             cell_finish(queue, cell, position, control);
             continue;
@@ -780,7 +989,9 @@ static ca_status_t bbq_lifecycle_activate(ca_lifecycle_binding_t *binding, ca_li
     scope->active = 1;
     bbq_active_binding = binding;
     atomic_fetch_add_explicit(&binding->activations, 1, memory_order_relaxed);
-    operation_exit(queue);
+    /* Keep lifecycle admission pinned for the full activated scope. The
+     * matching deactivate must always unwind this reference even after a
+     * writer has closed new admission. */
     return CA_OK;
 }
 
@@ -788,8 +999,6 @@ static ca_status_t bbq_lifecycle_deactivate(ca_lifecycle_scope_t *scope) {
     if (scope == NULL || !scope->active || scope->binding == NULL || bbq_active_binding != scope->binding)
         return CA_INVALID;
     struct bbq_queue *queue = as_bbq(scope->binding->queue);
-    ca_status_t status = operation_enter(queue);
-    if (status != CA_OK) return status;
     bbq_active_binding = scope->previous;
     atomic_fetch_sub_explicit(&scope->binding->activations, 1, memory_order_release);
     memset(scope, 0, sizeof(*scope));
@@ -826,6 +1035,7 @@ static ca_status_t bbq_producer_register_common(ca_queue_t *base,
         state->fallback = (unsigned)fallback;
         state->retry_barrier = UINT64_MAX;
         atomic_flag_clear(&state->gate);
+        atomic_flag_clear(&state->publish_gate);
         state->next = atomic_load_explicit(&queue->producers, memory_order_relaxed);
         atomic_store_explicit(&queue->producers, state, memory_order_release);
     }
@@ -837,6 +1047,7 @@ static ca_status_t bbq_producer_register_common(ca_queue_t *base,
                                                : (stable_key == 0 ? 0 : stable_key - 1) % BBQ_DEDICATED_PRODUCERS);
     producer->lane_generation = 1;
     atomic_init(&producer->outstanding, 0);
+    atomic_init(&producer->op_state, 0);
     producer->active = 1;
     producer->fallback = fallback;
     atomic_fetch_add_explicit(&queue->live_producers, 1, memory_order_relaxed);
@@ -853,11 +1064,29 @@ static ca_status_t bbq_producer_register_fallback(ca_queue_t *base, size_t index
 }
 
 static ca_status_t bbq_producer_release(ca_producer_t *producer) {
-    if (producer == NULL || producer->queue == NULL || !producer->active) return CA_INVALID;
+    if (producer == NULL) return CA_INVALID;
+    size_t lifecycle_state = atomic_load_explicit(&producer->op_state, memory_order_acquire);
+    for (;;) {
+        if (lifecycle_state & BBQ_PRODUCER_CLOSED) return CA_INVALID;
+        if (atomic_compare_exchange_weak_explicit(&producer->op_state, &lifecycle_state,
+                                                  lifecycle_state | BBQ_PRODUCER_CLOSED, memory_order_acq_rel,
+                                                  memory_order_acquire))
+            break;
+    }
+    while ((atomic_load_explicit(&producer->op_state, memory_order_acquire) & BBQ_PRODUCER_REF_MASK) != 0)
+        sched_yield();
+    if (producer->queue == NULL || !producer->active) {
+        atomic_store_explicit(&producer->op_state, 0, memory_order_release);
+        return CA_INVALID;
+    }
     struct bbq_queue *queue = as_bbq(producer->queue);
     ca_status_t status = operation_enter(queue);
-    if (status != CA_OK) return status;
+    if (status != CA_OK) {
+        atomic_store_explicit(&producer->op_state, 0, memory_order_release);
+        return status;
+    }
     if (atomic_load_explicit(&producer->outstanding, memory_order_acquire) != 0) {
+        atomic_store_explicit(&producer->op_state, 0, memory_order_release);
         operation_exit(queue);
         return CA_BUSY;
     }
@@ -897,7 +1126,8 @@ static ca_status_t bbq_reserve(ca_queue_t *base,
     ca_status_t status = operation_enter(queue);
     if (status != CA_OK) return status;
     memset(reservation, 0, sizeof(*reservation));
-    struct bbq_producer_state *state = producer_state(queue, producer);
+    struct bbq_producer_state *state = producer_state_pin(queue, producer);
+    const int producer_pinned = producer != NULL && state != NULL;
     if (!atomic_load_explicit(&queue->accepting, memory_order_acquire))
         status = CA_CLOSED;
     else if (state == NULL)
@@ -913,6 +1143,7 @@ static ca_status_t bbq_reserve(ca_queue_t *base,
         owner_acquire(producer);
         atomic_fetch_add_explicit(&queue->live_reservations, 1, memory_order_relaxed);
     }
+    if (producer_pinned) producer_op_exit(producer);
     operation_exit(queue);
     return status;
 }
@@ -987,10 +1218,8 @@ static ca_status_t bbq_publish_reserved(ca_reservation_t *reservation, void *con
 static void bbq_cancel_reservation(ca_reservation_t *reservation) {
     if (reservation == NULL || reservation->queue == NULL || !reservation->active) return;
     struct bbq_queue *queue = as_bbq(reservation->queue);
-    if (operation_enter(queue) != CA_OK) return;
     release_capacity(queue, reservation->count);
     close_reservation(queue, reservation);
-    operation_exit(queue);
 }
 
 static ca_status_t bbq_submit_span(
@@ -1016,7 +1245,10 @@ static ca_status_t bbq_credit_acquire(ca_queue_t *base,
     ca_status_t status = operation_enter(queue);
     if (status != CA_OK) return status;
     memset(lease, 0, sizeof(*lease));
-    if (!atomic_load_explicit(&queue->accepting, memory_order_acquire) || producer_state(queue, producer) == NULL) {
+    struct bbq_producer_state *producer_state = producer_state_pin(queue, producer);
+    const int producer_pinned = producer != NULL && producer_state != NULL;
+    if (!atomic_load_explicit(&queue->accepting, memory_order_acquire) || producer_state == NULL) {
+        if (producer_pinned) producer_op_exit(producer);
         operation_exit(queue);
         return CA_CLOSED;
     }
@@ -1035,6 +1267,7 @@ static ca_status_t bbq_credit_acquire(ca_queue_t *base,
     status = reserve_capacity(queue, 1 + extra, &granted);
     if (status != CA_OK && status != CA_PARTIAL) {
         atomic_fetch_sub_explicit(&queue->speculative_unused, extra, memory_order_release);
+        if (producer_pinned) producer_op_exit(producer);
         operation_exit(queue);
         return status;
     }
@@ -1049,6 +1282,7 @@ static ca_status_t bbq_credit_acquire(ca_queue_t *base,
     lease->active = 1;
     owner_acquire(producer);
     atomic_fetch_add_explicit(&queue->live_leases, 1, memory_order_relaxed);
+    if (producer_pinned) producer_op_exit(producer);
     operation_exit(queue);
     return granted == wanted ? CA_OK : CA_PARTIAL;
 }
@@ -1096,11 +1330,9 @@ static ca_status_t bbq_credit_submit_span(ca_credit_lease_t *lease,
 static void bbq_credit_release(ca_credit_lease_t *lease) {
     if (lease == NULL || lease->queue == NULL || !lease->active) return;
     struct bbq_queue *queue = as_bbq(lease->queue);
-    if (operation_enter(queue) != CA_OK) return;
     atomic_fetch_sub_explicit(&queue->speculative_unused, lease->speculative_unused, memory_order_release);
     release_capacity(queue, lease->unused);
     close_lease(queue, lease);
-    operation_exit(queue);
 }
 
 static ca_status_t bbq_builder_begin(ca_queue_t *base, ca_producer_t *producer, ca_builder_t *builder) {
@@ -1109,7 +1341,10 @@ static ca_status_t bbq_builder_begin(ca_queue_t *base, ca_producer_t *producer, 
     ca_status_t status = operation_enter(queue);
     if (status != CA_OK) return status;
     memset(builder, 0, sizeof(*builder));
-    if (!atomic_load_explicit(&queue->accepting, memory_order_acquire) || producer_state(queue, producer) == NULL) {
+    struct bbq_producer_state *producer_state = producer_state_pin(queue, producer);
+    const int producer_pinned = producer != NULL && producer_state != NULL;
+    if (!atomic_load_explicit(&queue->accepting, memory_order_acquire) || producer_state == NULL) {
+        if (producer_pinned) producer_op_exit(producer);
         operation_exit(queue);
         return CA_CLOSED;
     }
@@ -1121,6 +1356,7 @@ static ca_status_t bbq_builder_begin(ca_queue_t *base, ca_producer_t *producer, 
     builder->active = 1;
     owner_acquire(producer);
     atomic_fetch_add_explicit(&queue->live_builders, 1, memory_order_relaxed);
+    if (producer_pinned) producer_op_exit(producer);
     operation_exit(queue);
     return CA_OK;
 }
@@ -1239,10 +1475,8 @@ static ca_status_t bbq_builder_publish(ca_builder_t *builder) {
 static void bbq_builder_cancel(ca_builder_t *builder) {
     if (builder == NULL || builder->queue == NULL || !builder->active) return;
     struct bbq_queue *queue = as_bbq(builder->queue);
-    if (operation_enter(queue) != CA_OK) return;
     release_capacity(queue, builder->count);
     close_builder(queue, builder);
-    operation_exit(queue);
 }
 
 static ca_status_t bbq_claim(ca_queue_t *base, ca_claim_t *claim, ca_claim_item_t *items, size_t maximum) {
@@ -1431,11 +1665,11 @@ static void bbq_capacity_read(const ca_queue_t *base, ca_capacity_snapshot_t *sn
     operation_exit(queue);
 }
 
-static uint32_t bbq_epoch(const ca_queue_t *base) {
+static uint64_t bbq_epoch(const ca_queue_t *base) {
     return atomic_load_explicit(&((const struct bbq_queue *)base)->epoch, memory_order_acquire);
 }
 
-static uint32_t bbq_capacity_epoch(const ca_queue_t *base) {
+static uint64_t bbq_capacity_epoch(const ca_queue_t *base) {
     return atomic_load_explicit(&((const struct bbq_queue *)base)->capacity_epoch, memory_order_acquire);
 }
 
@@ -1455,12 +1689,15 @@ static void wait_cancel_cleanup(void *argument) {
 #endif
 
 static ca_status_t wait_on_epoch(struct bbq_queue *queue,
-                                 _Atomic uint32_t *epoch,
+                                 _Atomic uint64_t *epoch,
+#if BBQ_USE_FUTEX
+                                 _Atomic uint32_t *futex_epoch,
+#endif
                                  _Atomic unsigned *sleepers,
 #if !BBQ_USE_FUTEX
                                  pthread_cond_t *condition,
 #endif
-                                 uint32_t observed,
+                                 uint64_t observed,
                                  const struct timespec *deadline) {
     ca_status_t status = operation_enter(queue);
     if (status != CA_OK) return status;
@@ -1475,11 +1712,12 @@ static ca_status_t wait_on_epoch(struct bbq_queue *queue,
      * sleeping so a writer can close waiting and wake both adapter classes. */
     operation_exit(queue);
 #if BBQ_USE_FUTEX
+    const uint32_t futex_observed = atomic_load_explicit(futex_epoch, memory_order_acquire);
     if (atomic_load_explicit(epoch, memory_order_acquire) == observed) {
         struct timespec relative;
         const int deadline_state = relative_deadline(deadline, &relative);
         int result = deadline_state < 0 ? ETIMEDOUT
-                                        : (int)syscall(SYS_futex, epoch, FUTEX_WAIT_PRIVATE, observed,
+                                        : (int)syscall(SYS_futex, futex_epoch, FUTEX_WAIT_PRIVATE, futex_observed,
                                                        deadline_state == 0 ? NULL : &relative, NULL, 0);
         if (result != 0 && deadline_state >= 0) result = errno;
         if (result == ETIMEDOUT) status = CA_TIMED_OUT;
@@ -1513,18 +1751,26 @@ static ca_status_t wait_on_epoch(struct bbq_queue *queue,
     return status;
 }
 
-static ca_status_t bbq_wait_epoch(ca_queue_t *base, uint32_t observed, const struct timespec *deadline) {
+static ca_status_t bbq_wait_epoch(ca_queue_t *base, uint64_t observed, const struct timespec *deadline) {
     struct bbq_queue *queue = as_bbq(base);
-    return wait_on_epoch(queue, &queue->epoch, &queue->sleepers,
+    return wait_on_epoch(queue, &queue->epoch,
+#if BBQ_USE_FUTEX
+                         &queue->epoch_futex,
+#endif
+                         &queue->sleepers,
 #if !BBQ_USE_FUTEX
                          &queue->wait_cond,
 #endif
                          observed, deadline);
 }
 
-static ca_status_t bbq_wait_capacity_epoch(ca_queue_t *base, uint32_t observed, const struct timespec *deadline) {
+static ca_status_t bbq_wait_capacity_epoch(ca_queue_t *base, uint64_t observed, const struct timespec *deadline) {
     struct bbq_queue *queue = as_bbq(base);
-    return wait_on_epoch(queue, &queue->capacity_epoch, &queue->capacity_sleepers,
+    return wait_on_epoch(queue, &queue->capacity_epoch,
+#if BBQ_USE_FUTEX
+                         &queue->capacity_epoch_futex,
+#endif
+                         &queue->capacity_sleepers,
 #if !BBQ_USE_FUTEX
                          &queue->capacity_cond,
 #endif
@@ -1575,8 +1821,12 @@ static size_t discard_producer(struct bbq_queue *queue, struct bbq_producer_stat
 static ca_status_t bbq_quiesce(ca_queue_t *base, ca_quiesce_mode_t mode, const struct timespec *deadline) {
     struct bbq_queue *queue = as_bbq(base);
     size_t discarded;
+    if (!control_enter(queue)) return CA_BUSY;
     ca_status_t status = writer_begin(queue, deadline);
-    if (status != CA_OK) return status;
+    if (status != CA_OK) {
+        control_exit(queue);
+        return status;
+    }
     const unsigned was_accepting = atomic_load_explicit(&queue->accepting, memory_order_relaxed);
     const unsigned was_publishing = atomic_load_explicit(&queue->publishing, memory_order_relaxed);
     const unsigned was_claiming = atomic_load_explicit(&queue->claiming, memory_order_relaxed);
@@ -1595,7 +1845,7 @@ static ca_status_t bbq_quiesce(ca_queue_t *base, ca_quiesce_mode_t mode, const s
     if (mode == CA_QUIESCE_DRAIN) {
         while (atomic_load_explicit(&queue->available, memory_order_acquire) != queue->capacity) {
             if (deadline_expired(deadline)) goto timed_out;
-            const uint32_t observed = atomic_load_explicit(&queue->capacity_epoch, memory_order_acquire);
+            const uint64_t observed = atomic_load_explicit(&queue->capacity_epoch, memory_order_acquire);
             status = bbq_wait_capacity_epoch(base, observed, deadline);
             if (status == CA_TIMED_OUT) goto timed_out;
         }
@@ -1604,6 +1854,7 @@ static ca_status_t bbq_quiesce(ca_queue_t *base, ca_quiesce_mode_t mode, const s
         atomic_store_explicit(&queue->waiting, 0, memory_order_release);
         bbq_interrupt_waiters(base);
         record_pool_trim(queue);
+        control_exit(queue);
         return CA_OK;
     }
     while (atomic_load_explicit(&queue->live_claims, memory_order_acquire) != 0) {
@@ -1626,8 +1877,12 @@ static ca_status_t bbq_quiesce(ca_queue_t *base, ca_quiesce_mode_t mode, const s
 #endif
     }
     release_capacity(queue, discarded);
-    if (atomic_load_explicit(&queue->available, memory_order_acquire) != queue->capacity) return CA_BUSY;
+    if (atomic_load_explicit(&queue->available, memory_order_acquire) != queue->capacity) {
+        control_exit(queue);
+        return CA_BUSY;
+    }
     record_pool_trim(queue);
+    control_exit(queue);
     return CA_OK;
 
 timed_out:
@@ -1636,7 +1891,9 @@ timed_out:
     atomic_store_explicit(&queue->claiming, was_claiming, memory_order_relaxed);
     atomic_store_explicit(&queue->waiting, was_waiting, memory_order_release);
     atomic_store_explicit(&queue->phase, was_phase, memory_order_release);
+    if (was_phase == BBQ_PHASE_RUNNING) producer_registry_sweep(queue);
     bbq_interrupt_waiters(base);
+    control_exit(queue);
     return CA_TIMED_OUT;
 }
 
@@ -1651,8 +1908,12 @@ static void free_allocations(struct bbq_queue *queue) {
 
 static ca_status_t bbq_destroy(ca_queue_t *base) {
     struct bbq_queue *queue = as_bbq(base);
+    if (!control_enter(queue)) return CA_BUSY;
     ca_status_t status = writer_begin(queue, NULL);
-    if (status != CA_OK) return status;
+    if (status != CA_OK) {
+        control_exit(queue);
+        return status;
+    }
     const unsigned was_phase = atomic_load_explicit(&queue->phase, memory_order_relaxed);
     atomic_store_explicit(&queue->destroying, 1, memory_order_release);
     atomic_store_explicit(&queue->phase, BBQ_PHASE_DESTROY, memory_order_release);
@@ -1668,6 +1929,7 @@ static ca_status_t bbq_destroy(ca_queue_t *base) {
         atomic_store_explicit(&queue->destroying, 0, memory_order_release);
         atomic_store_explicit(&queue->phase, was_phase, memory_order_release);
         writer_end(queue);
+        control_exit(queue);
         return CA_BUSY;
     }
     struct bbq_producer_state *producer = atomic_load_explicit(&queue->producers, memory_order_relaxed);
@@ -1742,6 +2004,7 @@ static ca_status_t bbq_create(const ca_config_t *config, ca_queue_t **result) {
     queue->anonymous_producer.queue = queue;
     queue->anonymous_producer.retry_barrier = UINT64_MAX;
     atomic_flag_clear(&queue->anonymous_producer.gate);
+    atomic_flag_clear(&queue->anonymous_producer.publish_gate);
     atomic_init(&queue->producers, NULL);
     atomic_flag_clear(&queue->producer_registry_gate);
     atomic_init(&queue->available, config->capacity);
@@ -1749,6 +2012,7 @@ static ca_status_t bbq_create(const ca_config_t *config, ca_queue_t **result) {
     atomic_init(&queue->in_flight, 0);
     atomic_init(&queue->active_calls, 0);
     atomic_init(&queue->lifecycle_writer, 0);
+    atomic_init(&queue->control_owner, 0);
     atomic_init(&queue->live_producers, 0);
     atomic_init(&queue->live_reservations, 0);
     atomic_init(&queue->live_leases, 0);
@@ -1762,6 +2026,10 @@ static ca_status_t bbq_create(const ca_config_t *config, ca_queue_t **result) {
 #endif
     atomic_init(&queue->epoch, 0);
     atomic_init(&queue->capacity_epoch, 0);
+#if BBQ_USE_FUTEX
+    atomic_init(&queue->epoch_futex, 0);
+    atomic_init(&queue->capacity_epoch_futex, 0);
+#endif
     atomic_init(&queue->sleepers, 0);
     atomic_init(&queue->capacity_sleepers, 0);
     atomic_init(&queue->accepting, 1);
@@ -1770,6 +2038,14 @@ static ca_status_t bbq_create(const ca_config_t *config, ca_queue_t **result) {
     atomic_init(&queue->waiting, 1);
     atomic_init(&queue->destroying, 0);
     atomic_init(&queue->phase, BBQ_PHASE_RUNNING);
+#if BBQ_USE_FUTEX
+    if (!atomic_is_lock_free(&queue->epoch) || !atomic_is_lock_free(&queue->capacity_epoch) ||
+        !atomic_is_lock_free(&queue->epoch_futex) || !atomic_is_lock_free(&queue->capacity_epoch_futex)) {
+        free_allocations(queue);
+        free(queue);
+        return CA_INVALID;
+    }
+#endif
 #ifdef CA_ENABLE_DIAGNOSTICS
     atomic_init(&queue->capacity_attempts, 0);
     atomic_init(&queue->capacity_failures, 0);
@@ -1790,6 +2066,9 @@ static ca_status_t bbq_create(const ca_config_t *config, ca_queue_t **result) {
     atomic_init(&queue->test_pause_after_faa, 0);
     atomic_init(&queue->test_after_faa_entered, 0);
     atomic_init(&queue->test_after_faa_release, 0);
+    atomic_init(&queue->test_pause_reserved_remaining, 0);
+    atomic_init(&queue->test_reserved_entered, 0);
+    atomic_init(&queue->test_reserved_release_count, 0);
     atomic_init(&queue->test_pause_after_install, 0);
     atomic_init(&queue->test_after_install_entered, 0);
     atomic_init(&queue->test_after_install_release, 0);
@@ -1803,6 +2082,9 @@ static ca_status_t bbq_create(const ca_config_t *config, ca_queue_t **result) {
     atomic_init(&queue->test_after_discard_producer_entered, 0);
     atomic_init(&queue->test_after_discard_producer_release, 0);
     atomic_init(&queue->test_record_word_probes, 0);
+    atomic_init(&queue->test_pause_before_producer_ref, 0);
+    atomic_init(&queue->test_before_producer_ref_entered, 0);
+    atomic_init(&queue->test_before_producer_ref_release, 0);
 #endif
 #if !BBQ_USE_FUTEX
     if (pthread_mutex_init(&queue->wait_mutex, NULL) != 0) goto synchronization_error;
@@ -1889,6 +2171,21 @@ void ca_bbq_test_release_after_faa(ca_queue_t *base) {
     struct bbq_queue *queue = as_bbq(base);
     atomic_store_explicit(&queue->test_pause_after_faa, 0, memory_order_relaxed);
     atomic_store_explicit(&queue->test_after_faa_release, 1, memory_order_release);
+}
+
+void ca_bbq_test_pause_reserved(ca_queue_t *base, size_t count) {
+    struct bbq_queue *queue = as_bbq(base);
+    atomic_store_explicit(&queue->test_reserved_entered, 0, memory_order_relaxed);
+    atomic_store_explicit(&queue->test_reserved_release_count, 0, memory_order_relaxed);
+    atomic_store_explicit(&queue->test_pause_reserved_remaining, count, memory_order_release);
+}
+
+size_t ca_bbq_test_reserved_entered(ca_queue_t *base) {
+    return atomic_load_explicit(&as_bbq(base)->test_reserved_entered, memory_order_acquire);
+}
+
+void ca_bbq_test_release_reserved(ca_queue_t *base, size_t count) {
+    atomic_store_explicit(&as_bbq(base)->test_reserved_release_count, count, memory_order_release);
 }
 
 void ca_bbq_test_pause_after_install(ca_queue_t *base) {
@@ -1985,6 +2282,41 @@ void ca_bbq_test_reset_record_word_probes(ca_queue_t *base) {
 
 size_t ca_bbq_test_record_word_probes(ca_queue_t *base) {
     return atomic_load_explicit(&as_bbq(base)->test_record_word_probes, memory_order_relaxed);
+}
+
+int ca_bbq_test_writer_active(ca_queue_t *base) {
+    return atomic_load_explicit(&as_bbq(base)->lifecycle_writer, memory_order_acquire);
+}
+
+void ca_bbq_test_seed_epochs(ca_queue_t *base, uint64_t work, uint64_t capacity) {
+    struct bbq_queue *queue = as_bbq(base);
+    atomic_store_explicit(&queue->epoch, work, memory_order_release);
+    atomic_store_explicit(&queue->capacity_epoch, capacity, memory_order_release);
+    #if BBQ_USE_FUTEX
+    atomic_store_explicit(&queue->epoch_futex, (uint32_t)work, memory_order_release);
+    atomic_store_explicit(&queue->capacity_epoch_futex, (uint32_t)capacity, memory_order_release);
+    #endif
+}
+
+void ca_bbq_test_pause_before_producer_ref(ca_queue_t *base) {
+    struct bbq_queue *queue = as_bbq(base);
+    atomic_store_explicit(&queue->test_before_producer_ref_entered, 0, memory_order_relaxed);
+    atomic_store_explicit(&queue->test_before_producer_ref_release, 0, memory_order_relaxed);
+    atomic_store_explicit(&queue->test_pause_before_producer_ref, 1, memory_order_release);
+}
+
+int ca_bbq_test_before_producer_ref_entered(ca_queue_t *base) {
+    return atomic_load_explicit(&as_bbq(base)->test_before_producer_ref_entered, memory_order_acquire);
+}
+
+void ca_bbq_test_release_before_producer_ref(ca_queue_t *base) {
+    struct bbq_queue *queue = as_bbq(base);
+    atomic_store_explicit(&queue->test_before_producer_ref_release, 1, memory_order_release);
+    atomic_store_explicit(&queue->test_pause_before_producer_ref, 0, memory_order_release);
+}
+
+int ca_bbq_test_producer_closed(ca_producer_t *producer) {
+    return (atomic_load_explicit(&producer->op_state, memory_order_acquire) & BBQ_PRODUCER_CLOSED) != 0;
 }
 #endif
 

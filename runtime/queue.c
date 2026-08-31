@@ -2384,7 +2384,7 @@ typedef struct qConcurrentWorker_s {
     ca_claim_t claim;
     ca_claim_item_t *items;
     ca_completion_state_t *completion;
-    uint32_t observedEpoch;
+    uint64_t observedEpoch;
 } qConcurrentWorker_t;
 
 static rsRetVal caStatusToRet(const ca_status_t status) {
@@ -5464,14 +5464,14 @@ static flowControl_t concurrentArrayFlowControl(const smsg_t *msg) {
 
 static void concurrentArrayWaitWatermark(qqueue_t *pThis, const flowControl_t flowCtlType) {
     while (flowCtlType == eFLOWCTL_FULL_DELAY && pThis->iFullDlyMrk > 0 && !glbl.GetGlobalInputTermState()) {
-        const uint32_t observed = ca_capacity_epoch(pThis->concurrentArray);
+        const uint64_t observed = ca_capacity_epoch(pThis->concurrentArray);
         if (ATOMIC_LOAD_32BIT(&pThis->iQueueSize, &pThis->mutQueueSize) < pThis->iFullDlyMrk) break;
         struct timespec deadline;
         monotonicDeadline(&deadline, 1000);
         (void)ca_wait_capacity_epoch(pThis->concurrentArray, observed, &deadline);
     }
     if (flowCtlType == eFLOWCTL_LIGHT_DELAY && pThis->iLightDlyMrk > 0 && !glbl.GetGlobalInputTermState()) {
-        const uint32_t observed = ca_capacity_epoch(pThis->concurrentArray);
+        const uint64_t observed = ca_capacity_epoch(pThis->concurrentArray);
         if (ATOMIC_LOAD_32BIT(&pThis->iQueueSize, &pThis->mutQueueSize) >= pThis->iLightDlyMrk &&
             !glbl.GetGlobalInputTermState()) {
             struct timespec deadline;
@@ -5496,7 +5496,7 @@ static rsRetVal doEnqConcurrentArray(qqueue_t *pThis,
     if (pThis->takeFlowCtlFromMsg) flowCtlType = pMsg->flowCtlType;
 
     while (flowCtlType == eFLOWCTL_FULL_DELAY && pThis->iFullDlyMrk > 0 && !glbl.GetGlobalInputTermState()) {
-        const uint32_t observed = ca_capacity_epoch(pThis->concurrentArray);
+        const uint64_t observed = ca_capacity_epoch(pThis->concurrentArray);
         /* The epoch snapshot must precede this predicate recheck. A completion
          * between them changes the epoch, so the capacity wait cannot sleep on
          * an already-satisfied watermark transition. */
@@ -5506,7 +5506,7 @@ static rsRetVal doEnqConcurrentArray(qqueue_t *pThis,
         (void)ca_wait_capacity_epoch(pThis->concurrentArray, observed, &deadline);
     }
     if (flowCtlType == eFLOWCTL_LIGHT_DELAY && pThis->iLightDlyMrk > 0 && !glbl.GetGlobalInputTermState()) {
-        const uint32_t observed = ca_capacity_epoch(pThis->concurrentArray);
+        const uint64_t observed = ca_capacity_epoch(pThis->concurrentArray);
         if (ATOMIC_LOAD_32BIT(&pThis->iQueueSize, &pThis->mutQueueSize) >= pThis->iLightDlyMrk &&
             !glbl.GetGlobalInputTermState()) {
             struct timespec deadline;
@@ -5516,7 +5516,7 @@ static rsRetVal doEnqConcurrentArray(qqueue_t *pThis,
     }
 
     while (1) {
-        const uint32_t observed = ca_capacity_epoch(pThis->concurrentArray);
+        const uint64_t observed = ca_capacity_epoch(pThis->concurrentArray);
         ca_reservation_t reservation;
         const ca_status_t reserveStatus = ca_reserve(pThis->concurrentArray, producer, 1, &reservation);
         if (reserveStatus != CA_OK) {
@@ -5667,7 +5667,7 @@ rsRetVal qqueueConcurrentTargetStage(
         }
     }
     while (!target->lease.active) {
-        const uint32_t observed = ca_capacity_epoch(queue->concurrentArray);
+        const uint64_t observed = ca_capacity_epoch(queue->concurrentArray);
         const ca_status_t status = ca_credit_acquire(queue->concurrentArray, target->producer, 64, &target->lease);
         if (status == CA_OK || status == CA_PARTIAL) break;
         if (status != CA_FULL) {
@@ -5879,7 +5879,7 @@ static rsRetVal qqueueMultiEnqObjConcurrentArray(qqueue_t *pThis, multi_submit_t
             }
         }
 
-        const uint32_t observed = ca_capacity_epoch(pThis->concurrentArray);
+        const uint64_t observed = ca_capacity_epoch(pThis->concurrentArray);
         ca_reservation_t reservation;
 #ifdef ENABLE_IMDIAG
         __atomic_fetch_add(&pThis->concurrentTestMultiReservations, 1, __ATOMIC_RELAXED);
@@ -6297,7 +6297,7 @@ rsRetVal qqueueApplyCnfParam(qqueue_t *pThis, struct nvlst *lst) {
     int concurrentSamplingSet = 0;
     int concurrentRateParamSet = 0;
     const char *name;
-    struct cnfparamvals *pvals;
+    struct cnfparamvals *pvals = NULL;
     int n_params_set = 0;
     DEFiRet;
 
@@ -6599,8 +6599,8 @@ rsRetVal qqueueApplyCnfParam(qqueue_t *pThis, struct nvlst *lst) {
         CHKiRet(initCryprov(pThis, lst));
     }
 
-    cnfparamvalsDestruct(pvals, &pblk);
 finalize_it:
+    if (pvals != NULL) cnfparamvalsDestruct(pvals, &pblk);
     RETiRet;
 }
 

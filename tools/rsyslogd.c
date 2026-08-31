@@ -1047,6 +1047,8 @@ static rsRetVal msgConsumer(void __attribute__((unused)) * notNeeded, batch_t *p
  * rgerhards, 2009-10-27
  */
 rsRetVal createMainQueue(qqueue_t **ppQueue, uchar *pszQueueName, struct nvlst *lst) {
+    qqueue_t *const originalQueue = *ppQueue;
+    int queueConstructed = 0;
     struct queuefilenames_s *qfn;
     uchar *qfname = NULL;
     uchar *queueName = pszQueueName;
@@ -1083,6 +1085,7 @@ rsRetVal createMainQueue(qqueue_t **ppQueue, uchar *pszQueueName, struct nvlst *
         /* no queue is fatal, we need to give up in that case... */
         LogError(0, iRet, "could not create (ruleset) main message queue");
     }
+    queueConstructed = 1;
     /* name our main queue object (it's not fatal if it fails...) */
     obj.SetName((obj_t *)(*ppQueue), queueName);
 
@@ -1178,6 +1181,10 @@ rsRetVal createMainQueue(qqueue_t **ppQueue, uchar *pszQueueName, struct nvlst *
     qqueueCorrectParams(*ppQueue);
 
 finalize_it:
+    if (iRet != RS_RET_OK && queueConstructed && *ppQueue != originalQueue) {
+        qqueueDestruct(ppQueue);
+        *ppQueue = originalQueue;
+    }
     free(queueNameOverride);
     RETiRet;
 }

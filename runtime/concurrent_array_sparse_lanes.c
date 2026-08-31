@@ -60,6 +60,8 @@
 #endif
 
 #define CA_CHUNK_ITEMS 64U
+#define CA_PRODUCER_CLOSED ((size_t)1 << (sizeof(size_t) * CHAR_BIT - 1))
+#define CA_PRODUCER_REF_MASK (CA_PRODUCER_CLOSED - 1)
 #define CA_LEASE_MAX 64U
 #define CA_LIFECYCLE_CLOSED (UINT64_C(1) << 63)
 #define CA_LIFECYCLE_REFS (CA_LIFECYCLE_CLOSED - 1)
@@ -189,8 +191,13 @@ struct sparse_queue {
     size_t lifecycle_slot_count;
     size_t lifecycle_bytes;
     _Atomic unsigned lifecycle_writer;
-    _Atomic uint32_t epoch;
-    _Atomic uint32_t capacity_epoch;
+    _Atomic unsigned control_owner;
+    _Atomic uint64_t epoch;
+    _Atomic uint64_t capacity_epoch;
+#if CA_USE_FUTEX
+    _Atomic uint32_t epoch_futex;
+    _Atomic uint32_t capacity_epoch_futex;
+#endif
     _Atomic unsigned sleepers;
     _Atomic unsigned capacity_sleepers;
     _Atomic unsigned accepting;
@@ -222,6 +229,12 @@ struct sparse_queue {
     _Atomic int test_pause_claim;
     _Atomic int test_claim_entered;
     _Atomic int test_claim_release;
+    _Atomic int test_pause_producer_pin;
+    _Atomic int test_producer_pin_entered;
+    _Atomic int test_producer_pin_release;
+    _Atomic int test_pause_before_producer_ref;
+    _Atomic int test_before_producer_ref_entered;
+    _Atomic int test_before_producer_ref_release;
     _Atomic size_t test_chunk_allocations;
     _Atomic size_t test_chunk_fail_after;
     _Atomic size_t test_builder_item_allocations;
@@ -356,6 +369,16 @@ static void lifecycle_writer_end(struct sparse_queue *queue) {
     atomic_store_explicit(&queue->lifecycle_writer, 0, memory_order_release);
 }
 
+static int control_enter(struct sparse_queue *queue) {
+    unsigned expected = 0;
+    return atomic_compare_exchange_strong_explicit(&queue->control_owner, &expected, 1, memory_order_acq_rel,
+                                                   memory_order_acquire);
+}
+
+static void control_exit(struct sparse_queue *queue) {
+    atomic_store_explicit(&queue->control_owner, 0, memory_order_release);
+}
+
 static ca_status_t sparse_lifecycle_bind(ca_queue_t *base, ca_lifecycle_binding_t *binding) {
     if (binding == NULL) return CA_INVALID;
     memset(binding, 0, sizeof(*binding));
@@ -453,7 +476,10 @@ static uint64_t lane_token(const struct ca_lane *lane) {
 }
 
 static void event_signal_on(struct sparse_queue *queue,
-                            _Atomic uint32_t *epoch,
+                            _Atomic uint64_t *epoch,
+#if CA_USE_FUTEX
+                            _Atomic uint32_t *futex_epoch,
+#endif
                             _Atomic unsigned *sleepers,
 #if !CA_USE_FUTEX
                             pthread_cond_t *condition,
@@ -461,11 +487,12 @@ static void event_signal_on(struct sparse_queue *queue,
                             size_t wake_count) {
 #if CA_USE_FUTEX
     atomic_fetch_add_explicit(epoch, 1, memory_order_release);
+    atomic_fetch_add_explicit(futex_epoch, 1, memory_order_release);
     const unsigned sleeper_count = atomic_load_explicit(sleepers, memory_order_acquire);
     if (sleeper_count != 0) {
         const int requested = wake_count == SIZE_MAX || wake_count >= (size_t)INT_MAX ? INT_MAX : (int)wake_count;
         DIAG_INC(queue, wake_requests);
-        (void)syscall(SYS_futex, epoch, FUTEX_WAKE_PRIVATE, requested, NULL, NULL, 0);
+        (void)syscall(SYS_futex, futex_epoch, FUTEX_WAKE_PRIVATE, requested, NULL, NULL, 0);
     }
 #else
     pthread_mutex_lock(&queue->wait_mutex);
@@ -483,7 +510,11 @@ static void event_signal_on(struct sparse_queue *queue,
 }
 
 static void event_signal(struct sparse_queue *queue, int all) {
-    event_signal_on(queue, &queue->epoch, &queue->sleepers,
+    event_signal_on(queue, &queue->epoch,
+#if CA_USE_FUTEX
+                    &queue->epoch_futex,
+#endif
+                    &queue->sleepers,
 #if !CA_USE_FUTEX
                     &queue->wait_cond,
 #endif
@@ -491,7 +522,11 @@ static void event_signal(struct sparse_queue *queue, int all) {
 }
 
 static void capacity_event_signal(struct sparse_queue *queue, int all) {
-    event_signal_on(queue, &queue->capacity_epoch, &queue->capacity_sleepers,
+    event_signal_on(queue, &queue->capacity_epoch,
+#if CA_USE_FUTEX
+                    &queue->capacity_epoch_futex,
+#endif
+                    &queue->capacity_sleepers,
 #if !CA_USE_FUTEX
                     &queue->capacity_wait_cond,
 #endif
@@ -499,7 +534,11 @@ static void capacity_event_signal(struct sparse_queue *queue, int all) {
 }
 
 static void capacity_event_signal_count(struct sparse_queue *queue, size_t count) {
-    event_signal_on(queue, &queue->capacity_epoch, &queue->capacity_sleepers,
+    event_signal_on(queue, &queue->capacity_epoch,
+#if CA_USE_FUTEX
+                    &queue->capacity_epoch_futex,
+#endif
+                    &queue->capacity_sleepers,
 #if !CA_USE_FUTEX
                     &queue->capacity_wait_cond,
 #endif
@@ -524,6 +563,30 @@ static uint64_t slot_ordinal(ca_slot_meta_t *slot) {
     return chunk == NULL ? 0 : chunk->base + slot->offset;
 }
 
+static int producer_op_enter(struct sparse_queue *queue, ca_producer_t *producer) {
+#ifndef CA_TESTING
+    (void)queue;
+#endif
+    size_t state = atomic_load_explicit(&producer->op_state, memory_order_acquire);
+    for (;;) {
+        if (state & CA_PRODUCER_CLOSED || (state & CA_PRODUCER_REF_MASK) == CA_PRODUCER_REF_MASK) return 0;
+#ifdef CA_TESTING
+        if (atomic_load_explicit(&queue->test_pause_before_producer_ref, memory_order_acquire)) {
+            atomic_store_explicit(&queue->test_before_producer_ref_entered, 1, memory_order_release);
+            while (!atomic_load_explicit(&queue->test_before_producer_ref_release, memory_order_acquire)) sched_yield();
+        }
+#endif
+        if (atomic_compare_exchange_weak_explicit(&producer->op_state, &state, state + 1, memory_order_acquire,
+                                                  memory_order_acquire))
+            return 1;
+    }
+}
+
+static void producer_op_exit(ca_producer_t *producer) {
+    const size_t previous = atomic_fetch_sub_explicit(&producer->op_state, 1, memory_order_release);
+    if ((previous & CA_PRODUCER_REF_MASK) == 0) abort();
+}
+
 static ca_status_t validate_producer(struct sparse_queue *queue,
                                      ca_producer_t *producer,
                                      struct ca_lane **lane_result) {
@@ -533,9 +596,22 @@ static ca_status_t validate_producer(struct sparse_queue *queue,
         *lane_result = &queue->lanes[queue->dedicated_limit + (value & (queue->fallback_count - 1))];
         return CA_OK;
     }
-    if (!producer->active || producer->queue != &queue->base) return CA_INVALID;
+    if (!producer_op_enter(queue, producer)) return CA_INVALID;
+#ifdef CA_TESTING
+    if (atomic_load_explicit(&queue->test_pause_producer_pin, memory_order_acquire)) {
+        atomic_store_explicit(&queue->test_producer_pin_entered, 1, memory_order_release);
+        while (!atomic_load_explicit(&queue->test_producer_pin_release, memory_order_acquire)) sched_yield();
+    }
+#endif
+    if (!producer->active || producer->queue != &queue->base) {
+        producer_op_exit(producer);
+        return CA_INVALID;
+    }
     struct ca_lane *lane = lane_from_handle(queue, producer->lane_index, producer->lane_generation);
-    if (lane == NULL) return CA_INVALID;
+    if (lane == NULL) {
+        producer_op_exit(producer);
+        return CA_INVALID;
+    }
     *lane_result = lane;
     return CA_OK;
 }
@@ -950,6 +1026,7 @@ static ca_status_t sparse_reserve(ca_queue_t *base,
     }
     struct ca_lane *lane;
     status = validate_producer(queue, producer, &lane);
+    const int producer_pinned = status == CA_OK && producer != NULL;
     size_t granted = 0;
     if (status == CA_OK) status = reserve_capacity(queue, wanted, &granted);
     if (status == CA_OK || status == CA_PARTIAL) {
@@ -962,6 +1039,7 @@ static ca_status_t sparse_reserve(ca_queue_t *base,
         owner_acquire(producer);
         atomic_fetch_add_explicit(&queue->live_reservations, 1, memory_order_relaxed);
     }
+    if (producer_pinned) producer_op_exit(producer);
     lifecycle_exit(queue, CA_ROLE_RESERVE);
     return status;
 }
@@ -1060,7 +1138,8 @@ static ca_status_t sparse_publish_reserved(ca_reservation_t *reservation, void *
 static void sparse_cancel_reservation(ca_reservation_t *reservation) {
     if (reservation == NULL || reservation->queue == NULL) return;
     struct sparse_queue *queue = as_sparse(reservation->queue);
-    if (lifecycle_enter(queue, CA_ROLE_PUBLISH) != CA_OK) return;
+    /* The live handle is the destruction pin. Drop its release-count only
+     * after every queue/lane access, so cleanup cannot fail behind a writer. */
     if (reservation->active) {
         struct ca_lane *const lane = lane_from_handle(queue, reservation->lane_index, reservation->lane_generation);
         if (lane != NULL && reservation->prepared_chunks != NULL) {
@@ -1072,7 +1151,6 @@ static void sparse_cancel_reservation(ca_reservation_t *reservation) {
         capacity_release(queue, reservation->count);
         close_reservation(queue, reservation);
     }
-    lifecycle_exit(queue, CA_ROLE_PUBLISH);
 }
 
 static ca_status_t sparse_submit_span(
@@ -1089,6 +1167,7 @@ static ca_status_t sparse_submit_span(
     }
     struct ca_lane *lane;
     status = validate_producer(queue, producer, &lane);
+    const int producer_pinned = status == CA_OK && producer != NULL;
     size_t granted = 0;
     if (status == CA_OK) status = reserve_capacity(queue, count, &granted);
     if (status == CA_OK || status == CA_PARTIAL) {
@@ -1100,6 +1179,7 @@ static ca_status_t sparse_submit_span(
             *accepted = granted;
         }
     }
+    if (producer_pinned) producer_op_exit(producer);
     lifecycle_exit(queue, CA_ROLE_PUBLISH);
     return status;
 }
@@ -1119,6 +1199,7 @@ static ca_status_t sparse_credit_acquire(ca_queue_t *base,
     }
     struct ca_lane *lane;
     status = validate_producer(queue, producer, &lane);
+    const int producer_pinned = status == CA_OK && producer != NULL;
     if (status != CA_OK) {
         lifecycle_exit(queue, CA_ROLE_RESERVE);
         return status;
@@ -1159,6 +1240,7 @@ static ca_status_t sparse_credit_acquire(ca_queue_t *base,
         }
         DIAG_INC(queue, cas_retries);
     }
+    if (producer_pinned) producer_op_exit(producer);
     lifecycle_exit(queue, CA_ROLE_RESERVE);
     return status;
 }
@@ -1208,13 +1290,12 @@ static ca_status_t sparse_credit_submit_span(ca_credit_lease_t *lease,
 static void sparse_credit_release(ca_credit_lease_t *lease) {
     if (lease == NULL || lease->queue == NULL) return;
     struct sparse_queue *queue = as_sparse(lease->queue);
-    if (lifecycle_enter(queue, CA_ROLE_PUBLISH) != CA_OK) return;
+    /* See sparse_cancel_reservation: void ownership cleanup is no-fail. */
     if (lease->active) {
         atomic_fetch_sub_explicit(&queue->speculative_unused, lease->speculative_unused, memory_order_release);
         capacity_release(queue, lease->unused);
         close_lease(queue, lease);
     }
-    lifecycle_exit(queue, CA_ROLE_PUBLISH);
 }
 
 static ca_status_t sparse_builder_begin(ca_queue_t *base, ca_producer_t *producer, ca_builder_t *builder) {
@@ -1229,6 +1310,7 @@ static ca_status_t sparse_builder_begin(ca_queue_t *base, ca_producer_t *produce
     }
     struct ca_lane *lane;
     status = validate_producer(queue, producer, &lane);
+    const int producer_pinned = status == CA_OK && producer != NULL;
     if (status == CA_OK) {
         builder->queue = base;
         builder->owner = producer;
@@ -1240,6 +1322,7 @@ static ca_status_t sparse_builder_begin(ca_queue_t *base, ca_producer_t *produce
         owner_acquire(producer);
         atomic_fetch_add_explicit(&queue->live_builders, 1, memory_order_relaxed);
     }
+    if (producer_pinned) producer_op_exit(producer);
     lifecycle_exit(queue, CA_ROLE_RESERVE);
     return status;
 }
@@ -1398,7 +1481,7 @@ static ca_status_t sparse_builder_publish(ca_builder_t *builder) {
 static void sparse_builder_cancel(ca_builder_t *builder) {
     if (builder == NULL || builder->queue == NULL) return;
     struct sparse_queue *queue = as_sparse(builder->queue);
-    if (lifecycle_enter(queue, CA_ROLE_PUBLISH) != CA_OK) return;
+    /* Prepared chunks return under the lane lock before the live pin drops. */
     if (builder->active) {
         struct ca_lane *const lane = lane_from_handle(queue, builder->lane_index, builder->lane_generation);
         if (lane != NULL && builder->prepared_chunks != NULL) {
@@ -1410,7 +1493,6 @@ static void sparse_builder_cancel(ca_builder_t *builder) {
         capacity_release(queue, builder->count);
         close_builder(queue, builder);
     }
-    lifecycle_exit(queue, CA_ROLE_PUBLISH);
 }
 
 static void retry_insert_locked(struct ca_lane *lane, ca_slot_meta_t *slot) {
@@ -1633,6 +1715,7 @@ static ca_status_t sparse_producer_register(ca_queue_t *base, uint64_t key, ca_p
     producer->lane_index = (uint32_t)index;
     producer->lane_generation = queue->lanes[index].generation;
     atomic_init(&producer->outstanding, 0);
+    atomic_init(&producer->op_state, 0);
     producer->active = 1;
     atomic_fetch_add_explicit(&queue->live_producers, 1, memory_order_relaxed);
     lifecycle_exit(queue, CA_ROLE_HANDLE);
@@ -1655,6 +1738,7 @@ static ca_status_t sparse_producer_register_fallback(ca_queue_t *base, size_t fa
         producer->lane_index = (uint32_t)index;
         producer->lane_generation = queue->lanes[index].generation;
         atomic_init(&producer->outstanding, 0);
+        atomic_init(&producer->op_state, 0);
         producer->active = 1;
         producer->fallback = 1;
         atomic_fetch_add_explicit(&queue->live_producers, 1, memory_order_relaxed);
@@ -1665,16 +1749,33 @@ static ca_status_t sparse_producer_register_fallback(ca_queue_t *base, size_t fa
 }
 
 static ca_status_t sparse_producer_release(ca_producer_t *producer) {
-    if (producer == NULL || producer->queue == NULL) return CA_INVALID;
+    if (producer == NULL) return CA_INVALID;
+    size_t state = atomic_load_explicit(&producer->op_state, memory_order_acquire);
+    for (;;) {
+        if (state & CA_PRODUCER_CLOSED) return CA_INVALID;
+        if (atomic_compare_exchange_weak_explicit(&producer->op_state, &state, state | CA_PRODUCER_CLOSED,
+                                                  memory_order_acq_rel, memory_order_acquire))
+            break;
+    }
+    while ((atomic_load_explicit(&producer->op_state, memory_order_acquire) & CA_PRODUCER_REF_MASK) != 0) sched_yield();
+    if (producer->queue == NULL) {
+        atomic_store_explicit(&producer->op_state, 0, memory_order_release);
+        return CA_INVALID;
+    }
     struct sparse_queue *queue = as_sparse(producer->queue);
     ca_status_t status = lifecycle_enter(queue, CA_ROLE_HANDLE);
-    if (status != CA_OK) return status;
+    if (status != CA_OK) {
+        atomic_store_explicit(&producer->op_state, 0, memory_order_release);
+        return status;
+    }
     if (!producer->active || producer->queue != &queue->base ||
-        lane_from_handle(queue, producer->lane_index, producer->lane_generation) == NULL)
+        lane_from_handle(queue, producer->lane_index, producer->lane_generation) == NULL) {
         status = CA_INVALID;
-    else if (atomic_load_explicit(&producer->outstanding, memory_order_acquire) != 0)
+        atomic_store_explicit(&producer->op_state, 0, memory_order_release);
+    } else if (atomic_load_explicit(&producer->outstanding, memory_order_acquire) != 0) {
         status = CA_BUSY;
-    else {
+        atomic_store_explicit(&producer->op_state, 0, memory_order_release);
+    } else {
         struct ca_lane *lane = &queue->lanes[producer->lane_index];
         if (!lane->fallback) {
             lane_lock(lane);
@@ -1707,10 +1808,10 @@ static void sparse_capacity_read(const ca_queue_t *base, ca_capacity_snapshot_t 
     lifecycle_exit(queue, CA_ROLE_INSPECT);
 }
 
-static uint32_t sparse_epoch(const ca_queue_t *base) {
+static uint64_t sparse_epoch(const ca_queue_t *base) {
     struct sparse_queue *queue = as_sparse((ca_queue_t *)base);
     if (lifecycle_enter(queue, CA_ROLE_INSPECT) != CA_OK) return 0;
-    const uint32_t epoch = atomic_load_explicit(&queue->epoch, memory_order_acquire);
+    const uint64_t epoch = atomic_load_explicit(&queue->epoch, memory_order_acquire);
     lifecycle_exit(queue, CA_ROLE_INSPECT);
     return epoch;
 }
@@ -1765,9 +1866,12 @@ static void wait_cancel_cleanup(void *argument) {
 #endif
 
 static ca_status_t sparse_wait_epoch_on(ca_queue_t *base,
-                                        uint32_t observed,
+                                        uint64_t observed,
                                         const struct timespec *deadline,
-                                        _Atomic uint32_t *epoch,
+                                        _Atomic uint64_t *epoch,
+#if CA_USE_FUTEX
+                                        _Atomic uint32_t *futex_epoch,
+#endif
                                         _Atomic unsigned *sleepers
 #if !CA_USE_FUTEX
                                         ,
@@ -1785,6 +1889,7 @@ static ca_status_t sparse_wait_epoch_on(ca_queue_t *base,
     atomic_fetch_add_explicit(sleepers, 1, memory_order_acq_rel);
     DIAG_INC(queue, sleeps);
 #if CA_USE_FUTEX
+    const uint32_t futex_observed = atomic_load_explicit(futex_epoch, memory_order_acquire);
     if (atomic_load_explicit(epoch, memory_order_acquire) == observed) {
         struct timespec relative;
         const int deadline_state = relative_deadline(deadline, &relative);
@@ -1792,7 +1897,7 @@ static ca_status_t sparse_wait_epoch_on(ca_queue_t *base,
         if (deadline_state < 0)
             result = ETIMEDOUT;
         else {
-            result = (int)syscall(SYS_futex, epoch, FUTEX_WAIT_PRIVATE, observed,
+            result = (int)syscall(SYS_futex, futex_epoch, FUTEX_WAIT_PRIVATE, futex_observed,
                                   deadline_state == 0 ? NULL : &relative, NULL, 0);
             result = result == 0 ? 0 : errno;
         }
@@ -1836,9 +1941,13 @@ static ca_status_t sparse_wait_epoch_on(ca_queue_t *base,
     return status;
 }
 
-static ca_status_t sparse_wait_epoch(ca_queue_t *base, uint32_t observed, const struct timespec *deadline) {
+static ca_status_t sparse_wait_epoch(ca_queue_t *base, uint64_t observed, const struct timespec *deadline) {
     struct sparse_queue *queue = as_sparse(base);
-    return sparse_wait_epoch_on(base, observed, deadline, &queue->epoch, &queue->sleepers
+    return sparse_wait_epoch_on(base, observed, deadline, &queue->epoch,
+#if CA_USE_FUTEX
+                                &queue->epoch_futex,
+#endif
+                                &queue->sleepers
 #if !CA_USE_FUTEX
                                 ,
                                 &queue->wait_cond
@@ -1846,17 +1955,21 @@ static ca_status_t sparse_wait_epoch(ca_queue_t *base, uint32_t observed, const 
     );
 }
 
-static uint32_t sparse_capacity_epoch(const ca_queue_t *base) {
+static uint64_t sparse_capacity_epoch(const ca_queue_t *base) {
     struct sparse_queue *queue = as_sparse((ca_queue_t *)base);
     if (lifecycle_enter(queue, CA_ROLE_INSPECT) != CA_OK) return 0;
-    const uint32_t epoch = atomic_load_explicit(&queue->capacity_epoch, memory_order_acquire);
+    const uint64_t epoch = atomic_load_explicit(&queue->capacity_epoch, memory_order_acquire);
     lifecycle_exit(queue, CA_ROLE_INSPECT);
     return epoch;
 }
 
-static ca_status_t sparse_wait_capacity_epoch(ca_queue_t *base, uint32_t observed, const struct timespec *deadline) {
+static ca_status_t sparse_wait_capacity_epoch(ca_queue_t *base, uint64_t observed, const struct timespec *deadline) {
     struct sparse_queue *queue = as_sparse(base);
-    return sparse_wait_epoch_on(base, observed, deadline, &queue->capacity_epoch, &queue->capacity_sleepers
+    return sparse_wait_epoch_on(base, observed, deadline, &queue->capacity_epoch,
+#if CA_USE_FUTEX
+                                &queue->capacity_epoch_futex,
+#endif
+                                &queue->capacity_sleepers
 #if !CA_USE_FUTEX
                                 ,
                                 &queue->capacity_wait_cond
@@ -1870,31 +1983,46 @@ static void sparse_interrupt_waiters(ca_queue_t *base) {
     capacity_event_signal(queue, 1);
 }
 
-static void discard_lane_locked(struct ca_lane *lane, size_t *discarded) {
+static void discard_lane(struct ca_lane *lane, size_t *discarded) {
     for (uint64_t ordinal = lane->final_frontier; ordinal < lane->published_tail; ++ordinal) {
+        lane_lock(lane);
         void **message;
         ca_slot_meta_t *slot = lane_slot_locked(lane, ordinal, &message);
         unsigned state = atomic_load_explicit(&slot->state, memory_order_acquire);
-        if (state == CA_SLOT_TERMINAL) continue;
+        if (state == CA_SLOT_TERMINAL) {
+            lane_unlock(lane);
+            continue;
+        }
         if (state == CA_SLOT_CLAIMED) abort();
         atomic_store_explicit(&slot->state, CA_SLOT_TERMINAL, memory_order_release);
         struct ca_chunk *chunk = slot_chunk(slot);
         if (chunk != NULL) atomic_fetch_add_explicit(&chunk->terminal_count, 1, memory_order_relaxed);
-        if (lane->queue->dispose != NULL)
-            lane->queue->dispose(*message, CA_COMPLETE_DISCARD, lane->queue->dispose_user);
+        void *const item = *message;
+        lane_unlock(lane);
+        /* Disposal may invoke application code.  The quiesce flags make the
+         * lane immutable here, so run it without holding the lane lock and
+         * permit a callback to inspect or attempt a closed queue operation. */
+        if (lane->queue->dispose != NULL) lane->queue->dispose(item, CA_COMPLETE_DISCARD, lane->queue->dispose_user);
         ++*discarded;
     }
+    lane_lock(lane);
     lane->retry_head = NULL;
     lane->retry_pending = 0;
     lane->claim_cursor = lane->published_tail;
     lane->final_frontier = lane->published_tail;
     reclaim_chunks_locked(lane);
+    lane_unlock(lane);
 }
 
 static ca_status_t sparse_quiesce(ca_queue_t *base, ca_quiesce_mode_t mode, const struct timespec *deadline) {
     struct sparse_queue *queue = as_sparse(base);
+    size_t discarded = 0;
+    if (!control_enter(queue)) return CA_BUSY;
     ca_status_t status = lifecycle_writer_begin(queue, deadline);
-    if (status != CA_OK) return status;
+    if (status != CA_OK) {
+        control_exit(queue);
+        return status;
+    }
     const unsigned was_accepting = atomic_load_explicit(&queue->accepting, memory_order_relaxed);
     const unsigned was_publishing = atomic_load_explicit(&queue->publishing, memory_order_relaxed);
     const unsigned was_claiming = atomic_load_explicit(&queue->claiming, memory_order_relaxed);
@@ -1916,42 +2044,51 @@ static ca_status_t sparse_quiesce(ca_queue_t *base, ca_quiesce_mode_t mode, cons
         lifecycle_writer_end(queue);
         event_signal(queue, 1);
         capacity_event_signal(queue, 1);
+        control_exit(queue);
         return status;
     }
     lifecycle_writer_end(queue);
 
     if (mode == CA_QUIESCE_DRAIN) {
         while (atomic_load_explicit(&queue->available, memory_order_acquire) != queue->capacity) {
-            if (deadline_expired(deadline)) return CA_TIMED_OUT;
-            const uint32_t observed = atomic_load_explicit(&queue->capacity_epoch, memory_order_acquire);
+            if (deadline_expired(deadline)) goto timed_out;
+            const uint64_t observed = atomic_load_explicit(&queue->capacity_epoch, memory_order_acquire);
             status = sparse_wait_capacity_epoch(base, observed, deadline);
-            if (status == CA_TIMED_OUT) return status;
+            if (status == CA_TIMED_OUT) goto timed_out;
         }
         atomic_store_explicit(&queue->publishing, 0, memory_order_release);
         atomic_store_explicit(&queue->claiming, 0, memory_order_release);
         atomic_store_explicit(&queue->waiting, 0, memory_order_release);
         event_signal(queue, 1);
         capacity_event_signal(queue, 1);
+        control_exit(queue);
         return CA_OK;
     }
 
     while (atomic_load_explicit(&queue->live_claims, memory_order_acquire) != 0 ||
            atomic_load_explicit(&queue->in_flight, memory_order_acquire) != 0) {
-        if (deadline_expired(deadline)) return CA_TIMED_OUT;
+        if (deadline_expired(deadline)) goto timed_out;
         sched_yield();
     }
-    size_t discarded = 0;
-    for (size_t i = 0; i < queue->lane_count; ++i) {
-        lane_lock(&queue->lanes[i]);
-        discard_lane_locked(&queue->lanes[i], &discarded);
-        lane_unlock(&queue->lanes[i]);
-    }
+    for (size_t i = 0; i < queue->lane_count; ++i) discard_lane(&queue->lanes[i], &discarded);
     uint64_t stale_token;
     while (ca_ready_scq_try_dequeue(queue->ready, &stale_token) == CA_READY_SCQ_OK);
     for (size_t i = 0; i < queue->lane_count; ++i)
         atomic_store_explicit(&queue->lanes[i].token_state, CA_TOKEN_ABSENT, memory_order_release);
     capacity_release(queue, discarded);
-    return atomic_load_explicit(&queue->available, memory_order_acquire) == queue->capacity ? CA_OK : CA_BUSY;
+    status = atomic_load_explicit(&queue->available, memory_order_acquire) == queue->capacity ? CA_OK : CA_BUSY;
+    control_exit(queue);
+    return status;
+
+timed_out:
+    atomic_store_explicit(&queue->accepting, was_accepting, memory_order_relaxed);
+    atomic_store_explicit(&queue->publishing, was_publishing, memory_order_relaxed);
+    atomic_store_explicit(&queue->claiming, was_claiming, memory_order_relaxed);
+    atomic_store_explicit(&queue->waiting, was_waiting, memory_order_release);
+    event_signal(queue, 1);
+    capacity_event_signal(queue, 1);
+    control_exit(queue);
+    return CA_TIMED_OUT;
 }
 
 static void free_lane_chunks(struct ca_lane *lane) {
@@ -1971,8 +2108,12 @@ static void free_lane_chunks(struct ca_lane *lane) {
 
 static ca_status_t sparse_destroy(ca_queue_t *base) {
     struct sparse_queue *queue = as_sparse(base);
+    if (!control_enter(queue)) return CA_BUSY;
     ca_status_t status = lifecycle_writer_begin(queue, NULL);
-    if (status != CA_OK) return status;
+    if (status != CA_OK) {
+        control_exit(queue);
+        return status;
+    }
     atomic_store_explicit(&queue->destroying, 1, memory_order_release);
     atomic_store_explicit(&queue->accepting, 0, memory_order_release);
     atomic_store_explicit(&queue->publishing, 0, memory_order_release);
@@ -1984,6 +2125,7 @@ static ca_status_t sparse_destroy(ca_queue_t *base) {
     if (status != CA_OK) {
         atomic_store_explicit(&queue->destroying, 0, memory_order_release);
         lifecycle_writer_end(queue);
+        control_exit(queue);
         return status;
     }
     const int busy = atomic_load_explicit(&queue->live_producers, memory_order_acquire) != 0 ||
@@ -1998,6 +2140,7 @@ static ca_status_t sparse_destroy(ca_queue_t *base) {
     if (busy) {
         atomic_store_explicit(&queue->destroying, 0, memory_order_release);
         lifecycle_writer_end(queue);
+        control_exit(queue);
         return CA_BUSY;
     }
     if (ca_ready_scq_destroy(queue->ready) != CA_READY_SCQ_OK) abort();
@@ -2076,12 +2219,17 @@ static ca_status_t sparse_create(const ca_config_t *config, ca_queue_t **result)
     atomic_init(&queue->chunks_live_count, 0);
     atomic_init(&queue->chunks_pooled_count, 0);
     atomic_init(&queue->lifecycle_writer, 0);
+    atomic_init(&queue->control_owner, 0);
     for (size_t i = 0; i < queue->lifecycle_slot_count; ++i) {
         atomic_init(&queue->lifecycle_slots[i].state, 0);
         atomic_init(&queue->lifecycle_slots[i].bound, 0);
     }
     atomic_init(&queue->epoch, 0);
     atomic_init(&queue->capacity_epoch, 0);
+#if CA_USE_FUTEX
+    atomic_init(&queue->epoch_futex, 0);
+    atomic_init(&queue->capacity_epoch_futex, 0);
+#endif
     atomic_init(&queue->sleepers, 0);
     atomic_init(&queue->capacity_sleepers, 0);
     atomic_init(&queue->accepting, 1);
@@ -2099,6 +2247,12 @@ static ca_status_t sparse_create(const ca_config_t *config, ca_queue_t **result)
     atomic_init(&queue->test_pause_claim, 0);
     atomic_init(&queue->test_claim_entered, 0);
     atomic_init(&queue->test_claim_release, 0);
+    atomic_init(&queue->test_pause_producer_pin, 0);
+    atomic_init(&queue->test_producer_pin_entered, 0);
+    atomic_init(&queue->test_producer_pin_release, 0);
+    atomic_init(&queue->test_pause_before_producer_ref, 0);
+    atomic_init(&queue->test_before_producer_ref_entered, 0);
+    atomic_init(&queue->test_before_producer_ref_release, 0);
     atomic_init(&queue->test_chunk_allocations, 0);
     atomic_init(&queue->test_chunk_fail_after, SIZE_MAX);
     atomic_init(&queue->test_builder_item_allocations, 0);
@@ -2131,8 +2285,13 @@ static ca_status_t sparse_create(const ca_config_t *config, ca_queue_t **result)
 #endif
     if (!ca_ready_scq_is_lock_free() || !atomic_is_lock_free(&queue->epoch) ||
         !atomic_is_lock_free(&queue->capacity_epoch) || !atomic_is_lock_free(&queue->lifecycle_slots[0].state) ||
-        !atomic_is_lock_free(&queue->available) || ((uintptr_t)&queue->epoch % sizeof(uint32_t)) != 0 ||
-        ((uintptr_t)&queue->capacity_epoch % sizeof(uint32_t)) != 0) {
+        !atomic_is_lock_free(&queue->available)
+#if CA_USE_FUTEX
+        || !atomic_is_lock_free(&queue->epoch_futex) || !atomic_is_lock_free(&queue->capacity_epoch_futex) ||
+        ((uintptr_t)&queue->epoch_futex % sizeof(uint32_t)) != 0 ||
+        ((uintptr_t)&queue->capacity_epoch_futex % sizeof(uint32_t)) != 0
+#endif
+    ) {
         free(queue->lanes);
         free(queue->lifecycle_slots);
         free(queue);
@@ -2312,12 +2471,14 @@ ca_status_t ca_test_seed_empty_lane(ca_queue_t *base, ca_producer_t *producer, u
     if (lane->published_tail != lane->final_frontier || lane->claim_cursor != lane->published_tail ||
         lane->chunks_head != NULL) {
         lane_unlock(lane);
+        producer_op_exit(producer);
         return CA_BUSY;
     }
     lane->published_tail = ordinal;
     lane->claim_cursor = ordinal;
     lane->final_frontier = ordinal;
     lane_unlock(lane);
+    producer_op_exit(producer);
     return CA_OK;
 }
 
@@ -2336,6 +2497,54 @@ void ca_test_release_normal_claim(ca_queue_t *base) {
     struct sparse_queue *queue = as_sparse(base);
     atomic_store_explicit(&queue->test_claim_release, 1, memory_order_release);
     atomic_store_explicit(&queue->test_pause_claim, 0, memory_order_release);
+}
+
+void ca_test_pause_producer_pin(ca_queue_t *base) {
+    struct sparse_queue *queue = as_sparse(base);
+    atomic_store_explicit(&queue->test_producer_pin_entered, 0, memory_order_relaxed);
+    atomic_store_explicit(&queue->test_producer_pin_release, 0, memory_order_relaxed);
+    atomic_store_explicit(&queue->test_pause_producer_pin, 1, memory_order_release);
+}
+
+int ca_test_producer_pin_entered(ca_queue_t *base) {
+    return atomic_load_explicit(&as_sparse(base)->test_producer_pin_entered, memory_order_acquire);
+}
+
+void ca_test_release_producer_pin(ca_queue_t *base) {
+    struct sparse_queue *queue = as_sparse(base);
+    atomic_store_explicit(&queue->test_producer_pin_release, 1, memory_order_release);
+    atomic_store_explicit(&queue->test_pause_producer_pin, 0, memory_order_release);
+}
+
+void ca_test_pause_before_producer_ref(ca_queue_t *base) {
+    struct sparse_queue *queue = as_sparse(base);
+    atomic_store_explicit(&queue->test_before_producer_ref_entered, 0, memory_order_relaxed);
+    atomic_store_explicit(&queue->test_before_producer_ref_release, 0, memory_order_relaxed);
+    atomic_store_explicit(&queue->test_pause_before_producer_ref, 1, memory_order_release);
+}
+
+int ca_test_before_producer_ref_entered(ca_queue_t *base) {
+    return atomic_load_explicit(&as_sparse(base)->test_before_producer_ref_entered, memory_order_acquire);
+}
+
+void ca_test_release_before_producer_ref(ca_queue_t *base) {
+    struct sparse_queue *queue = as_sparse(base);
+    atomic_store_explicit(&queue->test_before_producer_ref_release, 1, memory_order_release);
+    atomic_store_explicit(&queue->test_pause_before_producer_ref, 0, memory_order_release);
+}
+
+int ca_test_producer_closed(ca_producer_t *producer) {
+    return (atomic_load_explicit(&producer->op_state, memory_order_acquire) & CA_PRODUCER_CLOSED) != 0;
+}
+
+void ca_test_seed_epochs(ca_queue_t *base, uint64_t work, uint64_t capacity) {
+    struct sparse_queue *queue = as_sparse(base);
+    atomic_store_explicit(&queue->epoch, work, memory_order_release);
+    atomic_store_explicit(&queue->capacity_epoch, capacity, memory_order_release);
+    #if CA_USE_FUTEX
+    atomic_store_explicit(&queue->epoch_futex, (uint32_t)work, memory_order_release);
+    atomic_store_explicit(&queue->capacity_epoch_futex, (uint32_t)capacity, memory_order_release);
+    #endif
 }
 
 void ca_test_fail_chunk_alloc_after(ca_queue_t *base, size_t successful_allocations) {
@@ -2362,6 +2571,10 @@ int ca_test_accepting(ca_queue_t *base) {
 
 int ca_test_destroying(ca_queue_t *base) {
     return atomic_load_explicit(&as_sparse(base)->destroying, memory_order_acquire);
+}
+
+int ca_test_writer_active(ca_queue_t *base) {
+    return atomic_load_explicit(&as_sparse(base)->lifecycle_writer, memory_order_acquire);
 }
 
 size_t ca_test_lifecycle_slot(ca_queue_t *base) {

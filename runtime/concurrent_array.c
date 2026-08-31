@@ -151,19 +151,19 @@ void ca_capacity_read(const ca_queue_t *queue, ca_capacity_snapshot_t *snapshot)
     queue->ops->capacity_read(queue, snapshot);
 }
 
-uint32_t ca_epoch(const ca_queue_t *queue) {
+uint64_t ca_epoch(const ca_queue_t *queue) {
     return queue == NULL ? 0 : queue->ops->epoch(queue);
 }
 
-ca_status_t ca_wait_epoch(ca_queue_t *queue, uint32_t observed, const struct timespec *deadline) {
+ca_status_t ca_wait_epoch(ca_queue_t *queue, uint64_t observed, const struct timespec *deadline) {
     return queue == NULL ? CA_INVALID : queue->ops->wait_epoch(queue, observed, deadline);
 }
 
-uint32_t ca_capacity_epoch(const ca_queue_t *queue) {
+uint64_t ca_capacity_epoch(const ca_queue_t *queue) {
     return queue == NULL ? 0 : queue->ops->capacity_epoch(queue);
 }
 
-ca_status_t ca_wait_capacity_epoch(ca_queue_t *queue, uint32_t observed, const struct timespec *deadline) {
+ca_status_t ca_wait_capacity_epoch(ca_queue_t *queue, uint64_t observed, const struct timespec *deadline) {
     return queue == NULL ? CA_INVALID : queue->ops->wait_capacity_epoch(queue, observed, deadline);
 }
 

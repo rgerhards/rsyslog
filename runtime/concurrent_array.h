@@ -87,6 +87,7 @@ typedef struct ca_producer {
     uint32_t lane_index;
     uint64_t lane_generation;
     _Atomic size_t outstanding;
+    _Atomic size_t op_state;
     unsigned active : 1;
     unsigned fallback : 1;
 } ca_producer_t;
@@ -151,7 +152,7 @@ typedef struct ca_capacity_snapshot {
     size_t available;
     size_t speculative_unused;
     size_t in_flight;
-    uint32_t epoch;
+    uint64_t epoch;
     unsigned accepting : 1;
     unsigned claiming : 1;
 } ca_capacity_snapshot_t;
@@ -225,13 +226,16 @@ ca_status_t ca_complete(ca_claim_t *claim, const ca_completion_state_t *states);
 ca_status_t ca_return_claim(ca_claim_t *claim);
 
 void ca_capacity_read(const ca_queue_t *queue, ca_capacity_snapshot_t *snapshot);
-uint32_t ca_epoch(const ca_queue_t *queue);
-ca_status_t ca_wait_epoch(ca_queue_t *queue, uint32_t observed, const struct timespec *absolute_deadline);
-uint32_t ca_capacity_epoch(const ca_queue_t *queue);
-ca_status_t ca_wait_capacity_epoch(ca_queue_t *queue, uint32_t observed, const struct timespec *absolute_deadline);
+uint64_t ca_epoch(const ca_queue_t *queue);
+ca_status_t ca_wait_epoch(ca_queue_t *queue, uint64_t observed, const struct timespec *absolute_deadline);
+uint64_t ca_capacity_epoch(const ca_queue_t *queue);
+ca_status_t ca_wait_capacity_epoch(ca_queue_t *queue, uint64_t observed, const struct timespec *absolute_deadline);
 /* Control-plane wake for shutdown/state changes. Normal publication uses the
  * core's proportional wake policy instead. */
 void ca_interrupt_waiters(ca_queue_t *queue);
+/* Quiesce and destroy are exclusive control-plane operations. If another
+ * control operation owns the transition (including a timeout rollback), a
+ * concurrent quiesce returns CA_BUSY rather than altering its state. */
 ca_status_t ca_quiesce(ca_queue_t *queue, ca_quiesce_mode_t mode, const struct timespec *absolute_deadline);
 void ca_diagnostics_read(const ca_queue_t *queue, ca_diagnostics_t *diagnostics);
 
@@ -269,12 +273,21 @@ ca_status_t ca_test_seed_empty_lane(ca_queue_t *queue, ca_producer_t *producer, 
 void ca_test_pause_normal_claim(ca_queue_t *queue);
 int ca_test_normal_claim_entered(ca_queue_t *queue);
 void ca_test_release_normal_claim(ca_queue_t *queue);
+void ca_test_pause_producer_pin(ca_queue_t *queue);
+int ca_test_producer_pin_entered(ca_queue_t *queue);
+void ca_test_release_producer_pin(ca_queue_t *queue);
+void ca_test_pause_before_producer_ref(ca_queue_t *queue);
+int ca_test_before_producer_ref_entered(ca_queue_t *queue);
+void ca_test_release_before_producer_ref(ca_queue_t *queue);
+int ca_test_producer_closed(ca_producer_t *producer);
+void ca_test_seed_epochs(ca_queue_t *queue, uint64_t work, uint64_t capacity);
 void ca_test_fail_chunk_alloc_after(ca_queue_t *queue, size_t successful_allocations);
 size_t ca_test_chunks_live(ca_queue_t *queue);
 size_t ca_test_chunks_pooled(ca_queue_t *queue);
 size_t ca_test_builder_item_allocations(ca_queue_t *queue);
 int ca_test_accepting(ca_queue_t *queue);
 int ca_test_destroying(ca_queue_t *queue);
+int ca_test_writer_active(ca_queue_t *queue);
 size_t ca_test_lifecycle_slot(ca_queue_t *queue);
 size_t ca_test_lifecycle_bytes(ca_queue_t *queue);
 size_t ca_test_lifecycle_alignment(ca_queue_t *queue);

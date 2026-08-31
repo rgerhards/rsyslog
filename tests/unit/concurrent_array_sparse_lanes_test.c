@@ -58,6 +58,26 @@ static void finish_queue(ca_queue_t *queue) {
     CHECK(ca_destroy(queue) == CA_OK);
 }
 
+/* Intent: the logical epoch remains 64-bit even though Linux waits use a
+ * wrapping 32-bit futex word. Exact increments across UINT32_MAX are the ABA
+ * oracle for both work and capacity predicates. */
+static void test_epoch_wrap(void) {
+    ca_queue_t *queue = new_queue(1, 1);
+    ca_producer_t producer;
+    CHECK(ca_producer_register(queue, 2, &producer) == CA_OK);
+    ca_test_seed_epochs(queue, UINT32_MAX, UINT32_MAX);
+    CHECK(ca_submit_one(queue, &producer, item_id(0)) == CA_OK);
+    CHECK(ca_epoch(queue) == (uint64_t)UINT32_MAX + 1);
+    ca_claim_t claim;
+    ca_claim_item_t item;
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK);
+    const ca_completion_state_t commit = CA_COMPLETE_COMMIT;
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    CHECK(ca_capacity_epoch(queue) == (uint64_t)UINT32_MAX + 1);
+    CHECK(ca_producer_release(&producer) == CA_OK);
+    finish_queue(queue);
+}
+
 static size_t drain_commit(ca_queue_t *queue, size_t ceiling) {
     ca_claim_item_t *items = calloc(ceiling, sizeof(*items));
     ca_completion_state_t *states = calloc(ceiling, sizeof(*states));
@@ -1213,7 +1233,7 @@ static void test_cancelled_claim_return(void) {
 
 struct wait_context {
     ca_queue_t *queue;
-    uint32_t observed;
+    uint64_t observed;
     _Atomic int started;
     _Atomic int done;
     int capacity;
@@ -1344,6 +1364,19 @@ static void *submit_thread(void *argument) {
     return NULL;
 }
 
+struct producer_release_context {
+    ca_producer_t *producer;
+    ca_status_t status;
+    _Atomic int started;
+};
+
+static void *producer_release_thread(void *argument) {
+    struct producer_release_context *context = argument;
+    atomic_store_explicit(&context->started, 1, memory_order_release);
+    context->status = ca_producer_release(context->producer);
+    return NULL;
+}
+
 struct quiesce_context {
     ca_queue_t *queue;
     ca_status_t status;
@@ -1353,6 +1386,30 @@ static void *quiesce_thread(void *argument) {
     struct quiesce_context *context = argument;
     context->status = ca_quiesce(context->queue, CA_QUIESCE_DRAIN, NULL);
     return NULL;
+}
+
+/* Intent: one control owner retains rollback authority for the entire DRAIN,
+ * including its capacity wait after dropping the lifecycle writer. A second
+ * DISCARD returns BUSY; completing the held claim is the exact oracle that the
+ * original owner still controls and completes the transition. */
+static void test_concurrent_quiesce_owner(void) {
+    ca_queue_t *queue = new_queue(1, 1);
+    ca_producer_t producer;
+    CHECK(ca_producer_register(queue, 35, &producer) == CA_OK);
+    CHECK(ca_submit_one(queue, &producer, item_id(0)) == CA_OK);
+    ca_claim_t claim;
+    ca_claim_item_t item;
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK);
+    struct quiesce_context quiesce = {.queue = queue, .status = CA_INVALID};
+    pthread_t quiescer;
+    CHECK(pthread_create(&quiescer, NULL, quiesce_thread, &quiesce) == 0);
+    while (ca_test_capacity_sleepers(queue) != 1) sched_yield();
+    CHECK(ca_quiesce(queue, CA_QUIESCE_DISCARD, NULL) == CA_BUSY);
+    const ca_completion_state_t commit = CA_COMPLETE_COMMIT;
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    CHECK(pthread_join(quiescer, NULL) == 0 && quiesce.status == CA_OK);
+    CHECK(ca_producer_release(&producer) == CA_OK);
+    CHECK(ca_destroy(queue) == CA_OK);
 }
 
 /* Intent: quiesce closes admission before inspecting flags and waits entrants
@@ -1379,6 +1436,78 @@ static void test_concurrent_quiesce_admission(void) {
     check_capacity(queue, 2, 2, 0);
     CHECK(ca_producer_release(&producer) == CA_OK);
     CHECK(ca_destroy(queue) == CA_OK);
+}
+
+/* Intent: successful producer validation holds a transient handle reference
+ * across every non-atomic handle field access. Release races after that pin and
+ * must return BUSY; the paused submit then completes and a later release must
+ * succeed, proving neither a stale lane dereference nor a permanent close. */
+static void test_submit_pins_producer_release(void) {
+    ca_queue_t *queue = new_queue(2, 1);
+    ca_producer_t producer;
+    CHECK(ca_producer_register(queue, 33, &producer) == CA_OK);
+    ca_test_pause_producer_pin(queue);
+    struct submit_context submit = {.queue = queue, .producer = &producer, .status = CA_INVALID};
+    pthread_t submitter;
+    CHECK(pthread_create(&submitter, NULL, submit_thread, &submit) == 0);
+    while (!ca_test_producer_pin_entered(queue)) sched_yield();
+    struct producer_release_context release = {.producer = &producer, .status = CA_INVALID};
+    pthread_t releaser;
+    CHECK(pthread_create(&releaser, NULL, producer_release_thread, &release) == 0);
+    while (!ca_test_producer_closed(&producer)) sched_yield();
+    ca_test_release_producer_pin(queue);
+    CHECK(pthread_join(submitter, NULL) == 0 && submit.status == CA_OK);
+    CHECK(pthread_join(releaser, NULL) == 0 && release.status == CA_OK);
+    CHECK(drain_commit(queue, 1) == 1);
+    finish_queue(queue);
+}
+
+/* Intent: the packed close-bit/ref CAS closes the store-buffering window. The
+ * submitter pauses after loading an open word but before incrementing it;
+ * release closes with zero refs and succeeds, then the stale CAS must fail
+ * without reading the cleared producer fields. */
+static void test_producer_close_store_buffering(void) {
+    ca_queue_t *queue = new_queue(1, 1);
+    ca_producer_t producer;
+    CHECK(ca_producer_register(queue, 38, &producer) == CA_OK);
+    ca_test_pause_before_producer_ref(queue);
+    struct submit_context submit = {.queue = queue, .producer = &producer, .status = CA_OK};
+    pthread_t submitter;
+    CHECK(pthread_create(&submitter, NULL, submit_thread, &submit) == 0);
+    while (!ca_test_before_producer_ref_entered(queue)) sched_yield();
+    CHECK(ca_producer_release(&producer) == CA_OK);
+    ca_test_release_before_producer_ref(queue);
+    CHECK(pthread_join(submitter, NULL) == 0 && submit.status == CA_INVALID);
+    finish_queue(queue);
+}
+
+/* Intent: timeouts after the lifecycle writer has closed DRAIN or DISCARD
+ * must restore all data-plane flags and wake predicates. A new submit and claim
+ * after each timeout is the exact reopen oracle. */
+static void test_post_writer_quiesce_timeout_reopens(void) {
+    const struct timespec expired = {0, 0};
+    for (int discard = 0; discard < 2; ++discard) {
+        ca_queue_t *queue = new_queue(2, 1);
+        ca_producer_t producer;
+        CHECK(ca_producer_register(queue, (uint64_t)34 + (uint64_t)discard, &producer) == CA_OK);
+        CHECK(ca_submit_one(queue, &producer, item_id(0)) == CA_OK);
+        ca_claim_t held;
+        ca_claim_item_t held_item;
+        CHECK(ca_claim_up_to(queue, &held, &held_item, 1) == CA_OK);
+        CHECK(ca_quiesce(queue, discard ? CA_QUIESCE_DISCARD : CA_QUIESCE_DRAIN, &expired) == CA_TIMED_OUT);
+        ca_capacity_snapshot_t snapshot;
+        ca_capacity_read(queue, &snapshot);
+        CHECK(snapshot.accepting && snapshot.claiming);
+        CHECK(ca_submit_one(queue, &producer, item_id(1)) == CA_OK);
+        ca_claim_t later;
+        ca_claim_item_t later_item;
+        CHECK(ca_claim_up_to(queue, &later, &later_item, 1) == CA_OK && id_of(later_item.item) == 1);
+        const ca_completion_state_t commit = CA_COMPLETE_COMMIT;
+        CHECK(ca_complete(&later, &commit) == CA_OK);
+        CHECK(ca_complete(&held, &commit) == CA_OK);
+        CHECK(ca_producer_release(&producer) == CA_OK);
+        finish_queue(queue);
+    }
 }
 
 static void *paused_snapshot_thread(void *argument) {
@@ -1416,6 +1545,66 @@ static void test_quiesce_timeout_preserves_admitted_ref(void) {
     CHECK(ca_complete(&claim, &commit) == CA_OK);
     check_capacity(queue, 2, 2, 0);
     CHECK(ca_quiesce(queue, CA_QUIESCE_DRAIN, NULL) == CA_OK);
+    CHECK(ca_producer_release(&producer) == CA_OK);
+    CHECK(ca_destroy(queue) == CA_OK);
+}
+
+struct cleanup_quiesce_context {
+    ca_queue_t *queue;
+    struct timespec deadline;
+    ca_status_t status;
+};
+
+static void *cleanup_quiesce_thread(void *argument) {
+    struct cleanup_quiesce_context *context = argument;
+    context->status = ca_quiesce(context->queue, CA_QUIESCE_DRAIN, &context->deadline);
+    return NULL;
+}
+
+/* Intent: void cleanup owns queue lifetime independently of new lifecycle
+ * admission. A paused inspector holds a DRAIN writer pending while prepared
+ * reservation and builder chunks plus a credit lease are cancelled. DRAIN
+ * finishing before its deadline with exact capacity proves none can silently
+ * return CLOSED or leak its live-handle count. */
+static void test_writer_active_void_cleanup(void) {
+    ca_queue_t *queue = new_queue(3, 1);
+    ca_producer_t producer;
+    CHECK(ca_producer_register(queue, 37, &producer) == CA_OK);
+    CHECK(ca_test_seed_empty_lane(queue, &producer, 1) == CA_OK);
+    ca_reservation_t reservation;
+    CHECK(ca_reserve(queue, &producer, 1, &reservation) == CA_OK);
+    CHECK(ca_prepare_reserved(&reservation) == CA_OK);
+    ca_credit_lease_t lease;
+    CHECK(ca_credit_acquire(queue, &producer, 1, &lease) == CA_OK);
+    ca_builder_t builder;
+    ca_credit_lease_t builder_lease;
+    CHECK(ca_builder_begin(queue, &producer, &builder) == CA_OK);
+    CHECK(ca_credit_acquire(queue, &producer, 1, &builder_lease) == CA_OK);
+    void *item = item_id(0);
+    size_t accepted = 0;
+    CHECK(ca_builder_append(&builder, &builder_lease, &item, 1, &accepted) == CA_OK && accepted == 1);
+    ca_credit_release(&builder_lease);
+    CHECK(ca_builder_prepare(&builder) == CA_OK);
+
+    ca_test_pause_role(queue, CA_TEST_ROLE_INSPECT);
+    struct inspect_context inspector = {.queue = queue};
+    pthread_t reader;
+    CHECK(pthread_create(&reader, NULL, paused_snapshot_thread, &inspector) == 0);
+    while (!ca_test_role_entered(queue)) sched_yield();
+    struct cleanup_quiesce_context quiesce = {.queue = queue, .status = CA_INVALID};
+    clock_gettime(CLOCK_MONOTONIC, &quiesce.deadline);
+    quiesce.deadline.tv_sec += 5;
+    pthread_t quiescer;
+    CHECK(pthread_create(&quiescer, NULL, cleanup_quiesce_thread, &quiesce) == 0);
+    while (!ca_test_writer_active(queue)) sched_yield();
+
+    ca_cancel_reservation(&reservation);
+    ca_credit_release(&lease);
+    ca_builder_cancel(&builder);
+    ca_test_release_role(queue);
+    CHECK(pthread_join(reader, NULL) == 0);
+    CHECK(pthread_join(quiescer, NULL) == 0 && quiesce.status == CA_OK);
+    check_capacity(queue, 3, 3, 0);
     CHECK(ca_producer_release(&producer) == CA_OK);
     CHECK(ca_destroy(queue) == CA_OK);
 }
@@ -1473,6 +1662,43 @@ static void count_discard(void *item, ca_completion_state_t state, void *user) {
     CHECK(item != NULL);
     CHECK(state == CA_COMPLETE_DISCARD);
     atomic_fetch_add_explicit(&context->count, 1, memory_order_relaxed);
+}
+
+struct reentrant_dispose_context {
+    ca_producer_t *producer;
+    ca_status_t release_status;
+    _Atomic size_t count;
+};
+
+static void release_from_dispose(void *item, ca_completion_state_t state, void *user) {
+    struct reentrant_dispose_context *context = user;
+    CHECK(item != NULL && state == CA_COMPLETE_DISCARD);
+    context->release_status = ca_producer_release(context->producer);
+    atomic_fetch_add_explicit(&context->count, 1, memory_order_relaxed);
+}
+
+/* Intent: DISCARD callbacks are application code and may reenter producer
+ * lifecycle. Releasing the item producer in the callback must finish instead
+ * of deadlocking on its lane lock. */
+static void test_discard_callback_outside_lane_lock(void) {
+    struct reentrant_dispose_context context = {.release_status = CA_INVALID};
+    ca_queue_t *queue = NULL;
+    const ca_config_t config = {
+        .core = CA_CORE_SPARSE_LANES,
+        .capacity = 1,
+        .consumers = 1,
+        .dispose = release_from_dispose,
+        .dispose_user = &context,
+    };
+    CHECK(ca_create(&config, &queue) == CA_OK);
+    ca_producer_t producer;
+    context.producer = &producer;
+    CHECK(ca_producer_register(queue, 36, &producer) == CA_OK);
+    CHECK(ca_submit_one(queue, &producer, item_id(0)) == CA_OK);
+    CHECK(ca_quiesce(queue, CA_QUIESCE_DISCARD, NULL) == CA_OK);
+    CHECK(context.release_status == CA_OK);
+    CHECK(atomic_load_explicit(&context.count, memory_order_relaxed) == 1);
+    CHECK(ca_destroy(queue) == CA_OK);
 }
 
 static void test_discard_quiesce(void) {
@@ -1660,6 +1886,7 @@ int main(void) {
      * pass criterion; every behavioral oracle remains an exact count/state. */
     alarm(120);
     test_shape();
+    test_epoch_wrap();
     test_capacity_and_batch_boundaries();
     test_large_builder_publications();
     test_builder_inline_singleton();
@@ -1691,12 +1918,18 @@ int main(void) {
     test_split_work_capacity_waits();
     test_capacity_release_wakes_proportionally();
     test_concurrent_quiesce_admission();
+    test_concurrent_quiesce_owner();
+    test_submit_pins_producer_release();
+    test_producer_close_store_buffering();
+    test_post_writer_quiesce_timeout_reopens();
     test_quiesce_timeout_preserves_admitted_ref();
+    test_writer_active_void_cleanup();
     test_nested_lifecycle_bindings();
 #ifdef CA_FORCE_PTHREAD_WAIT
     test_pthread_wait_lost_wake_and_cancel();
 #endif
     test_discard_quiesce();
+    test_discard_callback_outside_lane_lock();
     run_stress(1, 1);
     run_stress(8, 8);
     run_stress(16, 16);

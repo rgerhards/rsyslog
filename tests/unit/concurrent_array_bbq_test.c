@@ -141,6 +141,26 @@ static void test_capacity_boundaries(void) {
     }
 }
 
+/* Intent: logical wait predicates must not alias when the Linux futex adapter
+ * wraps its 32-bit wake word. Seeding both counters at UINT32_MAX and observing
+ * exact 64-bit increments proves work and capacity comparisons remain unique. */
+static void test_epoch_wrap(void) {
+    ca_queue_t *queue = new_queue(1, 1, NULL, NULL);
+    ca_producer_t producer;
+    CHECK(ca_producer_register(queue, 2, &producer) == CA_OK);
+    ca_bbq_test_seed_epochs(queue, UINT32_MAX, UINT32_MAX);
+    CHECK(ca_submit_one(queue, &producer, item_id(0)) == CA_OK);
+    CHECK(ca_epoch(queue) == (uint64_t)UINT32_MAX + 1);
+    ca_claim_t claim;
+    ca_claim_item_t item;
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK);
+    const ca_completion_state_t commit = CA_COMPLETE_COMMIT;
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    CHECK(ca_capacity_epoch(queue) == (uint64_t)UINT32_MAX + 1);
+    CHECK(ca_producer_release(&producer) == CA_OK);
+    finish_queue(queue);
+}
+
 static void test_large_span_and_wrap(void) {
     static const size_t sizes[] = {127, 128, 129, 1000, 4096, 8192, 65536};
     for (size_t s = 0; s < sizeof(sizes) / sizeof(sizes[0]); ++s) {
@@ -457,26 +477,129 @@ static void test_help_stalled_faa_publisher(void) {
     pthread_t publisher;
     CHECK(pthread_create(&publisher, NULL, paused_publish_thread, &context) == 0);
     while (!ca_bbq_test_after_faa_entered(queue)) sched_yield();
-    CHECK(ca_submit_one(queue, &independent_producer, item_id(1)) == CA_OK);
 
-    /* The first FAA position has no visible record. Claim tombstones that
-     * generation and reaches the independent publisher; the stalled producer
-     * then observes the tombstone and retries its same owned record. */
+    /* The first position already exposes a generation-tagged RESERVED record.
+     * Claim promotes it and advances the tail, so it reaches the stalled
+     * record without waiting for its owner. */
     ca_claim_item_t item;
     ca_claim_t claim;
     CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK);
-    CHECK(id_of(item.item) == 1);
+    CHECK(id_of(item.item) == 0);
     const ca_completion_state_t commit = CA_COMPLETE_COMMIT;
     CHECK(ca_complete(&claim, &commit) == CA_OK);
+    CHECK(ca_submit_one(queue, &independent_producer, item_id(1)) == CA_OK);
     ca_bbq_test_release_after_faa(queue);
     CHECK(pthread_join(publisher, NULL) == 0);
     CHECK(context.status == CA_OK);
     CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK);
-    CHECK(id_of(item.item) == 0);
+    CHECK(id_of(item.item) == 1);
     CHECK(ca_complete(&claim, &commit) == CA_OK);
     check_capacity(queue, 2, 2);
     CHECK(ca_producer_release(&independent_producer) == CA_OK);
     CHECK(ca_producer_release(&stalled_producer) == CA_OK);
+    finish_queue(queue);
+}
+
+/* Intent: every reservation is visible before the publisher can stall. With
+ * capacity two, publisher B must help A's RESERVED cell before pausing on its
+ * own, and a replacement publish must in turn help B. Exact FIFO delivery of
+ * all three items while B remains stopped proves bounded per-position helping
+ * and rules out alternating tombstone livelock. */
+static void test_alternating_reserved_publishers(void) {
+    ca_queue_t *queue = new_queue(2, 2, NULL, NULL);
+    ca_producer_t first_producer;
+    ca_producer_t second_producer;
+    CHECK(ca_producer_register(queue, 65, &first_producer) == CA_OK);
+    CHECK(ca_producer_register(queue, 66, &second_producer) == CA_OK);
+    ca_bbq_test_pause_reserved(queue, 2);
+    struct paused_publish_context first = {
+        .queue = queue, .producer = &first_producer, .item = item_id(0), .status = CA_INVALID};
+    struct paused_publish_context second = {
+        .queue = queue, .producer = &second_producer, .item = item_id(1), .status = CA_INVALID};
+    pthread_t first_thread;
+    pthread_t second_thread;
+    CHECK(pthread_create(&first_thread, NULL, paused_publish_thread, &first) == 0);
+    while (ca_bbq_test_reserved_entered(queue) != 1) sched_yield();
+    CHECK(pthread_create(&second_thread, NULL, paused_publish_thread, &second) == 0);
+    while (ca_bbq_test_reserved_entered(queue) != 2) sched_yield();
+
+    ca_claim_t claim;
+    ca_claim_item_t item;
+    const ca_completion_state_t commit = CA_COMPLETE_COMMIT;
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK && id_of(item.item) == 0);
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    ca_bbq_test_release_reserved(queue, 1);
+    CHECK(pthread_join(first_thread, NULL) == 0 && first.status == CA_OK);
+    CHECK(ca_submit_one(queue, &first_producer, item_id(2)) == CA_OK);
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK && id_of(item.item) == 1);
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK && id_of(item.item) == 2);
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    ca_bbq_test_release_reserved(queue, 2);
+    CHECK(pthread_join(second_thread, NULL) == 0 && second.status == CA_OK);
+    check_capacity(queue, 2, 2);
+    CHECK(ca_producer_release(&second_producer) == CA_OK);
+    CHECK(ca_producer_release(&first_producer) == CA_OK);
+    finish_queue(queue);
+}
+
+/* Intent: handles registered with one stable key share one physical exposure
+ * order. The first publisher is stopped after reserving a position; a second
+ * handle for that key must remain behind it, while an independent producer is
+ * still helped and claimed. Exact final item order is the serialization oracle. */
+static void test_shared_key_publish_order(void) {
+    ca_queue_t *queue = new_queue(4, 2, NULL, NULL);
+    ca_producer_t first_handle;
+    ca_producer_t second_handle;
+    ca_producer_t independent;
+    CHECK(ca_producer_register(queue, 61, &first_handle) == CA_OK);
+    CHECK(ca_producer_register(queue, 61, &second_handle) == CA_OK);
+    CHECK(ca_producer_register(queue, 62, &independent) == CA_OK);
+    ca_bbq_test_pause_after_faa(queue);
+    struct paused_publish_context first = {
+        .queue = queue, .producer = &first_handle, .item = item_id(0), .status = CA_INVALID};
+    struct paused_publish_context second = {
+        .queue = queue, .producer = &second_handle, .item = item_id(1), .status = CA_INVALID};
+    pthread_t first_thread;
+    pthread_t second_thread;
+    CHECK(pthread_create(&first_thread, NULL, paused_publish_thread, &first) == 0);
+    while (!ca_bbq_test_after_faa_entered(queue)) sched_yield();
+    CHECK(pthread_create(&second_thread, NULL, paused_publish_thread, &second) == 0);
+    CHECK(ca_submit_one(queue, &independent, item_id(2)) == CA_OK);
+    ca_claim_t claim;
+    ca_claim_item_t item;
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK && id_of(item.item) == 0);
+    const ca_completion_state_t commit = CA_COMPLETE_COMMIT;
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    ca_bbq_test_release_after_faa(queue);
+    CHECK(pthread_join(first_thread, NULL) == 0 && first.status == CA_OK);
+    CHECK(pthread_join(second_thread, NULL) == 0 && second.status == CA_OK);
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK && id_of(item.item) == 2);
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK && id_of(item.item) == 1);
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    CHECK(ca_producer_release(&independent) == CA_OK);
+    CHECK(ca_producer_release(&second_handle) == CA_OK);
+    CHECK(ca_producer_release(&first_handle) == CA_OK);
+    finish_queue(queue);
+}
+
+/* Intent: one packed close-bit/ref word removes the store-buffering gap
+ * between a validation load and transient reference acquisition. The stale
+ * publisher CAS must fail after release closes and clears the handle. */
+static void test_producer_close_store_buffering(void) {
+    ca_queue_t *queue = new_queue(1, 1, NULL, NULL);
+    ca_producer_t producer;
+    CHECK(ca_producer_register(queue, 64, &producer) == CA_OK);
+    ca_bbq_test_pause_before_producer_ref(queue);
+    struct paused_publish_context publish = {
+        .queue = queue, .producer = &producer, .item = item_id(0), .status = CA_OK};
+    pthread_t publisher;
+    CHECK(pthread_create(&publisher, NULL, paused_publish_thread, &publish) == 0);
+    while (!ca_bbq_test_before_producer_ref_entered(queue)) sched_yield();
+    CHECK(ca_producer_release(&producer) == CA_OK);
+    ca_bbq_test_release_before_producer_ref(queue);
+    CHECK(pthread_join(publisher, NULL) == 0 && publish.status == CA_INVALID);
     finish_queue(queue);
 }
 
@@ -548,6 +671,69 @@ static void *quiesce_thread(void *argument) {
     struct quiesce_context *context = argument;
     context->status = ca_quiesce(context->queue, context->mode, NULL);
     return NULL;
+}
+
+/* Intent: one control owner retains rollback authority for the entire DRAIN,
+ * including its wait outside the lifecycle writer. A concurrent DISCARD must
+ * return BUSY and cannot steal flags; completing the held claim lets the
+ * original owner finish normally. */
+static void test_concurrent_quiesce_owner(void) {
+    ca_queue_t *queue = new_queue(1, 1, NULL, NULL);
+    ca_producer_t producer;
+    CHECK(ca_producer_register(queue, 67, &producer) == CA_OK);
+    CHECK(ca_submit_one(queue, &producer, item_id(0)) == CA_OK);
+    ca_claim_t claim;
+    ca_claim_item_t item;
+    CHECK(ca_claim_up_to(queue, &claim, &item, 1) == CA_OK);
+    struct quiesce_context quiesce = {.queue = queue, .mode = CA_QUIESCE_DRAIN, .status = CA_INVALID};
+    pthread_t quiescer;
+    CHECK(pthread_create(&quiescer, NULL, quiesce_thread, &quiesce) == 0);
+    while (ca_bbq_test_capacity_sleepers(queue) != 1) sched_yield();
+    CHECK(ca_quiesce(queue, CA_QUIESCE_DISCARD, NULL) == CA_BUSY);
+    const ca_completion_state_t commit = CA_COMPLETE_COMMIT;
+    CHECK(ca_complete(&claim, &commit) == CA_OK);
+    CHECK(pthread_join(quiescer, NULL) == 0 && quiesce.status == CA_OK);
+    CHECK(ca_producer_release(&producer) == CA_OK);
+    CHECK(ca_destroy(queue) == CA_OK);
+}
+
+/* Intent: an activated lifecycle scope pins writer admission until deactivate,
+ * but void ownership cleanup must remain no-fail while that writer is pending.
+ * DRAIN completing after all three handle classes are cancelled proves exact
+ * capacity and the mandatory deactivate unwind. */
+static void test_lifecycle_pin_and_writer_cleanup(void) {
+    ca_queue_t *queue = new_queue(3, 1, NULL, NULL);
+    ca_producer_t producer;
+    CHECK(ca_producer_register(queue, 63, &producer) == CA_OK);
+    ca_reservation_t reservation;
+    CHECK(ca_reserve(queue, &producer, 1, &reservation) == CA_OK);
+    ca_credit_lease_t lease;
+    CHECK(ca_credit_acquire(queue, &producer, 1, &lease) == CA_OK);
+    ca_builder_t builder;
+    ca_credit_lease_t builder_lease;
+    CHECK(ca_builder_begin(queue, &producer, &builder) == CA_OK);
+    CHECK(ca_credit_acquire(queue, &producer, 1, &builder_lease) == CA_OK);
+    void *item = item_id(0);
+    size_t accepted = 0;
+    CHECK(ca_builder_append(&builder, &builder_lease, &item, 1, &accepted) == CA_OK && accepted == 1);
+    ca_credit_release(&builder_lease);
+    ca_lifecycle_binding_t binding;
+    ca_lifecycle_scope_t scope;
+    CHECK(ca_lifecycle_bind(queue, &binding) == CA_OK);
+    CHECK(ca_lifecycle_activate(&binding, &scope) == CA_OK);
+    struct quiesce_context quiesce = {.queue = queue, .mode = CA_QUIESCE_DRAIN, .status = CA_INVALID};
+    pthread_t quiescer;
+    CHECK(pthread_create(&quiescer, NULL, quiesce_thread, &quiesce) == 0);
+    while (!ca_bbq_test_writer_active(queue)) sched_yield();
+    ca_cancel_reservation(&reservation);
+    ca_credit_release(&lease);
+    ca_builder_cancel(&builder);
+    CHECK(ca_lifecycle_deactivate(&scope) == CA_OK);
+    CHECK(pthread_join(quiescer, NULL) == 0 && quiesce.status == CA_OK);
+    check_capacity(queue, 3, 3);
+    CHECK(ca_lifecycle_unbind(&binding) == CA_OK);
+    CHECK(ca_producer_release(&producer) == CA_OK);
+    CHECK(ca_destroy(queue) == CA_OK);
 }
 
 static void *paused_claim_thread(void *argument) {
@@ -759,7 +945,7 @@ static void test_retry_after_origin_reuse(void) {
 
 struct wait_context {
     ca_queue_t *queue;
-    uint32_t observed;
+    uint64_t observed;
     ca_status_t status;
     int capacity;
 };
@@ -971,6 +1157,7 @@ static void test_concurrent_exact_ownership(void) {
 int main(void) {
     alarm(120);
     test_capacity_boundaries();
+    test_epoch_wrap();
     test_large_span_and_wrap();
     test_control_word_wrap_integrity();
     test_reservation_credit_and_builder();
@@ -980,6 +1167,9 @@ int main(void) {
     test_producer_retry_barrier();
     test_stable_key_reregistration_barrier();
     test_help_stalled_faa_publisher();
+    test_alternating_reserved_publishers();
+    test_shared_key_publish_order();
+    test_producer_close_store_buffering();
     test_help_installed_publisher_generation();
     test_help_stalled_claimed_generation();
     test_completion_releases_metadata_before_capacity();
@@ -989,6 +1179,8 @@ int main(void) {
     test_retry_after_origin_reuse();
     test_wait_adapters_and_classes();
     test_quiesce_wakes_registered_waiters();
+    test_lifecycle_pin_and_writer_cleanup();
+    test_concurrent_quiesce_owner();
     test_wait_lifecycle_and_discard();
     test_concurrent_exact_ownership();
     puts("ConcurrentArray BBQ focused tests passed");

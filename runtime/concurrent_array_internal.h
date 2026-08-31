@@ -34,10 +34,10 @@ struct ca_ops {
     ca_status_t (*complete)(ca_claim_t *, const ca_completion_state_t *);
     ca_status_t (*return_claim)(ca_claim_t *);
     void (*capacity_read)(const ca_queue_t *, ca_capacity_snapshot_t *);
-    uint32_t (*epoch)(const ca_queue_t *);
-    ca_status_t (*wait_epoch)(ca_queue_t *, uint32_t, const struct timespec *);
-    uint32_t (*capacity_epoch)(const ca_queue_t *);
-    ca_status_t (*wait_capacity_epoch)(ca_queue_t *, uint32_t, const struct timespec *);
+    uint64_t (*epoch)(const ca_queue_t *);
+    ca_status_t (*wait_epoch)(ca_queue_t *, uint64_t, const struct timespec *);
+    uint64_t (*capacity_epoch)(const ca_queue_t *);
+    ca_status_t (*wait_capacity_epoch)(ca_queue_t *, uint64_t, const struct timespec *);
     void (*interrupt_waiters)(ca_queue_t *);
     ca_status_t (*quiesce)(ca_queue_t *, ca_quiesce_mode_t, const struct timespec *);
     void (*diagnostics_read)(const ca_queue_t *, ca_diagnostics_t *);
@@ -58,6 +58,9 @@ extern const struct ca_ops ca_bbq_ops;
 void ca_bbq_test_pause_after_faa(ca_queue_t *queue);
 int ca_bbq_test_after_faa_entered(ca_queue_t *queue);
 void ca_bbq_test_release_after_faa(ca_queue_t *queue);
+void ca_bbq_test_pause_reserved(ca_queue_t *queue, size_t count);
+size_t ca_bbq_test_reserved_entered(ca_queue_t *queue);
+void ca_bbq_test_release_reserved(ca_queue_t *queue, size_t count);
 void ca_bbq_test_pause_after_install(ca_queue_t *queue);
 int ca_bbq_test_after_install_entered(ca_queue_t *queue);
 void ca_bbq_test_release_after_install(ca_queue_t *queue);
@@ -76,6 +79,12 @@ size_t ca_bbq_test_capacity_sleepers(ca_queue_t *queue);
 size_t ca_bbq_test_record_blocks(ca_queue_t *queue);
 void ca_bbq_test_reset_record_word_probes(ca_queue_t *queue);
 size_t ca_bbq_test_record_word_probes(ca_queue_t *queue);
+int ca_bbq_test_writer_active(ca_queue_t *queue);
+void ca_bbq_test_seed_epochs(ca_queue_t *queue, uint64_t work, uint64_t capacity);
+void ca_bbq_test_pause_before_producer_ref(ca_queue_t *queue);
+int ca_bbq_test_before_producer_ref_entered(ca_queue_t *queue);
+void ca_bbq_test_release_before_producer_ref(ca_queue_t *queue);
+int ca_bbq_test_producer_closed(ca_producer_t *producer);
 #endif
 
 #endif
