@@ -2423,7 +2423,12 @@ static void concurrentArrayDispose(void *item, ca_completion_state_t state, void
     msgDestruct(&msg);
 }
 
-static uint64_t concurrentArrayProducerHash(uint64_t key) {
+static uint64_t
+#if defined(__clang__)
+    __attribute__((no_sanitize("unsigned-integer-overflow")))
+#endif
+    concurrentArrayProducerHash(uint64_t key) {
+    /* Unsigned wrap is part of this hash's avalanche algorithm. */
     key ^= key >> 33;
     key *= UINT64_C(0xff51afd7ed558ccd);
     key ^= key >> 33;

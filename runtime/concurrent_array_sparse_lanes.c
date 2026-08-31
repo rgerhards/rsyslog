@@ -1680,6 +1680,18 @@ static ca_status_t sparse_return_claim(ca_claim_t *claim) {
     return sparse_complete_impl(claim, NULL, 1);
 }
 
+static uint64_t
+#if defined(__clang__)
+    __attribute__((no_sanitize("unsigned-integer-overflow")))
+#endif
+    sparse_producer_hash(uint64_t key) {
+    /* Unsigned wrap is part of this hash's avalanche algorithm. */
+    uint64_t mixed = key + UINT64_C(0x9e3779b97f4a7c15);
+    mixed = (mixed ^ (mixed >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
+    mixed = (mixed ^ (mixed >> 27)) * UINT64_C(0x94d049bb133111eb);
+    return mixed ^ (mixed >> 31);
+}
+
 static ca_status_t sparse_producer_register(ca_queue_t *base, uint64_t key, ca_producer_t *producer) {
     if (producer == NULL) return CA_INVALID;
     memset(producer, 0, sizeof(*producer));
@@ -1704,10 +1716,7 @@ static ca_status_t sparse_producer_register(ca_queue_t *base, uint64_t key, ca_p
     if (index != SIZE_MAX) {
         producer->fallback = 0;
     } else {
-        uint64_t mixed = key + UINT64_C(0x9e3779b97f4a7c15);
-        mixed = (mixed ^ (mixed >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
-        mixed = (mixed ^ (mixed >> 27)) * UINT64_C(0x94d049bb133111eb);
-        mixed ^= mixed >> 31;
+        const uint64_t mixed = sparse_producer_hash(key);
         index = queue->dedicated_limit + ((size_t)mixed & (queue->fallback_count - 1));
         producer->fallback = 1;
     }
