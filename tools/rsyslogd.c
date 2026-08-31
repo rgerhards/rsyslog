@@ -1015,9 +1015,9 @@ static rsRetVal msgConsumer(void __attribute__((unused)) * notNeeded, batch_t *p
         for (int i = 0; i < pBatch->nElem; ++i) {
             if (pBatch->pElem[i].pMsg != NULL &&
                 strstr((const char *)pBatch->pElem[i].pMsg->pszRawMsg, flipMessage) != NULL) {
-                runConf->executionEngine = atoi(flipValue) != 0;
+                pWti->egress.testLateExecutionEngine = atoi(flipValue) != 0;
                 DBGPRINTF("test changed mutable executionEngine to %d after batch; captured completion policy %d\n",
-                          runConf->executionEngine, preserveCompletion);
+                          pWti->egress.testLateExecutionEngine, preserveCompletion);
                 break;
             }
         }

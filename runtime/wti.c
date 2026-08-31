@@ -273,6 +273,9 @@ void wtiEgressBegin(wti_t *const pThis, const rsconf_t *const batchConfig, const
     assert(pThis->egress.buckets == NULL && pThis->egress.nBuckets == 0 && pThis->egress.nAllocated == 0);
     pThis->egress.enabled = enabled;
     pThis->egress.preserveCompletion = 0;
+#ifdef ENABLE_IMDIAG
+    pThis->egress.testLateExecutionEngine = enabled;
+#endif
     pThis->egress.batchConfig = batchConfig;
     pThis->egress.error = RS_RET_OK;
     pThis->egress.errorGeneration = 0;

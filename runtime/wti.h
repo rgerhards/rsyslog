@@ -80,6 +80,11 @@ typedef struct egress_ledger_s {
     size_t nAllocated;
     int enabled;
     int preserveCompletion;
+#ifdef ENABLE_IMDIAG
+    /* Per-invocation mutable-selector model for the post-ProcessBatch test
+     * hook. The real configuration remains immutable while workers use it. */
+    int testLateExecutionEngine;
+#endif
     const rsconf_t *batchConfig;
     rsRetVal error;
     /* Distinguishes a new staged-branch failure from an earlier error in the
