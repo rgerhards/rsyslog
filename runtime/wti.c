@@ -37,6 +37,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <stdint.h>
+#include <limits.h>
 
 #include "rsyslog.h"
 #include "stringbuf.h"
@@ -49,13 +50,13 @@
 #include "action.h"
 #include "atomic.h"
 #include "rsconf.h"
+#include "queue.h"
 
 /* static data */
 DEFobjStaticHelpers;
 DEFobjCurrIf(glbl)
 
     pthread_key_t thrd_wti_key;
-
 
 /* methods */
 
@@ -243,6 +244,9 @@ rsRetVal wtiNewIParam(wti_t *const pWti, action_t *const pAction, actWrkrIParams
     if (wrkrInfo->p.tx.currIParam == wrkrInfo->p.tx.maxIParams) {
         /* we need to extend */
         newMax = (wrkrInfo->p.tx.maxIParams == 0) ? CONF_IPARAMS_BUFSIZE : 2u * (size_t)wrkrInfo->p.tx.maxIParams;
+        if (newMax > (size_t)INT_MAX) {
+            ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
+        }
         if ((size_t)pAction->iNumTpls > SIZE_MAX / newMax) {
             ABORT_FINALIZE(RS_RET_OUT_OF_MEMORY);
         }
@@ -264,6 +268,143 @@ finalize_it:
     RETiRet;
 }
 
+void wtiEgressBegin(wti_t *const pThis, const rsconf_t *const batchConfig, const int enabled) {
+    assert(pThis->egress.state == EGRESS_EMPTY);
+    assert(pThis->egress.buckets == NULL && pThis->egress.nBuckets == 0 && pThis->egress.nAllocated == 0);
+    pThis->egress.enabled = enabled;
+    pThis->egress.preserveCompletion = 0;
+#ifdef ENABLE_IMDIAG
+    pThis->egress.testLateExecutionEngine = enabled;
+#endif
+    pThis->egress.batchConfig = batchConfig;
+    pThis->egress.error = RS_RET_OK;
+    pThis->egress.errorGeneration = 0;
+    pThis->egress.state = enabled ? EGRESS_EXECUTING : EGRESS_EMPTY;
+}
+
+static void wtiEgressRecordError(wti_t *const pThis, const rsRetVal error) {
+    if (error == RS_RET_OK) return;
+    pThis->egress.error = error;
+    ++pThis->egress.errorGeneration;
+}
+
+static egress_bucket_t *wtiEgressBucket(wti_t *const pThis, qqueue_t *const queue, smsg_t *const msg) {
+    for (size_t i = 0; i < pThis->egress.nBuckets; ++i)
+        if (pThis->egress.buckets[i].queue == queue) return &pThis->egress.buckets[i];
+    if (pThis->egress.nBuckets == pThis->egress.nAllocated) {
+        if (pThis->egress.nAllocated > SIZE_MAX / 2) return NULL;
+        const size_t allocation = pThis->egress.nAllocated == 0 ? 4 : pThis->egress.nAllocated * 2;
+        if (allocation > SIZE_MAX / sizeof(*pThis->egress.buckets)) return NULL;
+        egress_bucket_t *const buckets = realloc(pThis->egress.buckets, allocation * sizeof(*buckets));
+        if (buckets == NULL) return NULL;
+        pThis->egress.buckets = buckets;
+        memset(buckets + pThis->egress.nAllocated, 0, (allocation - pThis->egress.nAllocated) * sizeof(*buckets));
+        pThis->egress.nAllocated = allocation;
+    }
+    egress_bucket_t *const bucket = &pThis->egress.buckets[pThis->egress.nBuckets];
+    bucket->queue = queue;
+    if (pThis->producerIdentity == 0) pThis->producerIdentity = qqueueConcurrentProducerIdentityAcquire();
+    qConcurrentTarget_t *target = NULL;
+    const rsRetVal ret = qqueueConcurrentTargetCreate(queue, pThis->producerIdentity, &target);
+    if (ret != RS_RET_OK) {
+        DBGPRINTF("reservedBatch target binding failed for message %.128s: %d\n",
+                  msg->pszRawMsg == NULL ? (uchar *)"" : msg->pszRawMsg, ret);
+        bucket->queue = NULL;
+        return NULL;
+    }
+    bucket->target = target;
+    ++pThis->egress.nBuckets;
+    return bucket;
+}
+
+static rsRetVal wtiEgressPublishBuckets(wti_t *const pThis) {
+    rsRetVal first = RS_RET_OK;
+    for (size_t i = 0; i < pThis->egress.nBuckets; ++i) {
+        const rsRetVal ret = qqueueConcurrentTargetPublish((qConcurrentTarget_t *)pThis->egress.buckets[i].target);
+        if (first == RS_RET_OK && ret != RS_RET_OK) first = ret;
+    }
+    return first;
+}
+
+/* Target wrappers contain queue-local producer pointers and therefore may not
+ * cross a source-batch/config lifetime. Publication runs with cancellation
+ * disabled and purges every wrapper before restoring cancellation. */
+static rsRetVal wtiEgressPurgeTargets(wti_t *const pThis) {
+    rsRetVal first = RS_RET_OK;
+    for (size_t i = 0; i < pThis->egress.nBuckets; ++i) {
+        qConcurrentTarget_t **const target = (qConcurrentTarget_t **)&pThis->egress.buckets[i].target;
+        if (*target == NULL) continue;
+        const rsRetVal ret = qqueueConcurrentTargetDestroy(target);
+        if (first == RS_RET_OK && ret != RS_RET_OK) first = ret;
+    }
+    if (first == RS_RET_OK) {
+        free(pThis->egress.buckets);
+        pThis->egress.buckets = NULL;
+        pThis->egress.nBuckets = 0;
+        pThis->egress.nAllocated = 0;
+    }
+    return first;
+}
+
+rsRetVal wtiEgressStage(wti_t *const pThis, qqueue_t *const queue, smsg_t *msg) {
+    if (pThis->egress.state != EGRESS_EXECUTING || queue == NULL) {
+        if (msg != NULL) msgDestruct(&msg);
+        wtiEgressRecordError(pThis, RS_RET_PARAM_ERROR);
+        return RS_RET_PARAM_ERROR;
+    }
+    if (msg == NULL) {
+        wtiEgressRecordError(pThis, RS_RET_OUT_OF_MEMORY);
+        return RS_RET_OUT_OF_MEMORY;
+    }
+    int cancelState;
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancelState);
+    egress_bucket_t *const bucket = wtiEgressBucket(pThis, queue, msg);
+    if (bucket == NULL) {
+        msgDestruct(&msg);
+        wtiEgressRecordError(pThis, RS_RET_OUT_OF_MEMORY);
+        pthread_setcancelstate(cancelState, NULL);
+        return RS_RET_OUT_OF_MEMORY;
+    }
+    int consumed = 0;
+    rsRetVal ret = qqueueConcurrentTargetStage((qConcurrentTarget_t *)bucket->target, msg, 1, 1, &consumed);
+    if (ret == RS_RET_RETRY) {
+        const rsRetVal publishRet = wtiEgressPublishBuckets(pThis);
+        if (publishRet != RS_RET_OK) {
+            ret = publishRet;
+        } else {
+            ret = qqueueConcurrentTargetStage((qConcurrentTarget_t *)bucket->target, msg, 0, 0, &consumed);
+        }
+    }
+    if (!consumed && ret != RS_RET_OK) msgDestruct(&msg);
+    if (ret == RS_RET_DISCARDMSG || ret == RS_RET_QUEUE_FULL) ret = RS_RET_OK;
+    wtiEgressRecordError(pThis, ret);
+    pthread_setcancelstate(cancelState, NULL);
+    return ret;
+}
+
+void wtiEgressPublish(wti_t *const pThis) {
+    if (pThis->egress.state != EGRESS_EXECUTING) return;
+    int cancelState;
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cancelState);
+    pThis->egress.state = EGRESS_PUBLISHING;
+    const rsRetVal ret = wtiEgressPublishBuckets(pThis);
+    if (pThis->egress.error == RS_RET_OK && ret != RS_RET_OK) pThis->egress.error = ret;
+    const rsRetVal purgeRet = wtiEgressPurgeTargets(pThis);
+    if (pThis->egress.error == RS_RET_OK && purgeRet != RS_RET_OK) pThis->egress.error = purgeRet;
+    pThis->egress.state = EGRESS_PUBLISHED;
+    pthread_setcancelstate(cancelState, NULL);
+}
+
+rsRetVal wtiEgressCleanup(wti_t *const pThis) {
+    if (pThis->egress.state == EGRESS_EXECUTING) wtiEgressPublish(pThis);
+    assert(pThis->egress.state == EGRESS_PUBLISHED || pThis->egress.state == EGRESS_EMPTY);
+    const rsRetVal ret = pThis->egress.nBuckets == 0 ? RS_RET_OK : wtiEgressPurgeTargets(pThis);
+    pThis->egress.state = EGRESS_EMPTY;
+    pThis->egress.enabled = 0;
+    pThis->egress.batchConfig = NULL;
+    return ret;
+}
+
 
 /* Destructor */
 BEGINobjDestruct(wti) /* be sure to specify the object type also in END and CODESTART macros! */
@@ -276,7 +417,15 @@ BEGINobjDestruct(wti) /* be sure to specify the object type also in END and CODE
             assert(wtiGetState(pThis) == WRKTHRD_STOPPED);
         }
     }
+    /* Batch cleanup must already have released every target binding. Treat a
+     * surviving builder/binding as a lifecycle invariant failure; freeing the
+     * wrapper through CA_BUSY would leave a core reference dangling. */
+    if ((pThis->egress.state != EGRESS_EMPTY || pThis->egress.nBuckets != 0) && wtiEgressCleanup(pThis) != RS_RET_OK)
+        abort();
+    assert(pThis->egress.buckets == NULL && pThis->egress.nBuckets == 0);
     /* actual destruction */
+    if (pThis->pWtp != NULL && pThis->pWtp->pfWorkerDestruct != NULL)
+        pThis->pWtp->pfWorkerDestruct(pThis->pWtp->pUsr, pThis);
     batchFree(&pThis->batch);
     free(pThis->actWrkrInfo);
     pthread_cond_destroy(&pThis->pcondBusy);
@@ -319,6 +468,7 @@ rsRetVal wtiConstructFinalize(wti_t *pThis) {
     /* we now alloc the array for user pointers. We obtain the max from the queue itself. */
     CHKiRet(pThis->pWtp->pfGetDeqBatchSize(pThis->pWtp->pUsr, &iDeqBatchSize));
     CHKiRet(batchInit(&pThis->batch, iDeqBatchSize));
+    if (pThis->pWtp->pfWorkerConstruct != NULL) CHKiRet(pThis->pWtp->pfWorkerConstruct(pThis->pWtp->pUsr, pThis));
 
 finalize_it:
     RETiRet;
@@ -340,7 +490,23 @@ static void wtiWorkerCancelCleanup(void *arg) {
     ISOBJ_TYPE_assert(pWtp, wtp);
 
     DBGPRINTF("%s: cancellation cleanup handler called.\n", wtiGetDbgHdr(pThis));
-    pWtp->pfObjProcessed(pWtp->pUsr, pThis);
+    if (pThis->egress.state != EGRESS_EMPTY || pThis->egress.nBuckets != 0) {
+        if (wtiEgressPurgeTargets(pThis) != RS_RET_OK) abort();
+        pThis->egress.state = EGRESS_EMPTY;
+        pThis->egress.enabled = 0;
+        pThis->egress.batchConfig = NULL;
+        pThis->egress.error = RS_RET_OK;
+        pThis->egress.errorGeneration = 0;
+    }
+    if (pWtp->bUnlockedWorker) {
+        pWtp->pfCancelProcessed(pWtp->pUsr, pThis);
+        if (pThis->bQueueWorkerStarted) {
+            pWtp->pfWorkerStop(pWtp->pUsr, pThis);
+            pThis->bQueueWorkerStarted = 0;
+        }
+    } else {
+        pWtp->pfObjProcessed(pWtp->pUsr, pThis);
+    }
     DBGPRINTF("%s: done cancellation cleanup handler.\n", wtiGetDbgHdr(pThis));
 }
 
@@ -421,6 +587,40 @@ PRAGMA_IGNORE_Wempty_body rsRetVal wtiWorker(wti_t *__restrict__ const pThis) {
     DBGPRINTF("wti %p: worker starting\n", pThis);
     /* now we have our identity, on to real processing */
 
+    if (pWtp->bUnlockedWorker) {
+        localRet = pWtp->pfWorkerStart(pWtp->pUsr, pThis);
+        if (localRet != RS_RET_OK) {
+            goto worker_cleanup;
+        }
+        pThis->bQueueWorkerStarted = 1;
+        while (1) {
+            terminateRet = wtpChkStopWrkr(pWtp, LOCK_MUTEX);
+            if (terminateRet == RS_RET_TERMINATE_NOW) {
+                pWtp->pfCancelProcessed(pWtp->pUsr, pThis);
+                break;
+            }
+            localRet = pWtp->pfDoWork(pWtp->pUsr, pThis);
+            if (localRet == RS_RET_ERR_QUEUE_EMERGENCY) {
+                break;
+            }
+            if (localRet == RS_RET_IDLE) {
+                if (terminateRet == RS_RET_TERMINATE_WHEN_IDLE || bInactivityTOOccurred) {
+                    break;
+                }
+                localRet = pWtp->pfWaitIdle(pWtp->pUsr, pThis, &bInactivityTOOccurred);
+                if (localRet != RS_RET_OK && localRet != RS_RET_TIMED_OUT && localRet != RS_RET_IDLE) {
+                    break;
+                }
+                continue;
+            }
+            bInactivityTOOccurred = 0;
+        }
+        pWtp->pfCancelProcessed(pWtp->pUsr, pThis);
+        pWtp->pfWorkerStop(pWtp->pUsr, pThis);
+        pThis->bQueueWorkerStarted = 0;
+        goto worker_cleanup;
+    }
+
     /* note: in this loop, the mutex is "never" unlocked. Of course,
      * this is not true: it actually is unlocked when the actual processing
      * is done, as part of pWtp->pfDoWork() processing. Note that this
@@ -478,6 +678,7 @@ PRAGMA_IGNORE_Wempty_body rsRetVal wtiWorker(wti_t *__restrict__ const pThis) {
 
     d_pthread_mutex_unlock(pWtp->pmutUsr);
 
+worker_cleanup:
     DBGPRINTF("DDDD: wti %p: worker cleanup action instances\n", pThis);
     for (i = 0; i < runConf->actions.iActionNbr; ++i) {
         wrkrInfo = &(pThis->actWrkrInfo[i]);

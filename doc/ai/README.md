@@ -11,6 +11,8 @@
 | `structure_and_paths.md` | Directory layout and naming conventions |
 | `authoring_guidelines.md` | Required blocks, tone, section order |
 | `mermaid_rules.md` | Diagram syntax rules |
+| `mpmc_queue_design.md` | Draft contract and staged plan for the optional contention-distributed memory queue |
+| `mpmc_queue_lab_notebook.md` | Append-only decisions and evidence for the contention-distributed queue effort |
 | `terminology.md` | Canonical rsyslog vocabulary |
 | `security_triage_rubric.md` | Security finding proof, severity, and hardening classification rules |
 | `../security/project-threat-model.md` | Versioned project threat model, trust boundaries, and security invariants |

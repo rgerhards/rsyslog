@@ -49,6 +49,7 @@
 #include "statsobj.h"
 #include "cryprov.h"
 #include "queue_da.h"
+#include "concurrent_array.h"
 #include "segdisk_store.h"
 
 /* support for the toDelete list */
@@ -66,7 +67,8 @@ typedef enum {
     QUEUETYPE_LINKEDLIST = 1, /* linked list used as buffer, lower fixed memory overhead but slower */
     QUEUETYPE_DISK = 2, /* disk files used as buffer */
     QUEUETYPE_DIRECT = 3, /* no queuing happens, consumer is directly called */
-    QUEUETYPE_SEGMENTED_DISK = 4 /* log-structured segmented disk queue */
+    QUEUETYPE_SEGMENTED_DISK = 4, /* log-structured segmented disk queue */
+    QUEUETYPE_CONCURRENT_ARRAY = 5 /* opt-in ConcurrentArray execution core */
 } queueType_t;
 
 /* queue recovery modes */
@@ -81,6 +83,9 @@ typedef struct qLinkedList_S {
     struct qLinkedList_S *pNext;
     smsg_t *pMsg;
 } qLinkedList_t;
+
+typedef struct qConcurrentTarget_s qConcurrentTarget_t;
+struct qConcurrentProducerMapEntry;
 
 /**
  * @brief The "queue object for the queueing subsystem".
@@ -110,6 +115,36 @@ struct queue_s {
         /* minimum nbr of msgs per worker thread, if more, a new worker is started until max wrkrs */
         wtp_t *pWtpDA; /* single-worker DA transfer pool, not the DA disk queue child consumer pool */
         wtp_t *pWtpReg;
+        ca_queue_t *concurrentArray;
+        int concurrentRequestedQueueType; /* diagnostic enum, zero if not requested */
+        int concurrentActualQueueType; /* diagnostic enum after safe fallback */
+        int concurrentRequestedCore; /* 0=legacy, 1=sparseLanes, 2=bbq */
+        int concurrentActualCore; /* 0=legacy, 1=sparseLanes, 2=bbq */
+        ca_producer_t *concurrentProducers;
+        size_t concurrentProducerCount;
+        size_t concurrentDedicatedProducerCount;
+        size_t concurrentFallbackProducerCount;
+        struct qConcurrentProducerMapEntry *concurrentProducerMap;
+        size_t concurrentProducerMapSize;
+        _Atomic size_t concurrentDedicatedAssigned;
+        uint64_t concurrentIdentityGeneration;
+#ifdef ENABLE_IMDIAG
+        char *concurrentTestFailChunkOnMessage;
+        char *concurrentTestTargetFailChunkOnMessage;
+        char *concurrentTestActionPublicationMarker;
+        char *concurrentTestWorkerGate;
+        size_t concurrentTestWorkerGateCount;
+        size_t concurrentTestTargetFailChunkCount;
+        int concurrentTestTargetFailureArmed;
+        sbool concurrentTestLifecycleMarkers;
+        uint64_t concurrentTestMultiReservations;
+        uint64_t concurrentTestMultiPublications;
+        uint64_t concurrentTestMultiPublishedItems;
+        uint64_t concurrentTestMultiAdvice;
+#endif
+        char *concurrentCore;
+        sbool statsCountersInitialized;
+        rsRetVal (*SingleEnq)(struct queue_s *, flowControl_t, smsg_t *);
         action_t *pAction; /* for action queues, ptr to action object; for main queues unused */
         int iUpdsSincePersist; /* nbr of queue updates since the last persist call */
         int iPersistUpdCnt; /* persits queue info after this nbr of updates - 0 -> persist only on shutdown */
@@ -241,6 +276,8 @@ struct queue_s {
         STATSCOUNTER_DEF(ctrFull, mutCtrFull)
         STATSCOUNTER_DEF(ctrFDscrd, mutCtrFDscrd)
         STATSCOUNTER_DEF(ctrNFDscrd, mutCtrNFDscrd)
+        STATSCOUNTER_DEF(ctrConcurrentQueueSize, mutCtrConcurrentQueueSize)
+        STATSCOUNTER_DEF(ctrConcurrentMaxqsize, mutCtrConcurrentMaxqsize)
         int ctrMaxqsize; /* NOT guarded by a mutex */
         int segdiskBytes;
         int segdiskSegments;
@@ -277,6 +314,26 @@ struct queue_s {
 /* prototypes */
 rsRetVal qqueueDestruct(qqueue_t **ppThis);
 rsRetVal qqueueEnqMsg(qqueue_t *pThis, flowControl_t flwCtlType, smsg_t *pMsg);
+/* Private reservedBatch adapter. A target is owned by one WTI; its lifecycle
+ * binding exists only while the current source batch touches that target. */
+uint64_t qqueueConcurrentProducerIdentityAcquire(void);
+#ifdef ENABLE_IMDIAG
+rsRetVal qqueueConcurrentProducerTestResolve(qqueue_t *pThis,
+                                             uint64_t identity,
+                                             uint32_t *laneIndex,
+                                             int *fallback,
+                                             size_t *dedicatedCount,
+                                             size_t *fallbackCount);
+#endif
+int qqueueSupportsConcurrentTarget(const qqueue_t *pThis);
+int qqueueHasSupportedConcurrentCore(const qqueue_t *pThis);
+rsRetVal qqueueConcurrentTargetCreate(qqueue_t *pThis, uint64_t producerIdentity, qConcurrentTarget_t **target);
+rsRetVal qqueueConcurrentTargetStage(
+    qConcurrentTarget_t *target, smsg_t *msg, int tryOnly, int countArrival, int *consumed);
+rsRetVal qqueueConcurrentTargetPublish(qConcurrentTarget_t *target);
+rsRetVal qqueueConcurrentTargetCancelPending(qConcurrentTarget_t *target);
+rsRetVal qqueueConcurrentTargetEndBatch(qConcurrentTarget_t *target);
+rsRetVal qqueueConcurrentTargetDestroy(qConcurrentTarget_t **target);
 rsRetVal qqueueStart(rsconf_t *cnf, qqueue_t *pThis);
 rsRetVal qqueueSetMaxFileSize(qqueue_t *pThis, size_t iMaxFileSize);
 rsRetVal qqueueSetFilePrefix(qqueue_t *pThis, uchar *pszPrefix, size_t iLenPrefix);
@@ -322,6 +379,14 @@ PROTOTYPEpropSetMeth(qqueue, iSmpInterval, int);
 
 #ifdef ENABLE_IMDIAG
 extern unsigned int iOverallQueueSize;
+typedef struct qqueue_ca_multi_test_stats_s {
+    uint64_t reservations;
+    uint64_t publications;
+    uint64_t published_items;
+    uint64_t advice;
+} qqueue_ca_multi_test_stats_t;
+void qqueueResetConcurrentArrayMultiTestStats(qqueue_t *pThis);
+void qqueueGetConcurrentArrayMultiTestStats(qqueue_t *pThis, qqueue_ca_multi_test_stats_t *stats);
 rsRetVal qqueueSetSegDiskTestFault(qqueue_t *pThis, const char *point, unsigned int hit_count);
 rsRetVal qqueueClearSegDiskTestFault(qqueue_t *pThis);
 #endif

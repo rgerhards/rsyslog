@@ -88,6 +88,11 @@ static rsRetVal NotImplementedDummy_voidp_voidp(__attribute__((unused)) void *p1
 static rsRetVal NotImplementedDummy_voidp_wti_tp(__attribute__((unused)) void *p1, __attribute__((unused)) wti_t *p2) {
     return RS_RET_NOT_IMPLEMENTED;
 }
+static rsRetVal NotImplementedDummy_voidp_wti_tp_intp(__attribute__((unused)) void *p1,
+                                                      __attribute__((unused)) wti_t *p2,
+                                                      __attribute__((unused)) int *p3) {
+    return RS_RET_NOT_IMPLEMENTED;
+}
 /* Standard-Constructor for the wtp object
  */
 BEGINobjConstruct(wtp) /* be sure to specify the object type also in END macro! */
@@ -107,6 +112,13 @@ BEGINobjConstruct(wtp) /* be sure to specify the object type also in END macro! 
     pThis->pfGetDeqBatchSize = (rsRetVal(*)(void *, int *))NotImplementedDummy_voidp_intp;
     pThis->pfDoWork = (rsRetVal(*)(void *, void *))NotImplementedDummy_voidp_voidp;
     pThis->pfObjProcessed = (rsRetVal(*)(void *, wti_t *))NotImplementedDummy_voidp_wti_tp;
+    pThis->pfCancelProcessed = (rsRetVal(*)(void *, wti_t *))NotImplementedDummy_voidp_wti_tp;
+    pThis->pfWorkerConstruct = NULL;
+    pThis->pfWorkerDestruct = NULL;
+    pThis->pfWorkerStart = (rsRetVal(*)(void *, wti_t *))NotImplementedDummy_voidp_wti_tp;
+    pThis->pfWorkerStop = (rsRetVal(*)(void *, wti_t *))NotImplementedDummy_voidp_wti_tp;
+    pThis->pfWaitIdle = (rsRetVal(*)(void *, wti_t *, int *))NotImplementedDummy_voidp_wti_tp_intp;
+    pThis->pfWakeIdle = NULL;
     INIT_ATOMIC_HELPER_MUT(pThis->mutCurNumWrkThrd);
     INIT_ATOMIC_HELPER_MUT(pThis->mutWtpState);
 ENDobjConstruct(wtp)
@@ -129,7 +141,7 @@ rsRetVal wtpConstructFinalize(wtp_t *pThis) {
     /* alloc and construct workers - this can only be done in finalizer as we previously do
      * not know the max number of workers
      */
-    CHKmalloc(pThis->pWrkr = malloc(sizeof(wti_t *) * pThis->iNumWorkerThreads));
+    CHKmalloc(pThis->pWrkr = calloc((size_t)pThis->iNumWorkerThreads, sizeof(wti_t *)));
 
     for (i = 0; i < pThis->iNumWorkerThreads; ++i) {
         CHKiRet(wtiConstruct(&pThis->pWrkr[i]));
@@ -165,7 +177,10 @@ BEGINobjDestruct(wtp) /* be sure to specify the object type also in END and CODE
     assert(pThis->iCurNumWrkThrd == 0);
 
     /* destruct workers */
-    for (i = 0; i < pThis->iNumWorkerThreads; ++i) wtiDestruct(&pThis->pWrkr[i]);
+    if (pThis->pWrkr != NULL) {
+        for (i = 0; i < pThis->iNumWorkerThreads; ++i)
+            if (pThis->pWrkr[i] != NULL) wtiDestruct(&pThis->pWrkr[i]);
+    }
 
     free(pThis->pWrkr);
     pThis->pWrkr = NULL;
@@ -265,6 +280,7 @@ PRAGMA_IGNORE_Wempty_body
     /* lock mutex to prevent races (may otherwise happen during idle processing and such...) */
     d_pthread_mutex_lock(pThis->pmutUsr);
     wtpSetState(pThis, tShutdownCmd);
+    if (pThis->pfWakeIdle != NULL) pThis->pfWakeIdle(pThis->pUsr);
     /* awake workers in retry loop */
     for (i = 0; i < pThis->iNumWorkerThreads; ++i) {
         wtpJoinTerminatedWrkr(pThis);
@@ -595,6 +611,33 @@ finalize_it:
 }
 
 
+/* ConcurrentArray wakes already-running workers through its epoch wait
+ * primitive.  Its publisher-side scaling path therefore only needs to start
+ * missing workers; unlike the legacy advice routine it must not scan and
+ * signal the complete worker-slot table on every submission.  Concurrent
+ * callers serialize this routine in the queue's thread-management mutex. */
+rsRetVal ATTR_NONNULL()
+    wtpAdviseMaxWorkersConcurrent(wtp_t *const pThis, int nMaxWrkr, const int permit_during_shutdown) {
+    DEFiRet;
+
+    ISOBJ_TYPE_assert(pThis, wtp);
+    if (nMaxWrkr <= 0) FINALIZE;
+    if (nMaxWrkr > pThis->iNumWorkerThreads) nMaxWrkr = pThis->iNumWorkerThreads;
+
+    const int running = ATOMIC_LOAD_32BIT(&pThis->iCurNumWrkThrd, &pThis->mutCurNumWrkThrd);
+    for (int i = running; i < nMaxWrkr; ++i) CHKiRet(wtpStartWrkr(pThis, permit_during_shutdown));
+
+finalize_it:
+    RETiRet;
+}
+
+
+int ATTR_NONNULL() wtpGetCurrentNumWorkers(wtp_t *const pThis) {
+    ISOBJ_TYPE_assert(pThis, wtp);
+    return ATOMIC_LOAD_32BIT(&pThis->iCurNumWrkThrd, &pThis->mutCurNumWrkThrd);
+}
+
+
 rsRetVal wtpWakeupAllWrkr(wtp_t *pThis) {
     if (pThis == NULL) return RS_RET_PARAM_ERROR;
     d_pthread_mutex_lock(&pThis->mutWtp);
@@ -624,8 +667,16 @@ DEFpropSetMethFP(wtp, pfRateLimiter, rsRetVal (*pVal)(void *));
 DEFpropSetMethFP(wtp, pfGetDeqBatchSize, rsRetVal (*pVal)(void *, int *));
 DEFpropSetMethFP(wtp, pfDoWork, rsRetVal (*pVal)(void *, void *));
 DEFpropSetMethFP(wtp, pfObjProcessed, rsRetVal (*pVal)(void *, wti_t *));
+DEFpropSetMethFP(wtp, pfCancelProcessed, rsRetVal (*pVal)(void *, wti_t *));
+DEFpropSetMethFP(wtp, pfWorkerConstruct, rsRetVal (*pVal)(void *, wti_t *));
+DEFpropSetMethFP(wtp, pfWorkerDestruct, void (*pVal)(void *, wti_t *));
+DEFpropSetMethFP(wtp, pfWorkerStart, rsRetVal (*pVal)(void *, wti_t *));
+DEFpropSetMethFP(wtp, pfWorkerStop, rsRetVal (*pVal)(void *, wti_t *));
+DEFpropSetMethFP(wtp, pfWaitIdle, rsRetVal (*pVal)(void *, wti_t *, int *));
+DEFpropSetMethFP(wtp, pfWakeIdle, rsRetVal (*pVal)(void *));
 DEFpropSetMethFP(wtp, pfIdleTimeout, rsRetVal (*pVal)(void *));
 DEFpropSetMeth(wtp, bAllowFirstWorkerToTimeout, sbool);
+DEFpropSetMeth(wtp, bUnlockedWorker, sbool);
 
 
 /* set the debug header message

@@ -64,3 +64,10 @@ collection, and process orchestration).
   `tests/diag.sh`) when chasing race conditions.
 - Use the testbench Valgrind helpers by running the corresponding `*-vg.sh`
   scripts to flush out memory and threading regressions.
+- The private ConcurrentArray core is covered directly by
+  `runtime_unit_concurrent_array_ready_scq`,
+  `runtime_unit_concurrent_array_sparse_lanes`, and
+  `runtime_unit_concurrent_array_sparse_lanes_pthread`; they check the helpable
+  ready primitive, exact capacity/ownership, retry barriers, both epoch-wait
+  adapters, and P1/P8/P16 concurrency independently of the qqueue/daemon
+  integration exercised by the registered ConcurrentArray live tests.

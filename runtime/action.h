@@ -113,6 +113,18 @@ struct action_s {
     void **wrkrDataTable;
     int wrkrDataTableSize;
     int nWrkr;
+#ifdef ENABLE_IMDIAG
+    /* Deterministic queued-action fault/lifecycle hooks. These fields and all
+     * associated branches compile out of ordinary builds. */
+    char *concurrentTestCopyFailMessage;
+    char *concurrentTestStageFailMessage;
+    char *concurrentTestConsumerRetryMessage;
+    char *concurrentTestClaimGate;
+    char *concurrentTestClaimHeld;
+    _Atomic unsigned concurrentTestCopyFailRemaining;
+    _Atomic unsigned concurrentTestStageFailRemaining;
+    _Atomic unsigned concurrentTestConsumerRetryRemaining;
+#endif
     /* for statistics subsystem */
     statsobj_t *statsobj;
     STATSCOUNTER_DEF(ctrProcessed, mutCtrProcessed)

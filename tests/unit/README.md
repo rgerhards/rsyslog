@@ -31,6 +31,13 @@ root:
 make check TESTS='runtime_unit_linkedlist'
 ```
 
+The standalone ConcurrentArray ready and sparse-lane contract suites are
+selected with:
+
+```sh
+make check TESTS='runtime_unit_concurrent_array_ready_scq runtime_unit_concurrent_array_sparse_lanes runtime_unit_concurrent_array_sparse_lanes_pthread'
+```
+
 ## Conventions
 
 - Prefer one test binary per production helper or component.

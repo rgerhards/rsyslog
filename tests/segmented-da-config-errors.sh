@@ -3,10 +3,10 @@
 #
 # Copyright 2026 Rainer Gerhards and Adiscon GmbH.
 #
-# Queue DA engine parameters are intentionally limited to FixedArray and
-# LinkedList queues with a filename. The permissive oracle is a successful -N1
-# validation plus the dirty-configuration diagnostic; the strict oracle is a
-# failed validation when abortOnUncleanConfig is enabled.
+# Queue DA engine parameters are intentionally limited to FixedArray,
+# LinkedList, and ConcurrentArray queues with a filename. The permissive oracle
+# is a successful -N1 validation plus the dirty-configuration diagnostic; the
+# strict oracle is a failed validation when abortOnUncleanConfig is enabled.
 . ${srcdir:=.}/diag.sh init
 
 assert_contains() {
@@ -30,7 +30,7 @@ main_queue(queue.type="segmentedDisk" queue.filename="mainq"
 	shutdown_when_empty
 	wait_shutdown
 	unset RS_REDIR
-	assert_contains "$out" 'apply only to FixedArray or LinkedList disk-assisted queues'
+	assert_contains "$out" 'apply only to FixedArray, LinkedList, or ConcurrentArray disk-assisted queues'
 }
 
 check_strict_invalid_context() {
@@ -44,7 +44,7 @@ main_queue(queue.type="segmentedDisk" queue.filename="mainq"
 	if ../tools/rsyslogd -C -N1 -f"${TESTCONF_NM}.conf" -M../runtime/.libs:../.libs >"$out" 2>&1; then
 		error_exit 1 "strict invalid-context configuration unexpectedly passed"
 	fi
-	assert_contains "$out" 'apply only to FixedArray or LinkedList disk-assisted queues'
+	assert_contains "$out" 'apply only to FixedArray, LinkedList, or ConcurrentArray disk-assisted queues'
 }
 
 check_strict_meaningless_options() {
