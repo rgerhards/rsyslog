@@ -77,8 +77,7 @@ DEFobjCurrIf(prop) DEFobjCurrIf(net)
      * class...
      */
 
-    static struct cnfobj *mainqCnfObj = NULL; /* main queue object, to be used later in startup sequence */
-static int bPreserveFQDN = 0; /* should FQDNs always be preserved? */
+    static int bPreserveFQDN = 0; /* should FQDNs always be preserved? */
 static prop_t *propLocalIPIF = NULL; /* IP address to report for the local host (default is 127.0.0.1) */
 static int propLocalIPIF_set = 0; /* is propLocalIPIF already set? */
 static prop_t *propLocalHostName = NULL; /* our hostname as FQDN - read-only after startup */
@@ -106,6 +105,15 @@ int glblJsonFormatOpt = JSON_C_TO_STRING_SPACED;
 
 pid_t glbl_ourpid;
 #ifndef HAVE_ATOMIC_BUILTINS
+/* JSON serialization runs in message workers while transactional publication
+ * runs in the main thread, so both sides use the synchronized accessor. */
+DEF_ATOMIC_HELPER_MUT(mutJsonFormatOpt);
+DEF_ATOMIC_HELPER_MUT(mutParserDropTrailingCROnReception);
+DEF_ATOMIC_HELPER_MUT(mutReportOversizeMsg);
+/* Child termination can be reported by module workers as well as the main
+ * reaper. Transactional base publication therefore uses the same synchronized
+ * accessors as every reader instead of racing a plain configuration write. */
+DEF_ATOMIC_HELPER_MUT(mutReportChildProcessExits);
 DEF_ATOMIC_HELPER_MUT(mutTerminateInputs);
 #endif
 #ifdef USE_UNLIMITED_SELECT
@@ -174,6 +182,7 @@ static struct cnfparamdescr cnfparamdescr[] = {
     {"compatibility.configformat.property", eCmdHdlrGetWord, 0},
     {"compatibility.defaults.secure", eCmdHdlrGetWord, 0},
     {"systemd.notifyreadydelay", eCmdHdlrBinary, 0},
+    {"config.reloadonhup", eCmdHdlrGetWord, 0},
     {"abortonuncleanconfig", eCmdHdlrBinary, 0},
     {"abortonfailedqueuestartup", eCmdHdlrBinary, 0},
     {"variables.casesensitive", eCmdHdlrBinary, 0},
@@ -207,13 +216,6 @@ static struct cnfparamdescr cnfparamdescr[] = {
 };
 static struct cnfparamblk paramblk = {CNFPARAMBLK_VERSION, sizeof(cnfparamdescr) / sizeof(struct cnfparamdescr),
                                       cnfparamdescr};
-
-static struct cnfparamvals *cnfparamvals = NULL;
-/* we need to support multiple calls into our param block, so we need
- * to persist the current settings. Note that this must be re-set
- * each time a new config load begins. This is a hint if we will
- * ever implement multi-config support, which is just an idea right now.
- */
 
 int glblGetMaxLine(rsconf_t *cnf) {
     /* glblGetMaxLine might be invoked before our configuration exists */
@@ -250,7 +252,6 @@ int GetGnuTLSLoglevel(rsconf_t *cnf) {
     }
 
 SIMP_PROP(PreserveFQDN, bPreserveFQDN, int)
-SIMP_PROP(mainqCnfObj, mainqCnfObj, struct cnfobj *)
 #ifdef USE_UNLIMITED_SELECT
 SIMP_PROP(FdSetSize, iFdSetSize, int)
 #endif
@@ -258,6 +259,15 @@ SIMP_PROP(FdSetSize, iFdSetSize, int)
 #undef SIMP_PROP
 #undef SIMP_PROP_SET
 #undef SIMP_PROP_GET
+
+static rsRetVal SetmainqCnfObj(struct cnfobj *newVal) {
+    loadConf->mainqCnfObj = newVal;
+    return RS_RET_OK;
+}
+
+static struct cnfobj *GetmainqCnfObj(void) {
+    return (loadConf == NULL) ? NULL : loadConf->mainqCnfObj;
+}
 
 /* This is based on the previous SIMP_PROP but as a getter it uses
  * additional parameter specifying the configuration it belongs to.
@@ -289,7 +299,6 @@ SIMP_PROP_GET(DfltNetstrmDrvrKeyFile, pszDfltNetstrmDrvrKeyFile, uchar *)
 SIMP_PROP_GET(NetstrmDrvrCAExtraFiles, pszNetstrmDrvrCAExtraFiles, uchar *)
 SIMP_PROP_GET(ParserControlCharacterEscapePrefix, parser.cCCEscapeChar, uchar)
 SIMP_PROP_GET(ParserDropTrailingLFOnReception, parser.bDropTrailingLF, int)
-SIMP_PROP_GET(ParserDropTrailingCROnReception, parser.bDropTrailingCR, int)
 SIMP_PROP_GET(ParserEscapeControlCharactersOnReceive, parser.bEscapeCCOnRcv, int)
 SIMP_PROP_GET(ParserSpaceLFOnReceive, parser.bSpaceLFOnRcv, int)
 SIMP_PROP_GET(ParserEscape8BitCharactersOnReceive, parser.bEscape8BitChars, int)
@@ -298,6 +307,10 @@ SIMP_PROP_GET(ParserEscapeControlCharacterTab, parser.bEscapeTab, int)
 #undef SIMP_PROP
 #undef SIMP_PROP_SET
 #undef SIMP_PROP_GET
+
+static int GetParserDropTrailingCROnReception(rsconf_t *const cnf) {
+    return glblGetParserDropTrailingCROnReception(cnf);
+}
 
 /* return global input termination status
  * rgerhards, 2009-07-20
@@ -712,11 +725,11 @@ static rsRetVal ATTR_NONNULL() setOversizeMsgInputMode(const uchar *const mode) 
 static rsRetVal ATTR_NONNULL() setReportChildProcessExits(const uchar *const mode) {
     DEFiRet;
     if (!strcmp((char *)mode, "none")) {
-        loadConf->globals.reportChildProcessExits = REPORT_CHILD_PROCESS_EXITS_NONE;
+        glblSetReportChildProcessExits(loadConf, REPORT_CHILD_PROCESS_EXITS_NONE);
     } else if (!strcmp((char *)mode, "errors")) {
-        loadConf->globals.reportChildProcessExits = REPORT_CHILD_PROCESS_EXITS_ERRORS;
+        glblSetReportChildProcessExits(loadConf, REPORT_CHILD_PROCESS_EXITS_ERRORS);
     } else if (!strcmp((char *)mode, "all")) {
-        loadConf->globals.reportChildProcessExits = REPORT_CHILD_PROCESS_EXITS_ALL;
+        glblSetReportChildProcessExits(loadConf, REPORT_CHILD_PROCESS_EXITS_ALL);
     } else {
         LogError(0, RS_RET_CONF_PARAM_INVLD,
                  "invalid value '%s' for global parameter reportChildProcessExits -- ignored", mode);
@@ -923,7 +936,46 @@ int glblGetOversizeMsgInputMode(rsconf_t *cnf) {
 }
 
 int glblReportOversizeMessage(rsconf_t *cnf) {
-    return cnf->globals.reportOversizeMsg;
+    if (cnf == NULL) return 1;
+    return ATOMIC_LOAD_32BIT(&cnf->globals.reportOversizeMsg, &mutReportOversizeMsg);
+}
+
+int glblGetJsonFormatOpt(void) {
+    return ATOMIC_LOAD_32BIT(&glblJsonFormatOpt, &mutJsonFormatOpt);
+}
+
+int glblGetCompactJsonString(void) {
+    return glblGetJsonFormatOpt() == JSON_C_TO_STRING_PLAIN;
+}
+
+void glblSetCompactJsonString(const int enabled) {
+    const int formatOpt = enabled ? JSON_C_TO_STRING_PLAIN : JSON_C_TO_STRING_SPACED;
+    ATOMIC_STORE_32BIT(&glblJsonFormatOpt, &mutJsonFormatOpt, formatOpt);
+}
+
+void glblSetParserDropTrailingCROnReception(rsconf_t *const cnf, const int enabled) {
+    if (cnf == NULL) return;
+    ATOMIC_STORE_32BIT(&cnf->globals.parser.bDropTrailingCR, &mutParserDropTrailingCROnReception, enabled);
+}
+
+int glblGetParserDropTrailingCROnReception(rsconf_t *const cnf) {
+    if (cnf == NULL) return 0;
+    return ATOMIC_LOAD_32BIT(&cnf->globals.parser.bDropTrailingCR, &mutParserDropTrailingCROnReception);
+}
+
+void glblSetReportOversizeMessage(rsconf_t *const cnf, const int enabled) {
+    if (cnf == NULL) return;
+    ATOMIC_STORE_32BIT(&cnf->globals.reportOversizeMsg, &mutReportOversizeMsg, enabled);
+}
+
+int glblGetReportChildProcessExits(rsconf_t *const cnf) {
+    if (cnf == NULL) return REPORT_CHILD_PROCESS_EXITS_ERRORS;
+    return ATOMIC_LOAD_32BIT(&cnf->globals.reportChildProcessExits, &mutReportChildProcessExits);
+}
+
+void glblSetReportChildProcessExits(rsconf_t *const cnf, const int mode) {
+    if (cnf == NULL) return;
+    ATOMIC_STORE_32BIT(&cnf->globals.reportChildProcessExits, &mutReportChildProcessExits, mode);
 }
 
 
@@ -931,11 +983,11 @@ int glblReportOversizeMessage(rsconf_t *cnf) {
  * If name != NULL, prints it as the program name.
  */
 void glblReportChildProcessExit(rsconf_t *cnf, const uchar *name, pid_t pid, int status) {
+    const int reportMode = glblGetReportChildProcessExits(cnf);
     DBGPRINTF("waitpid for child %ld returned status: %2.2x\n", (long)pid, status);
 
-    if (cnf->globals.reportChildProcessExits == REPORT_CHILD_PROCESS_EXITS_NONE ||
-        (cnf->globals.reportChildProcessExits == REPORT_CHILD_PROCESS_EXITS_ERRORS && WIFEXITED(status) &&
-         WEXITSTATUS(status) == 0)) {
+    if (reportMode == REPORT_CHILD_PROCESS_EXITS_NONE ||
+        (reportMode == REPORT_CHILD_PROCESS_EXITS_ERRORS && WIFEXITED(status) && WEXITSTATUS(status) == 0)) {
         return;
     }
 
@@ -1170,7 +1222,7 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) * pp, void __
     free(loadConf->globals.oversizeMsgErrorFile);
     loadConf->globals.oversizeMsgErrorFile = NULL;
     loadConf->globals.oversizeMsgInputMode = glblOversizeMsgInputMode_Accept;
-    loadConf->globals.reportChildProcessExits = REPORT_CHILD_PROCESS_EXITS_ERRORS;
+    glblSetReportChildProcessExits(loadConf, REPORT_CHILD_PROCESS_EXITS_ERRORS);
     free(loadConf->globals.pszWorkDir);
     loadConf->globals.pszWorkDir = NULL;
     free((void *)loadConf->globals.operatingStateFile);
@@ -1179,7 +1231,7 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) * pp, void __
     loadConf->globals.systemdNotifyReadyDelay = 0;
     bPreserveFQDN = 0;
     loadConf->globals.iMaxLine = 8192;
-    loadConf->globals.reportOversizeMsg = 1;
+    glblSetReportOversizeMessage(loadConf, 1);
     loadConf->globals.parser.cCCEscapeChar = '#';
     loadConf->globals.parser.bDropTrailingLF = 1;
     loadConf->globals.parser.bDropTrailingCR = 0;
@@ -1194,15 +1246,6 @@ static rsRetVal resetConfigVariables(uchar __attribute__((unused)) * pp, void __
     return RS_RET_OK;
 }
 
-
-/* Prepare for new config
- */
-void glblPrepCnf(void) {
-    free(mainqCnfObj);
-    mainqCnfObj = NULL;
-    free(cnfparamvals);
-    cnfparamvals = NULL;
-}
 
 /* handle the timezone() object. Each incarnation adds one additional
  * zone info to the global table of time zones.
@@ -1220,17 +1263,19 @@ int bs_arrcmp_glblDbgFiles(const void *s1, const void *s2) {
  */
 void glblProcessCnf(struct cnfobj *o) {
     int i;
+    struct cnfparamvals *globalParamVals;
 
-    cnfparamvals = nvlstGetParams(o->nvlst, &paramblk, cnfparamvals);
-    if (cnfparamvals == NULL) {
+    globalParamVals = nvlstGetParams(o->nvlst, &paramblk, loadConf->globalParamVals);
+    if (globalParamVals == NULL) {
         LogError(0, RS_RET_MISSING_CNFPARAMS,
                  "error processing global "
                  "config parameters [global(...)]");
         goto done;
     }
+    loadConf->globalParamVals = globalParamVals;
     if (Debug) {
         dbgprintf("glbl param blk after glblProcessCnf:\n");
-        cnfparamsPrint(&paramblk, cnfparamvals);
+        cnfparamsPrint(&paramblk, loadConf->globalParamVals);
     }
 
     /* The next thing is a bit hackish and should be changed in higher
@@ -1238,13 +1283,13 @@ void glblProcessCnf(struct cnfobj *o) {
      * act on immediately. These are processed here.
      */
     for (i = 0; i < paramblk.nParams; ++i) {
-        if (!cnfparamvals[i].bUsed) continue;
+        if (!loadConf->globalParamVals[i].bUsed) continue;
         if (!strcmp(paramblk.descr[i].name, "processinternalmessages")) {
-            loadConf->globals.bProcessInternalMessages = (int)cnfparamvals[i].val.d.n;
-            cnfparamvals[i].bUsed = TRUE;
+            loadConf->globals.bProcessInternalMessages = (int)loadConf->globalParamVals[i].val.d.n;
+            loadConf->globalParamVals[i].bUsed = TRUE;
         } else if (!strcmp(paramblk.descr[i].name, "internal.developeronly.options")) {
-            loadConf->globals.glblDevOptions = (uint64_t)cnfparamvals[i].val.d.n;
-            cnfparamvals[i].bUsed = TRUE;
+            loadConf->globals.glblDevOptions = (uint64_t)loadConf->globalParamVals[i].val.d.n;
+            loadConf->globalParamVals[i].bUsed = TRUE;
         } else if (!strcmp(paramblk.descr[i].name, "stdlog.channelspec")) {
 #ifndef ENABLE_LIBLOGGING_STDLOG
             LogError(0, RS_RET_ERR,
@@ -1253,12 +1298,12 @@ void glblProcessCnf(struct cnfobj *o) {
                      "The 'stdlog.channelspec' parameter "
                      "is ignored. Note: the syslog API is used instead.\n");
 #else
-            loadConf->globals.stdlog_chanspec = (uchar *)es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
+            loadConf->globals.stdlog_chanspec = (uchar *)es_str2cstr(loadConf->globalParamVals[i].val.d.estr, NULL);
             /* we need to re-open with the new channel */
             stdlog_close(loadConf->globals.stdlog_hdl);
             loadConf->globals.stdlog_hdl =
                 stdlog_open("rsyslogd", 0, STDLOG_SYSLOG, (char *)loadConf->globals.stdlog_chanspec);
-            cnfparamvals[i].bUsed = TRUE;
+            loadConf->globalParamVals[i].bUsed = TRUE;
 #endif
         } else if (!strcmp(paramblk.descr[i].name, "operatingstatefile")) {
             if (loadConf->globals.operatingStateFile != NULL) {
@@ -1267,23 +1312,24 @@ void glblProcessCnf(struct cnfobj *o) {
                          "new value ignored",
                          loadConf->globals.operatingStateFile);
             } else {
-                loadConf->globals.operatingStateFile = (uchar *)es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
+                loadConf->globals.operatingStateFile =
+                    (uchar *)es_str2cstr(loadConf->globalParamVals[i].val.d.estr, NULL);
                 osf_open();
             }
         } else if (!strcmp(paramblk.descr[i].name, "security.abortonidresolutionfail")) {
-            loadConf->globals.abortOnIDResolutionFail = (int)cnfparamvals[i].val.d.n;
-            cnfparamvals[i].bUsed = TRUE;
+            loadConf->globals.abortOnIDResolutionFail = (int)loadConf->globalParamVals[i].val.d.n;
+            loadConf->globalParamVals[i].bUsed = TRUE;
         } else if (!strcmp(paramblk.descr[i].name, "defaultnetstreamdriver")) {
-            uchar *const cstr = (uchar *)es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
+            uchar *const cstr = (uchar *)es_str2cstr(loadConf->globalParamVals[i].val.d.estr, NULL);
             if (cstr == NULL) {
                 LogError(0, RS_RET_OUT_OF_MEMORY, "out of memory processing defaultnetstreamdriver");
             } else {
                 setDfltNetstrmDrvr(NULL, cstr);
             }
-            cnfparamvals[i].bUsed = TRUE;
+            loadConf->globalParamVals[i].bUsed = TRUE;
         } else if (!strncmp(paramblk.descr[i].name, "compatibility.", 14)) {
-            if (processCompatGlobalParam(paramblk.descr[i].name, &cnfparamvals[i]) == RS_RET_OK) {
-                cnfparamvals[i].bUsed = 1;
+            if (processCompatGlobalParam(paramblk.descr[i].name, &loadConf->globalParamVals[i]) == RS_RET_OK) {
+                loadConf->globalParamVals[i].bUsed = 1;
             } else {
                 dbgprintf("glblProcessCnf: failed to process early global parameter '%s'\n", paramblk.descr[i].name);
             }
@@ -1297,8 +1343,8 @@ done:
  * legacy parameter config. mainq parameters can only be set once.
  */
 void glblProcessMainQCnf(struct cnfobj *o) {
-    if (mainqCnfObj == NULL) {
-        mainqCnfObj = o;
+    if (loadConf->mainqCnfObj == NULL) {
+        loadConf->mainqCnfObj = o;
     } else {
         LogError(0, RS_RET_ERR,
                  "main_queue() object can only be specified "
@@ -1309,13 +1355,19 @@ void glblProcessMainQCnf(struct cnfobj *o) {
 /* destruct the main q cnf object after it is no longer needed. This is
  * also used to do some final checks.
  */
-void glblDestructMainqCnfObj(void) {
+void glblDestructMainqCnfObj(rsconf_t *cnf) {
     /* Only destruct if not NULL! */
-    if (mainqCnfObj != NULL) {
-        nvlstChkUnused(mainqCnfObj->nvlst);
-        cnfobjDestruct(mainqCnfObj);
-        mainqCnfObj = NULL;
+    if (cnf->mainqCnfObj != NULL) {
+        nvlstChkUnused(cnf->mainqCnfObj->nvlst);
+        cnfobjDestruct(cnf->mainqCnfObj);
+        cnf->mainqCnfObj = NULL;
     }
+}
+
+void glblCnfDestruct(rsconf_t *cnf) {
+    glblDestructMainqCnfObj(cnf);
+    cnfparamvalsDestruct(cnf->globalParamVals, &paramblk);
+    cnf->globalParamVals = NULL;
 }
 
 static int qs_arrcmp_glblDbgFiles(const void *s1, const void *s2) {
@@ -1372,6 +1424,7 @@ finalize_it:
 rsRetVal glblDoneLoadCnf(void) {
     int i;
     unsigned char *cstr;
+    struct cnfparamvals *const cnfparamvals = loadConf->globalParamVals;
     DEFiRet;
     CHKiRet(objUse(net, CORE_COMPONENT));
 
@@ -1430,7 +1483,7 @@ rsRetVal glblDoneLoadCnf(void) {
         } else if (!strcmp(paramblk.descr[i].name, "preservefqdn")) {
             bPreserveFQDN = (int)cnfparamvals[i].val.d.n;
         } else if (!strcmp(paramblk.descr[i].name, "compactjsonstring")) {
-            glblJsonFormatOpt = cnfparamvals[i].val.d.n ? JSON_C_TO_STRING_PLAIN : JSON_C_TO_STRING_SPACED;
+            glblSetCompactJsonString((int)cnfparamvals[i].val.d.n);
         } else if (!strcmp(paramblk.descr[i].name, "dropmsgswithmaliciousdnsptrrecords")) {
             loadConf->globals.bDropMalPTRMsgs = (int)cnfparamvals[i].val.d.n;
         } else if (!strcmp(paramblk.descr[i].name, "action.reportsuspension")) {
@@ -1445,7 +1498,7 @@ rsRetVal glblDoneLoadCnf(void) {
             free(loadConf->globals.oversizeMsgErrorFile);
             loadConf->globals.oversizeMsgErrorFile = (uchar *)es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
         } else if (!strcmp(paramblk.descr[i].name, "oversizemsg.report")) {
-            loadConf->globals.reportOversizeMsg = (int)cnfparamvals[i].val.d.n;
+            glblSetReportOversizeMessage(loadConf, (int)cnfparamvals[i].val.d.n);
         } else if (!strcmp(paramblk.descr[i].name, "oversizemsg.input.mode")) {
             const char *const tmp = es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
             setOversizeMsgInputMode((uchar *)tmp);
@@ -1557,6 +1610,21 @@ rsRetVal glblDoneLoadCnf(void) {
             /* processed immediately by glblProcessCnf(), as later syntax depends on it */
         } else if (!strcmp(paramblk.descr[i].name, "systemd.notifyreadydelay")) {
             loadConf->globals.systemdNotifyReadyDelay = (int)cnfparamvals[i].val.d.n;
+        } else if (!strcmp(paramblk.descr[i].name, "config.reloadonhup")) {
+            char *const mode = es_str2cstr(cnfparamvals[i].val.d.estr, NULL);
+            if (mode == NULL) {
+                parser_errmsg("out of memory processing config.reloadOnHUP");
+            } else if (!strcasecmp(mode, "off")) {
+                loadConf->globals.reloadOnHUP = RELOAD_ON_HUP_OFF;
+            } else if (!strcasecmp(mode, "validate")) {
+                loadConf->globals.reloadOnHUP = RELOAD_ON_HUP_VALIDATE;
+            } else if (!strcasecmp(mode, "on")) {
+                loadConf->globals.reloadOnHUP = RELOAD_ON_HUP_ON;
+            } else {
+                parser_errmsg("invalid config.reloadOnHUP value '%s'; expected off, validate, or on", mode);
+                iRet = RS_RET_CONF_PARAM_INVLD;
+            }
+            free(mode);
         } else if (!strcmp(paramblk.descr[i].name, "abortonuncleanconfig")) {
             loadConf->globals.bAbortOnUncleanConfig = cnfparamvals[i].val.d.n;
         } else if (!strcmp(paramblk.descr[i].name, "abortonfailedqueuestartup")) {
@@ -1705,6 +1773,10 @@ BEGINAbstractObjClassInit(glbl, 1, OBJ_IS_CORE_MODULE) /* class, version */
         regCfSysLineHdlr((uchar *)"resetconfigvariables", 1, eCmdHdlrCustomHandler, resetConfigVariables, NULL, NULL));
 
     INIT_ATOMIC_HELPER_MUT(mutTerminateInputs);
+    INIT_ATOMIC_HELPER_MUT(mutJsonFormatOpt);
+    INIT_ATOMIC_HELPER_MUT(mutParserDropTrailingCROnReception);
+    INIT_ATOMIC_HELPER_MUT(mutReportOversizeMsg);
+    INIT_ATOMIC_HELPER_MUT(mutReportChildProcessExits);
 ENDObjClassInit(glbl)
 
 
@@ -1718,5 +1790,9 @@ BEGINObjClassExit(glbl, OBJ_IS_CORE_MODULE) /* class, version */
     free(LocalFQDNName);
     objRelease(prop, CORE_COMPONENT);
     if (propLocalHostNameToDelete != NULL) prop.Destruct(&propLocalHostNameToDelete);
+    DESTROY_ATOMIC_HELPER_MUT(mutReportChildProcessExits);
+    DESTROY_ATOMIC_HELPER_MUT(mutReportOversizeMsg);
+    DESTROY_ATOMIC_HELPER_MUT(mutParserDropTrailingCROnReception);
+    DESTROY_ATOMIC_HELPER_MUT(mutJsonFormatOpt);
     DESTROY_ATOMIC_HELPER_MUT(mutTerminateInputs);
 ENDObjClassExit(glbl)

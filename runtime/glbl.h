@@ -120,6 +120,11 @@ ENDinterface(glbl)
 PROTOTYPEObj(glbl);
 
 extern int glblJsonFormatOpt;
+int glblGetJsonFormatOpt(void);
+int glblGetCompactJsonString(void);
+void glblSetCompactJsonString(int enabled);
+void glblSetParserDropTrailingCROnReception(rsconf_t *cnf, int enabled);
+int glblGetParserDropTrailingCROnReception(rsconf_t *cnf);
 extern int glblUnloadModules;
 extern short janitorInterval;
 extern char **glblDbgFiles;
@@ -147,10 +152,10 @@ extern DEF_ATOMIC_HELPER_MUT(mutTerminateInputs);
 #define glblSetOurPid(pid) \
     { glbl_ourpid = (pid); }
 
-void glblPrepCnf(void);
 void glblProcessCnf(struct cnfobj *o);
 void glblProcessMainQCnf(struct cnfobj *o);
-void glblDestructMainqCnfObj(void);
+void glblDestructMainqCnfObj(rsconf_t *cnf);
+void glblCnfDestruct(rsconf_t *cnf);
 rsRetVal glblDoneLoadCnf(void);
 const uchar *glblGetWorkDirRaw(rsconf_t *cnf);
 int GetGnuTLSLoglevel(rsconf_t *cnf);
@@ -160,6 +165,9 @@ uchar *glblGetOversizeMsgErrorFile(rsconf_t *cnf);
 const uchar *glblGetOperatingStateFile(rsconf_t *cnf);
 int glblGetOversizeMsgInputMode(rsconf_t *cnf);
 int glblReportOversizeMessage(rsconf_t *cnf);
+void glblSetReportOversizeMessage(rsconf_t *cnf, int enabled);
+int glblGetReportChildProcessExits(rsconf_t *cnf);
+void glblSetReportChildProcessExits(rsconf_t *cnf, int mode);
 void glblReportChildProcessExit(rsconf_t *cnf, const uchar *name, pid_t pid, int status);
 uchar *glblGetLocalHostName(void);
 rsRetVal glblSetMaxOpenFiles(void *pVal, int iFiles);

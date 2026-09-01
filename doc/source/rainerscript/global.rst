@@ -277,6 +277,11 @@ The following parameters can be set:
   payload. The default is "off" so existing configurations keep the CR
   byte when it is part of the original message.
 
+  When ``config.reloadOnHUP`` is ``on``, a candidate that changes only this
+  setting can activate it transactionally. Messages parsed after the commit
+  use the new policy. Combining it with another global change remains
+  unsupported and leaves the active parser policy unchanged.
+
 - **parser.parseHostnameAndTag** [on/off] available 8.6.0+
 
   **Default:** on
@@ -603,6 +608,10 @@ The following parameters can be set:
   This parameter specifies if an error shall be reported when an oversized
   message is seen. The default is "on".
 
+  With ``config.reloadOnHUP="on"``, this flag can be changed transactionally
+  by HUP when it is the only changed base/global setting in that generation.
+  Oversized messages submitted after the commit use the new value.
+
 - **abortOnUncleanConfig** [boolean (on/off)] available 8.37.0+
 
   This parameter permits to prevent rsyslog from running when the
@@ -761,6 +770,12 @@ Historically these options were referenced in source code and change logs as
   message to the process because the pipe is broken, it will report an error
   indicating this). This specific error message (if any) is not affected by this
   global setting.
+
+  With ``config.reloadOnHUP="on"``, this policy can be changed transactionally
+  by HUP when it is the only changed base/global setting in that generation.
+  Child exits observed after the commit use the new value.  A candidate that
+  also changes ``config.reloadOnHUP`` or another global parameter is rejected
+  without changing the active configuration.
 
 
 - **default.ruleset.queue.timeoutshutdown**
@@ -949,3 +964,9 @@ readability for humans, but needs more resources (disk, transfer, computation)
 in automated pipelines.
 To keep things as compatible as possible, we leave the default as "off" but
 recommend that this option is turned on for use in data pipelines.
+
+When ``config.reloadOnHUP`` is ``on``, a candidate that changes only
+``compactJsonString`` can activate this setting transactionally.  JSON values
+serialized after the commit use the new representation.  A candidate that
+combines this change with another global setting remains unsupported and does
+not partially change the active format.
