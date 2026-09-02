@@ -11,6 +11,7 @@ doc/source/configuration/modules/impstats.rst
   s_923c67e7c3d373::t_1d92b71cafc8a9 413-414,416-417
 runtime/queue.c
   s_923c67e7c3d373::t_e40170dcc76ceb 384,557,614-615,619,3470,3503,4861-4866,6488-6489
+  s_daa33b26269e69::t_97e30347218e29 6683-6684
 tests/queue-mutex-contention-impstats.sh
   s_923c67e7c3d373::t_e40170dcc76ceb 5-6,17-18,30
 doc/source/rainerscript/queue_parameters.rst
@@ -33,6 +34,14 @@ runtime/queue.h
       "agent_id": {
         "tool": "codex",
         "id": "01a05dfd-c5e9-7a01-b239-97b748984633",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    },
+    "s_daa33b26269e69": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a05bbb-f13d-7f81-83cd-f90383a7dd00",
         "model": "gpt-5.6-terra"
       },
       "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
