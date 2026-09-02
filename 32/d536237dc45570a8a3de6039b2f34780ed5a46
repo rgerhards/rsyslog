@@ -25,6 +25,14 @@ tests/ratelimit_hup.sh
   "base_commit_sha": "32d536237dc45570a8a3de6039b2f34780ed5a46",
   "prompts": {},
   "sessions": {
+    "s_6b340ae08e941b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a048bc-a478-75f3-9438-60a4c05c4b69",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": null
+    },
     "s_923c67e7c3d373": {
       "agent_id": {
         "tool": "codex",
