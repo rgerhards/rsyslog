@@ -19,6 +19,8 @@ runtime/wti.c
   s_142ee1fa291d22::t_550d1918f3b8c8 52,336-369,395-403,572
 runtime/wtp.c
   s_142ee1fa291d22::t_86bec7892a0e77 132,168-172,333-382,434-436,438-439
+runtime/queue.h
+  s_142ee1fa291d22::t_4a423b6f2951f6 98-100,104-108
 ---
 {
   "schema_version": "authorship/3.0.0",
