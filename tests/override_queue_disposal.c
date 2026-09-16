@@ -6,6 +6,7 @@
  * poll bounds a missing release and preserves a nonzero daemon failure oracle.
  */
 #include "config.h"
+#include "atomic.h"
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -19,9 +20,11 @@
 
 static int (*real_put)(struct json_object *);
 static pthread_once_t resolve_once = PTHREAD_ONCE_INIT;
+DEF_ATOMIC_HELPER_MUT(claim_mutex);
 static int claimed;
 
 static void resolve_put(void) {
+    INIT_ATOMIC_HELPER_MUT(claim_mutex);
     dlerror();
     real_put = (int (*)(struct json_object *))dlsym(RTLD_NEXT, "fjson_object_put");
     if (dlerror() != NULL || real_put == NULL) {
@@ -44,8 +47,7 @@ int json_object_put(struct json_object *object) {
 
     pthread_once(&resolve_once, resolve_put);
     if (object != NULL && json_object_get_type(object) == json_type_object &&
-        json_object_object_get_ex(object, "queue_disposal_gate", &marker) &&
-        __atomic_exchange_n(&claimed, 1, __ATOMIC_RELAXED) == 0) {
+        json_object_object_get_ex(object, "queue_disposal_gate", &marker) && ATOMIC_CAS(&claimed, 0, 1, &claim_mutex)) {
         ready = getenv("RSYSLOG_QUEUE_DISPOSAL_READY");
         release = getenv("RSYSLOG_QUEUE_DISPOSAL_RELEASE");
         if (ready == NULL || release == NULL) _exit(2);
