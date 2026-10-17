@@ -1,0 +1,45 @@
+doc/ai/module_map.yaml
+  s_f8a738e4bdfaee::t_76b1a54e2b8ceb 1-11
+runtime/Makefile.am
+  s_f8a738e4bdfaee::t_709cf73dd7524d 86-87
+runtime/action-prepared.h
+  s_f8a738e4bdfaee::t_608211136c1097 1-37
+runtime/action.c
+  s_f8a738e4bdfaee::t_71591d793e8b47 80-81,374-375,383,426-427,450,475-484,2631-2928
+runtime/action.h
+  s_f8a738e4bdfaee::t_b016db25652bdd 130-131
+runtime/module-action-prepared.h
+  s_f8a738e4bdfaee::t_db15416cac52fc 13-15
+runtime/queue-prepared.h
+  s_f8a738e4bdfaee::t_7e41697ace806f 1-16
+runtime/queue.c
+  s_f8a738e4bdfaee::t_566bca6a1c6711 208,2921-2924,2946-2959,2961-2968,2990,3004-3007,3019-3119,4811-4823,4834,4914,5457-5458
+runtime/queue.h
+  s_f8a738e4bdfaee::t_71cfac2220d603 308
+tests/Makefile.am
+  s_f8a738e4bdfaee::t_45cabcb0ffee5f 5093-5110
+tests/helpers/action_prepared_faults.h
+  s_f8a738e4bdfaee::t_c4c15ff65f6b60 1-27
+tests/helpers/action_prepared_omfile.c
+  s_f8a738e4bdfaee::t_c6daebeac288c2 1-63
+tests/helpers/action_prepared_queue.c
+  s_f8a738e4bdfaee::t_c4d3985e3560af 1-33
+tests/unit/action_prepared_test.c
+  s_f8a738e4bdfaee::t_f8b9032c6422c1 1-577
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "915b3cb632355f1226e372d4bb95558d22846af7",
+  "prompts": {},
+  "sessions": {
+    "s_f8a738e4bdfaee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14673-197a-7af1-a732-38a4b8d36d40",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
