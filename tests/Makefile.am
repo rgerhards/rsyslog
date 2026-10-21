@@ -463,6 +463,7 @@ TESTS_DEFAULT = \
 	privdropabortonidfaillegacy.sh \
 	json-nonstring.sh \
 	json-onempty-at-end.sh \
+	json-long-string.sh \
 	template-json.sh \
 	$(TESTS_RSCRIPT_OBJECT_STRINGS) \
 	template-property-transformations.sh \
