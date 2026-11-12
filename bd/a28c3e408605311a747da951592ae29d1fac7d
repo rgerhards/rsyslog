@@ -2,6 +2,7 @@ tests/yaml-mmcount-distinct-values.sh
   s_5e773934876cb4::t_097aea0afbdefa 1-5
 contrib/AGENTS.md
   s_5e773934876cb4::t_2ed86bcdcf7cd1 30,39-43
+  s_5e773934876cb4::t_1830c31d1d435e 38
 contrib/mmcount/mmcount.c
   s_5e773934876cb4::t_1727b12de471a6 129,188,209,211-213,220
 tests/Makefile.am
