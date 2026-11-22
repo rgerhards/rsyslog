@@ -1,0 +1,19 @@
+README.md
+  s_4a3ce22f84e090::t_24a879e0a128a5 145-147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f45be09a72241af11cd74957c450c5591e71b7e6",
+  "prompts": {},
+  "sessions": {
+    "s_4a3ce22f84e090": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20470-b74b-73c2-9b2d-94df23cb3d61",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
