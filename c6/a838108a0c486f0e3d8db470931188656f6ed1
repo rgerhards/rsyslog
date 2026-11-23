@@ -1,0 +1,23 @@
+runtime/im-helper.h
+  s_cc42942fd6b929::t_b280d73b9bff2e 1,11
+runtime/strgen.c
+  s_cc42942fd6b929::t_1fb4ab117db508 1,12
+runtime/strgen.h
+  s_cc42942fd6b929::t_523d162fa9d4e1 1,6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c6a838108a0c486f0e3d8db470931188656f6ed1",
+  "prompts": {},
+  "sessions": {
+    "s_cc42942fd6b929": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208a6-0a28-77b0-bee9-6562c45c5ed9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
