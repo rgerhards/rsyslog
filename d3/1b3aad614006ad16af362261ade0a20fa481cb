@@ -1,0 +1,27 @@
+COPYING.BSD-3-Clause
+  s_dcf6885d8eaf72::t_193e4bb5decece 1-30
+Makefile.am
+  s_dcf6885d8eaf72::t_e42ddc3004f47f 5
+runtime/Makefile.am
+  s_dcf6885d8eaf72::t_21a246d5a28654 29
+runtime/pri-filter.c
+  s_dcf6885d8eaf72::t_3c678869da93a1 1-116
+tests/rscript_prifilt_negated_exact.sh
+  s_dcf6885d8eaf72::t_62d77b0c006350 9-11,30-35,41-43,53-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d31b3aad614006ad16af362261ade0a20fa481cb",
+  "prompts": {},
+  "sessions": {
+    "s_dcf6885d8eaf72": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208d8-79c4-79a2-9f32-71c38695e4c4",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
