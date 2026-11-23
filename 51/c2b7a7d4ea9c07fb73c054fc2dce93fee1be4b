@@ -1,0 +1,21 @@
+tests/msleep.c
+  s_dcf6885d8eaf72::t_8a720f93986865 1,10
+tests/chkseq.c
+  s_dcf6885d8eaf72::t_0072ff81ec3cfe 1,23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "51c2b7a7d4ea9c07fb73c054fc2dce93fee1be4b",
+  "prompts": {},
+  "sessions": {
+    "s_dcf6885d8eaf72": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208d8-79c4-79a2-9f32-71c38695e4c4",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
