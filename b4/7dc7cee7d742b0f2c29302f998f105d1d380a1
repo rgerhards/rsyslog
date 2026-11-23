@@ -1,0 +1,22 @@
+tests/chkseq.c
+  s_cc42942fd6b929::t_7b76fcd3d7dc39 15,52-58,67,110,149,152,213,216
+  s_cc42942fd6b929::t_a5f97c19ea3797 150-151,214-215
+tests/chkseq-duplicate-increments.sh
+  s_cc42942fd6b929::t_a5f97c19ea3797 6-8,14,16,42-50,52,55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b47dc7cee7d742b0f2c29302f998f105d1d380a1",
+  "prompts": {},
+  "sessions": {
+    "s_cc42942fd6b929": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208a6-0a28-77b0-bee9-6562c45c5ed9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
