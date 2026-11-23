@@ -1,0 +1,21 @@
+tests/ourtail.c
+  s_cc42942fd6b929::t_59601f69b63ae9 1,13
+tests/randomgen.c
+  s_cc42942fd6b929::t_42fe3648b554a8 1,19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15f33da269a1169f4a5c9507dce196b23a35a920",
+  "prompts": {},
+  "sessions": {
+    "s_cc42942fd6b929": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208a6-0a28-77b0-bee9-6562c45c5ed9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
