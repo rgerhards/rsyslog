@@ -1,0 +1,31 @@
+doc/source/reference/parameters/imdtls-tls-authmode.rst
+  s_8743ef43c0859a::t_26cb08548f011f 39-40
+plugins/imdtls/imdtls.c
+  s_8743ef43c0859a::t_95e49b954711d8 1057,1059,1159,1161
+plugins/omdtls/omdtls.c
+  s_8743ef43c0859a::t_6a85ac38b78cf5 469,471
+runtime/dtls_authmode.h
+  s_8743ef43c0859a::t_d3e9db880f72c9 44,55-56,62
+tests/Makefile.am
+  s_8743ef43c0859a::t_320b1a8f4490a4 2612,4820
+tests/dtls-authmode-unsupported.sh
+  s_8743ef43c0859a::t_8dd86ac3a116c5 3-5,16-17,21-23,39-81,83-86
+tests/yaml-dtls-authmode-unsupported.sh
+  s_8743ef43c0859a::t_6441c046cc3aca 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d4413a508f1d925316fc1a617203d32db10c1d91",
+  "prompts": {},
+  "sessions": {
+    "s_8743ef43c0859a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "52dbed21-a632-50d3-8988-a3f550050419",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
