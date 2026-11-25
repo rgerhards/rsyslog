@@ -1,0 +1,19 @@
+tests/rscript-replace-result-limit.sh
+  s_8743ef43c0859a::t_1c972037e02d22 11-12,25,41-43,59-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3d76fe127b0090e6082d98dab345cbd2e2d75aef",
+  "prompts": {},
+  "sessions": {
+    "s_8743ef43c0859a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "52dbed21-a632-50d3-8988-a3f550050419",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
