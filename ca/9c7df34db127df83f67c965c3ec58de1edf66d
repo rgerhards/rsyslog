@@ -1,0 +1,19 @@
+runtime/conf.c
+  s_dcf6885d8eaf72::t_1916a32c5437ae 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ca9c7df34db127df83f67c965c3ec58de1edf66d",
+  "prompts": {},
+  "sessions": {
+    "s_dcf6885d8eaf72": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208d8-79c4-79a2-9f32-71c38695e4c4",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

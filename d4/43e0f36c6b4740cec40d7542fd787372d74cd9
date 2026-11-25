@@ -1,0 +1,29 @@
+tests/diagtalker-retry.sh
+  s_dcf6885d8eaf72::t_920aeaf39d41e3 26
+tests/diagtalker.c
+  s_ae69381231ba50::t_04fe118b18223c 55,86,92,132,134,138-139,142,144-145,170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d443e0f36c6b4740cec40d7542fd787372d74cd9",
+  "prompts": {},
+  "sessions": {
+    "s_ae69381231ba50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208a7-2a78-76a0-becc-f921a77dc3f9",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    },
+    "s_dcf6885d8eaf72": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208d8-79c4-79a2-9f32-71c38695e4c4",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+tests/diagtalker.c
+  s_ae69381231ba50::t_a1ba6013b4b85a 1,7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9a289e24e1cd32ceba3dddebfd9388d6beb55585",
+  "prompts": {},
+  "sessions": {
+    "s_ae69381231ba50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208a7-2a78-76a0-becc-f921a77dc3f9",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
