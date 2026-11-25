@@ -1,0 +1,27 @@
+runtime/AGENTS.md
+  s_8743ef43c0859a::t_a8ecbf62b2f589 72-75
+runtime/template.c
+  s_8743ef43c0859a::t_50078c31396bcd 1924-1929
+tests/Makefile.am
+  s_8743ef43c0859a::t_da7db905dc1a16 136-137,3664
+tests/template-cee-short-name.sh
+  s_8743ef43c0859a::t_516e4fc5d3c46b 3-5,15-16,19-29,32-34
+tests/yaml-template-cee-short-name.sh
+  s_8743ef43c0859a::t_8370934e545ca5 1-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f641cd5c229c6cf57f9d6c78f597f037f4359932",
+  "prompts": {},
+  "sessions": {
+    "s_8743ef43c0859a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "52dbed21-a632-50d3-8988-a3f550050419",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
