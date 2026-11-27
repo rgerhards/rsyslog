@@ -1,0 +1,121 @@
+tests/failover-no-basic-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+tests/failover-no-rptd-vg.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 6-9
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,4-5
+tests/imptcp_no_octet_counted.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+tests/imtcp_no_octet_counted.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-7
+tests/daqueue-persist.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 8-11
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,6-7
+tests/sndrcv_omudpspoof.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 16-18
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,14-15
+tests/asynwr_timeout_2.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 3-5
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,8-9
+tests/badqi.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,8-9
+tests/failover-no-rptd.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-7
+tests/getline.c
+  s_cc42942fd6b929::t_d15c7e02a83f38 1,8-9
+tests/udp-msgreduc-vg.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 7-9
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+tests/libdbi-basic-vg.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-7
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/failover-basic-vg.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/udp-msgreduc-orgmsg-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 7-10
+tests/imfile-growing-file-id.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+tests/diskqueue-fsync.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,8-9
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 10-12
+tests/testconfgen.c
+  s_cc42942fd6b929::t_d15c7e02a83f38 1,10-12
+tests/omruleset.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,13-14
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 15-17
+tests/filewriter.c
+  s_cc42942fd6b929::t_d15c7e02a83f38 1,20-21
+tests/failover-no-basic.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/discard-allmark.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+tests/asynwr_deadlock_2.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 11-14
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,9-10
+tests/imtcp_conndrop.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,6-7
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 8-11
+tests/sndrcv_tls_anon_rebind.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 7-10
+tests/failover-async.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/asynwr_deadlock.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,8-9
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 10-13
+tests/sndrcv_omudpspoof-bigmsg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 7-10
+tests/linkedlistqueue.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 7-9
+tests/failover-rptd-vg.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/asynwr_tinybuf.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,9-10
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 11-12
+tests/imfile-rename-while-stopped.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/mysql-basic-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-7
+tests/sndrcv_omudpspoof_nonstdpt.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,8-9
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 3-6
+tests/failover-basic.sh
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/discard-allmark-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 5-8
+tests/omruleset-queue.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,10-11
+  s_cc42942fd6b929::t_f2d32bb9f0c0e8 12-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "acd000a6f084f687a4a6958ee087809e5aaf864d",
+  "prompts": {},
+  "sessions": {
+    "s_cc42942fd6b929": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208a6-0a28-77b0-bee9-6562c45c5ed9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": null
+    }
+  }
+}
