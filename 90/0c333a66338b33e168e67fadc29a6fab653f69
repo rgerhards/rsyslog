@@ -1,0 +1,19 @@
+CONTRIBUTORS.md
+  s_ae69381231ba50::t_60e17629cf1352 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "900c333a66338b33e168e67fadc29a6fab653f69",
+  "prompts": {},
+  "sessions": {
+    "s_ae69381231ba50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208a7-2a78-76a0-becc-f921a77dc3f9",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
