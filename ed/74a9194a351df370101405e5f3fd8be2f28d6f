@@ -1,0 +1,103 @@
+tests/failover-basic.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/imfile-rename-while-stopped.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/sndrcv_omudpspoof-bigmsg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+tests/imfile-wildcards-dirs-multi2.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/sndrcv_omudpspoof.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,14-15
+tests/omruleset-queue.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,10-11
+tests/sndrcv_tls_anon_rebind.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+tests/failover-no-basic.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/failover-no-rptd-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,4-5
+tests/asynwr_tinybuf.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,9-10
+tests/libdbi-basic-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/daqueue-persist.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,6-7
+tests/discard-allmark.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/badqi.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,8-9
+tests/mysql-basic-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/failover-basic-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/omruleset.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,13-14
+tests/imfile-wildcards-dirs.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/imfile-wildcards-dirs-multi3.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/udp-msgreduc-orgmsg-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+tests/getline.c
+  s_cc42942fd6b929::t_d15c7e02a83f38 1,8-9
+tests/failover-no-basic-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/testconfgen.c
+  s_cc42942fd6b929::t_d15c7e02a83f38 1,10-12
+tests/imfile-growing-file-id.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/udp-msgreduc-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+tests/diskqueue-fsync.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,8-9
+tests/imfile-wildcards-dirs-multi4.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/failover-rptd-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/asynwr_deadlock_2.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,9-10
+tests/sndrcv_omudpspoof_nonstdpt.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,9-10
+tests/filewriter.c
+  s_cc42942fd6b929::t_d15c7e02a83f38 1,20-21
+tests/linkedlistqueue.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,5-6
+tests/imptcp_no_octet_counted.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/discard-allmark-vg.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/imfile-wildcards-dirs-multi.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/imtcp_no_octet_counted.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/asynwr_deadlock.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,8-9
+tests/imfile-wildcards-dirs2.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/asynwr_timeout_2.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,8-9
+tests/imfile-wildcards-dirs-multi5.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/imtcp_conndrop.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2,6-7
+tests/failover-async.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+tests/failover-no-rptd.sh
+  s_cc42942fd6b929::t_d15c7e02a83f38 2-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ed74a9194a351df370101405e5f3fd8be2f28d6f",
+  "prompts": {},
+  "sessions": {
+    "s_cc42942fd6b929": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a208a6-0a28-77b0-bee9-6562c45c5ed9",
+        "model": "gpt-6.2-sol"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
