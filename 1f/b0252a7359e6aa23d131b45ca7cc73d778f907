@@ -1,0 +1,19 @@
+tests/imbeats-accept-error-rearm.sh
+  s_8743ef43c0859a::t_118e2974e72698 4-5,23-24,57,69,89-90,92-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1fb0252a7359e6aa23d131b45ca7cc73d778f907",
+  "prompts": {},
+  "sessions": {
+    "s_8743ef43c0859a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "52dbed21-a632-50d3-8988-a3f550050419",
+        "model": "unknown"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
